@@ -1,4 +1,4 @@
-# CyborgZOSCII v20251228
+# CyborgZOSCII UNINTELLIGENCE Version v20251228
 
 ZOSCII Zero Overhead Secure Code Information Interchange.
 
