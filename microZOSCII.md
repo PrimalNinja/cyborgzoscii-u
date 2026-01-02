@@ -916,7 +916,7 @@ K9mP2vQx7nR4wL8jY3hT6fN1sB5gM0cV9zX2aD4eW7qU3iO8pJ[XX]
                                                       ^^^^
                                                    checksum
 ```
-Good practice is to add checksum or checkdigit internally witin the encoding. ZOSCII's principles are to have no identifiable information on the outside, no headers, no markers.
+Good practice is to add checksum or checkdigit internally to the data being encoded and you check it by decoding first. ZOSCII's principles are to have no identifiable information on the outside, no headers, no markers.
 
 ---
 
