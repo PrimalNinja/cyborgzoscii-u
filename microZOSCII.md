@@ -57,7 +57,7 @@ All mathematical encryption schemes share a fatal vulnerability:
 Full ZOSCII requires both parties to possess an identical 64KB ROM. This ROM:
 - Contains 65,536 byte values (0x00-0xFF)
 - Each value appears at multiple random positions
-- Enables 10^5,500,000+ combinatorial security for all messages
+- Enables 10^millions+ combinatorial security for large messages
 
 **The challenge**: How to securely transmit this 64KB ROM without using vulnerable encryption?
 
@@ -142,7 +142,7 @@ decode_micro = (microROM, addresses) =>
 
 Once the receiver decodes the 131,072 addresses:
 - Both parties now have identical 64KB ROM
-- Switch to full ZOSCII (10^5,500,000+ security)
+- Switch to full ZOSCII (10^millions+ security)
 - Optionally delete the microROM (perfect forward secrecy)
 
 ---
@@ -249,7 +249,7 @@ Even knowing the protocol, the attacker must try:
 │ Secure Communications (Full ZOSCII)                         │
 ├─────────────────────────────────────────────────────────────┤
 │ - Use 64KB ROM for all messages                            │
-│ - Security: 10^5,500,000+ combinations                     │
+│ - Security: 10^millions+ combinations                     │
 │ - Delete session ROM after use (optional)                  │
 │ - Generate new session ROM for next session                │
 └─────────────────────────────────────────────────────────────┘
@@ -378,7 +378,7 @@ CREATE TABLE users (
 1. Before deployment: Captain receives sealed envelope with 54-character code
 2. At sea: Command transmits 128KB bootstrap payload
 3. Submarine decodes using microZOSCII → receives 64KB operational ROM
-4. All mission communications use full ZOSCII (10^5,500,000+ security)
+4. All mission communications use full ZOSCII (10^millions+ security)
 5. Enemy intercepts everything → has nothing without the microROM
 
 **Advantages:**
@@ -1048,7 +1048,7 @@ Even with infinite computing power, attacker must:
 | RSA-2048 | 2048 bits | 10^77 | ❌ | ❌ |
 | ECC-256 | 256 bits | 10^77 | ❌ | ❌ |
 | **microZOSCII** | **54 chars** | **10^91,619** | **✅** | **✅** |
-| **Full ZOSCII** | **64 KB** | **10^5,500,000** | **✅** | **✅** |
+| **Full ZOSCII** | **64 KB** | **10^millions** | **✅** | **✅** |
 
 ### Performance Comparison
 
