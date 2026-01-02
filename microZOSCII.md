@@ -173,7 +173,7 @@ Converting to base-10:
 | Relative Strength | 1× | 10^91,542× stronger |
 | Vulnerability | Mathematical (quantum-vulnerable) | Information-theoretic (quantum-proof) |
 
-**microZOSCII provides 10^91,542 times more combinatorial possibilities than military-grade AES-256 encryption.**
+**microZOSCII provides 10^91,542 times more combinatorial possibilities than military-grade AES-256 encryption for sending the full ZOSCII ROM.**
 
 ### Information-Theoretic Security
 
@@ -1064,7 +1064,7 @@ A: AES-256 is vulnerable to quantum computers (Grover's algorithm) and "harvest 
 
 **Q: Is 54 characters really enough security?**
 
-A: Yes. Those 54 characters provide 10^91,619 combinations—10^91,542 times more than AES-256. The security comes from combinatorial explosion, not character length.
+A: Yes. Those 54 characters provide 10^91,619 combinations—10^91,542 times more than AES-256 for sending the full ZOSCII ROM. The security comes from combinatorial explosion, not character length.
 
 **Q: What if someone steals my 54-character seed?**
 
