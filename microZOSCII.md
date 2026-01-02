@@ -1076,7 +1076,7 @@ A: Not recommended. Each contact should have a unique seed. Storage cost is mini
 
 **Q: How do I initially share the 54 characters securely?**
 
-A: Options include: in-person exchange, phone call, QR code, secure courier, or even one-time use of traditional encryption (accepting that single vulnerability). After initial exchange, all future communications are quantum-proof.
+A: Options include: in-person exchange, phone call, QR code, secure courier, or even NFC between devices (not via encryption unless you are ok with harvesting). After initial exchange, all future communications are quantum-proof.
 
 **Q: What happens if I lose my 54-character seed?**
 
