@@ -910,12 +910,13 @@ Define canonical base-62 ↔ hex conversion ensuring:
 
 ### 2. Error Detection
 
-Add checksum to seed54:
+Bad practice to add checksum to seed54:
 ```
 K9mP2vQx7nR4wL8jY3hT6fN1sB5gM0cV9zX2aD4eW7qU3iO8pJ[XX]
                                                       ^^^^
                                                    checksum
 ```
+Good practice is to add checksum or checkdigit internally witin the encoding. ZOSCII's principles are to have no identifiable information on the outside, no headers, no markers.
 
 ### 3. Multi-Factor Bootstrap
 
