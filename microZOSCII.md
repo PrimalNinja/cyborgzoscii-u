@@ -1,9 +1,15 @@
 # microZOSCII: Quantum-Proof Bootstrap Protocol
 ## A Practical Solution for Secure Key Distribution
 
-**Version 1.0** (DRAFT) 
+**Version 1.1** (DRAFT) 
 **Julian Cassin, Cyborg Unicorn Pty Ltd**  
-**January 2026**
+**February 2026**
+
+---
+
+## Additional Notes (added 16 February 2026)
+
+Although microZOSCII can work with a 54 character bootstrap, it is recommended to use 3 x 54 character strings to give 240 bytes of entropy to make the randomness requirement less strict.
 
 ---
 
