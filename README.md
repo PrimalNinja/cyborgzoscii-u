@@ -1,8 +1,8 @@
-# CyborgZOSCII UNINTELLIGENCE Version v20251228
+# CyborgZOSCII UNINTELLIGENCE Version v20260226
 
 ZOSCII Zero Overhead Secure Code Information Interchange.
 
-All Sourcecode, Tools and Applications under this repository are released uner the UNINTELLIGENCE SOFTWARE LICENSE v1.0.
+All Sourcecode, Tools and Applications under this repository are released uner the UNINTELLIGENCE SOFTWARE LICENSE v1.1.
 
 For MIT Licenced versions: https://github.com/PrimalNinja/cyborgzoscii 
 
@@ -15,5 +15,9 @@ CyborgZOSCII is an alternative to ASCII/PETSCII that uses direct ROM addressing 
 ## microZOSCII
 
 microZOSCII is a ZOSCII-derived, Quantum Proof mechanism to bootstrap full ZOSCII.
+
+## UNSIGNAL Protocol
+
+UNSIGNAL Protocol Specification - using ZOSCII for the ultimate Quantum Proof protection.
 
 **ZOSCII: Where information theory meets practical engineering, and encryption becomes obsolete.**
