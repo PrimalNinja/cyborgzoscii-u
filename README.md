@@ -20,4 +20,8 @@ microZOSCII is a ZOSCII-derived, Quantum Proof mechanism to bootstrap full ZOSCI
 
 UNSIGNAL Protocol Specification - using ZOSCII for the ultimate Quantum Proof protection.
 
+## NoEyes Handshake Protocol
+
+NoEyes Handshake Protocol Specification - using microZOSCII and ZOSCII for the ultimate Quantum Proof 'real' zero-trust end to end handshake.
+
 **ZOSCII: Where information theory meets practical engineering, and encryption becomes obsolete.**
