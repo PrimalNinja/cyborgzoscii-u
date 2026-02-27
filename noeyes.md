@@ -18,7 +18,7 @@ You get a link from the certificate providers out of band, a generated 240-byte 
 
 ### Phase 2: Bootstrap
 
-Each of the 3 middlemen holds a complete, independently generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism — not a fragment, not a partial key.
+Each of the 3 middlemen holds a complete, independently generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism — not a fragment, not a partial key. This 240 byte microZOSCII microROM is delivered encoded in your out-of-band microROM for that provider.
 
 ### Phase 3: microROM Distribution
 
