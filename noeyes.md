@@ -12,11 +12,15 @@ A trust establishment mechanism that uses existing Certificate Authorities (CAs)
 - **3 Independent Middlemen**: Certificate Authorities or equivalent trust brokers
 - **2 Endpoints**: The communicating parties, client and server
 
-### Phase 1: Bootstrap
+### Phase 1: Link to Certificate Provider
+
+You get a link from the certificate providers out of band, a generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism — not a fragment, not a partial key.
+
+### Phase 2: Bootstrap
 
 Each of the 3 middlemen holds a complete, independently generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism — not a fragment, not a partial key.
 
-### Phase 2: microROM Distribution
+### Phase 3: microROM Distribution
 
 Each middleman dynamically generates a fresh 240-byte microZOSCII microROM for this session and provides it to both endpoints.
 
@@ -29,11 +33,11 @@ No middleman sees the other two microROMs. No middleman holds or generates the f
 
 Server must prove certificate identity to receive the 3 microROMs. If certificate is validated, client is just sent the 3 microROMs.
 
-### Phase 3: NoEyes Handshake
+### Phase 4: NoEyes Handshake
 
 Given 3 microROMs, the two endpoints now have a secure channel to establish end to end communications and send a full 64KB ROM.  In reality they can communicate securely over the 3 microROMs.  This is done simply by triple encoding using microZOSCII.  The benefits of transmitting the 64kb full ROM however is that communications now becomes more compact and faster. This 64kb ROM can either be nominated by the client, server or system-created.
 
-### Phase 4: Sovereign Communication
+### Phase 5: Sovereign Communication
 
 Endpoints communicate using the privately exchanged ROM. All three middlemen are now irrelevant.
 
