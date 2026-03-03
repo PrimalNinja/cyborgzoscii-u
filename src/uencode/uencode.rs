@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260301
+// Cyborg UNSIGNAL Protocol v20260303
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -8,7 +8,11 @@ use std::env;
 use std::fs::File;
 use std::io::{Read, Write, BufReader, BufWriter};
 use std::process;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+use lazy_static::lazy_static;
 
 struct ByteAddresses 
 {
@@ -25,6 +29,11 @@ struct RomData
     ptrROMData: Vec<u8>,
     lngROMSize: usize,
     arrLookup: [ByteAddresses; 256],
+}
+
+lazy_static! 
+{
+    static ref GLOBAL_RNG: Mutex<ChaCha8Rng> = Mutex::new(ChaCha8Rng::seed_from_u64(0));
 }
 
 fn find_offset(byLow_a: u8, byHigh_a: u8, lngROMSize_a: usize) -> u16 
@@ -58,7 +67,7 @@ fn find_rom_address(ptrLookup_a: &[ByteAddresses; 256], byTarget_a: u8) -> u16
     
     if ptrLookup_a[byTarget_a as usize].intCount > 0 
     {
-        let intRandomIdx: usize = rand::thread_rng().gen_range(0..ptrLookup_a[byTarget_a as usize].intCount) as usize;
+        let intRandomIdx: usize = GLOBAL_RNG.lock().unwrap().gen_range(0..ptrLookup_a[byTarget_a as usize].intCount) as usize;
         intResult = ptrLookup_a[byTarget_a as usize].ptrAddresses[intRandomIdx];
     }
     
@@ -68,12 +77,12 @@ fn find_rom_address(ptrLookup_a: &[ByteAddresses; 256], byTarget_a: u8) -> u16
 fn build_lookup_table(ptrRom_a: &mut RomData) 
 {
     let mut arrCounts: [u32; 256] = [0; 256];
-    let lngHeaderSize: usize;
+    let mut lngHeaderSize: usize;
     let mut lngI: usize = 0;
     let mut intI: usize = 0;
     
     // Initialize lookup array
-    for intI = 0; intI < 256; intI++ 
+    for intI in 0..256
     {
         ptrRom_a.arrLookup[intI].ptrAddresses = Vec::new();
         ptrRom_a.arrLookup[intI].intCount = 0;
@@ -87,13 +96,13 @@ fn build_lookup_table(ptrRom_a: &mut RomData)
     }
     
     // Count occurrences
-    for lngI = 0; lngI < lngHeaderSize; lngI++ 
+    for lngI in 0..lngHeaderSize
     {
         arrCounts[ptrRom_a.ptrROMData[lngI] as usize] += 1;
     }
     
     // Allocate memory for each byte value
-    for intI = 0; intI < 256; intI++ 
+    for intI in 0..256
     {
         if arrCounts[intI] > 0 
         {
@@ -103,12 +112,27 @@ fn build_lookup_table(ptrRom_a: &mut RomData)
     }
     
     // Fill addresses
-    for lngI = 0; lngI < lngHeaderSize; lngI++ 
+    for lngI in 0..lngHeaderSize
     {
         let by: u8 = ptrRom_a.ptrROMData[lngI];
         ptrRom_a.arrLookup[by as usize].ptrAddresses.push(lngI as u16);
         ptrRom_a.arrLookup[by as usize].intCount += 1;
     }
+	
+	// Seed rand based on ROM content
+	let mut intRomHash: u64 = 0;
+	for lngI in 0..ptrRom_a.lngROMSize 
+	{
+		intRomHash = intRomHash.wrapping_mul(33).wrapping_add(ptrRom_a.ptrROMData[lngI] as u64);
+	}
+
+	let time = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap()
+		.as_micros() as u64;
+	intRomHash ^= time;
+
+	*GLOBAL_RNG.lock().unwrap() = ChaCha8Rng::seed_from_u64(intRomHash);
 }
 
 fn load_rom(strFilename_a: &str) -> Result<RomData, String> 
@@ -194,7 +218,6 @@ fn encode_file(ptrRom_a: &RomData, strInputFile_a: &str, strOutputFile_a: &str) 
     let mut ptrPrefix: Vec<u8> = Vec::new();
     let mut ptrSuffix: Vec<u8> = Vec::new();
     let lngEffectiveSize: usize;
-    let mut ptrRand: rand::rngs::ThreadRng;
     let mut lngI: usize = 0;
     let mut intI: usize = 0;
     let mut blnLookupValid: bool = true;
@@ -202,20 +225,18 @@ fn encode_file(ptrRom_a: &RomData, strInputFile_a: &str, strOutputFile_a: &str) 
     let mut ptrOutput: BufWriter<File>;
     let mut arrBuf: [u8; 1] = [0u8; 1];
     
-    ptrRand = rand::thread_rng();
-    
     // Initialize offset lookup array
-    for intI = 0; intI < 256; intI++ 
+    for intI in 0..256
     {
         arrOffsetLookup[intI].ptrAddresses = Vec::new();
         arrOffsetLookup[intI].intCount = 0;
     }
     
     // Generate header values
-    byOffsetLow = ptrRand.gen();
-    byOffsetHigh = ptrRand.gen();
-    byPrefixLen = ptrRand.gen_range(10..=255);
-    bySuffixLen = ptrRand.gen_range(10..=255);
+	byOffsetLow = GLOBAL_RNG.lock().unwrap().gen();
+	byOffsetHigh = GLOBAL_RNG.lock().unwrap().gen();
+	byPrefixLen = GLOBAL_RNG.lock().unwrap().gen_range(10..=255);
+	bySuffixLen = GLOBAL_RNG.lock().unwrap().gen_range(10..=255);
     
     // Check that ROM contains required byte values using pre-built lookup
     if ptrRom_a.arrLookup[byOffsetLow as usize].intCount > 0 && 
@@ -232,34 +253,34 @@ fn encode_file(ptrRom_a: &RomData, strInputFile_a: &str, strOutputFile_a: &str) 
         
         // Generate random prefix and suffix
         ptrPrefix = Vec::with_capacity(byPrefixLen as usize);
-        for intI = 0; intI < byPrefixLen as usize; intI++ 
+        for intI in 0..byPrefixLen as usize 
         {
-            ptrPrefix.push(ptrRand.gen());
+            ptrPrefix.push(GLOBAL_RNG.lock().unwrap().gen());
         }
         
         ptrSuffix = Vec::with_capacity(bySuffixLen as usize);
-        for intI = 0; intI < bySuffixLen as usize; intI++ 
+        for intI in 0..bySuffixLen as usize
         {
-            ptrSuffix.push(ptrRand.gen());
+            ptrSuffix.push(GLOBAL_RNG.lock().unwrap().gen());
         }
         
         // Calculate effective encoding window
         lngEffectiveSize = (ptrRom_a.lngROMSize - intROMOffset as usize).min(65536);
         
         // Build offset lookup tables for the encoding window
-        for lngI = 0; lngI < lngEffectiveSize; lngI++ 
+        for lngI in 0..lngEffectiveSize
         {
             arrOffsetCounts[ptrRom_a.ptrROMData[intROMOffset as usize + lngI] as usize] += 1;
         }
         
         // Initialize offset lookup array (already done above)
         
-        for intI = 0; intI < 256 && blnLookupValid; intI++ 
+        for intI in 0..256
         {
             if arrOffsetCounts[intI] > 0 
             {
                 arrOffsetLookup[intI].ptrAddresses = Vec::with_capacity(arrOffsetCounts[intI] as usize);
-                if !arrOffsetLookup[intI].ptrAddresses.is_empty() || arrOffsetCounts[intI] == 0 
+                if arrOffsetLookup[intI].ptrAddresses.capacity() > 0 
                 {
                     arrOffsetLookup[intI].intCount = 0;
                 } 
@@ -270,10 +291,11 @@ fn encode_file(ptrRom_a: &RomData, strInputFile_a: &str, strOutputFile_a: &str) 
             }
         }
         
-        for lngI = 0; lngI < lngEffectiveSize && blnLookupValid; lngI++ 
-        {
-            let by: u8 = ptrRom_a.ptrROMData[intROMOffset as usize + lngI];
-            arrOffsetLookup[by as usize].ptrAddresses.push(lngI as u16);
+		for lngI in 0..lngEffectiveSize
+		{
+			if !blnLookupValid { break; }
+			let by: u8 = ptrRom_a.ptrROMData[intROMOffset as usize + lngI];
+			arrOffsetLookup[by as usize].ptrAddresses.push(lngI as u16);
             arrOffsetLookup[by as usize].intCount += 1;
         }
         
@@ -308,9 +330,7 @@ fn encode_file(ptrRom_a: &RomData, strInputFile_a: &str, strOutputFile_a: &str) 
                                             let by: u8 = arrBuf[0];
                                             if arrOffsetLookup[by as usize].intCount > 0 
                                             {
-                                                let intIdx: usize = ptrRand.gen_range(
-                                                    0..arrOffsetLookup[by as usize].intCount
-                                                ) as usize;
+                                                let intIdx: usize = GLOBAL_RNG.lock().unwrap().gen_range(0..arrOffsetLookup[by as usize].intCount) as usize;
                                                 let intAddress: u16 = arrOffsetLookup[by as usize].ptrAddresses[intIdx];
                                                 
                                                 if ptrOutput.write_all(&intAddress.to_le_bytes()).is_err() 
@@ -357,8 +377,8 @@ fn main()
     let strArgs: Vec<String> = env::args().collect();
     let blnEncodeOk: bool;
     
-    println!("UNSIGNAL Protocol Encoder");
-    println!("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n");
+    println!("UNSIGNAL Protocol Encoder v20260303");
+    println!("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n");
 
     if strArgs.len() == 4 
     {

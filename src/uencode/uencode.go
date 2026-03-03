@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260301
+// Cyborg UNSIGNAL Protocol v20260303
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -34,6 +34,8 @@ type RomData struct
 	arrLookup  [256]ByteAddresses
 }
 
+var globalRand *rand.Rand
+
 func findOffset(byLow_a byte, byHigh_a byte, lngROMSize_a int64) uint16 
 {
 	var intResult uint16 = 0
@@ -65,7 +67,7 @@ func findROMAddress(ptrLookup_a *[256]ByteAddresses, byTarget_a byte) uint16
 	
 	if ptrLookup_a[byTarget_a].intCount > 0 
 	{
-		var intRandomIdx int = rand.Intn(int(ptrLookup_a[byTarget_a].intCount))
+		var intRandomIdx int = globalRand.Intn(int(ptrLookup_a[byTarget_a].intCount))
 		intResult = ptrLookup_a[byTarget_a].ptrAddresses[intRandomIdx]
 	}
 	
@@ -116,32 +118,53 @@ func buildLookupTable(ptrRom_a *RomData)
 		ptrRom_a.arrLookup[by].ptrAddresses = append(ptrRom_a.arrLookup[by].ptrAddresses, uint16(lngI))
 		ptrRom_a.arrLookup[by].intCount++
 	}
+	
+	// Seed rand based on ROM content
+	var intRomHash uint64 = 0
+	for lngI = 0; lngI < ptrRom_a.lngROMSize; lngI++ 
+	{
+		intRomHash = intRomHash*33 + uint64(ptrRom_a.ptrROMData[lngI])
+	}
+
+	intRomHash ^= uint64(time.Now().UnixNano())
+
+	globalRand = rand.New(rand.NewSource(int64(intRomHash)))
 }
 
 func loadRom(strFilename_a string) (*RomData, error) 
 {
 	var ptrRom *RomData = nil
 	var ptrFile *os.File = nil
+	var info os.FileInfo = nil
 	var err error = nil
+	var lngSize int64 = 0
 	
 	ptrFile, err = os.Open(strFilename_a)
 	if err == nil 
 	{
 		defer ptrFile.Close()
 		
-		var arrBuf []byte = make([]byte, UNSIGNAL_ROM_LOAD_MAX)
-		var n int = 0
-		
-		n, err = io.ReadFull(ptrFile, arrBuf)
-		if err == nil || err == io.ErrUnexpectedEOF 
+		info, err = ptrFile.Stat()
+		if err == nil 
 		{
-			ptrRom = &RomData{}
-			ptrRom.ptrROMData = arrBuf[:n]
-			ptrRom.lngROMSize = int64(len(ptrRom.ptrROMData))
+			lngSize = info.Size()
+			if lngSize > UNSIGNAL_ROM_LOAD_MAX 
+			{
+				lngSize = UNSIGNAL_ROM_LOAD_MAX
+			}
 			
-			// Pre-build lookup table for reuse across multiple encodes
-			buildLookupTable(ptrRom)
-		} 
+			var arrBuf []byte = make([]byte, lngSize)
+			_, err = io.ReadFull(ptrFile, arrBuf)
+			if err == nil 
+			{
+				ptrRom = &RomData{}
+				ptrRom.ptrROMData = arrBuf
+				ptrRom.lngROMSize = lngSize
+				
+				// Pre-build lookup table for reuse across multiple encodes
+				buildLookupTable(ptrRom)
+			}
+		}
 	}
 	
 	return ptrRom, err
@@ -192,10 +215,10 @@ func encodeFile(ptrRom_a *RomData, strInputFile_a string, strOutputFile_a string
 	}
 	
 	// Generate header values
-	byOffsetLow = byte(rand.Intn(256))
-	byOffsetHigh = byte(rand.Intn(256))
-	byPrefixLen = byte(rand.Intn(246) + 10)
-	bySuffixLen = byte(rand.Intn(246) + 10)
+	byOffsetLow = byte(globalRand.Intn(256))
+	byOffsetHigh = byte(globalRand.Intn(256))
+	byPrefixLen = byte(globalRand.Intn(246) + 10)
+	bySuffixLen = byte(globalRand.Intn(246) + 10)
 	
 	// Check that ROM contains required byte values using pre-built lookup
 	if ptrRom_a.arrLookup[byOffsetLow].intCount > 0 && 
@@ -215,11 +238,11 @@ func encodeFile(ptrRom_a *RomData, strInputFile_a string, strOutputFile_a string
 		ptrSuffix = make([]byte, bySuffixLen)
 		for intI = 0; intI < int(byPrefixLen); intI++ 
 		{
-			ptrPrefix[intI] = byte(rand.Intn(256))
+			ptrPrefix[intI] = byte(globalRand.Intn(256))
 		}
 		for intI = 0; intI < int(bySuffixLen); intI++ 
 		{
-			ptrSuffix[intI] = byte(rand.Intn(256))
+			ptrSuffix[intI] = byte(globalRand.Intn(256))
 		}
 		
 		// Calculate effective encoding window
@@ -298,7 +321,7 @@ func encodeFile(ptrRom_a *RomData, strInputFile_a string, strOutputFile_a string
 						var by byte = arrBuf[0]
 						if arrOffsetLookup[by].intCount > 0 
 						{
-							var intRandomIdx int = rand.Intn(int(arrOffsetLookup[by].intCount))
+							var intRandomIdx int = globalRand.Intn(int(arrOffsetLookup[by].intCount))
 							var intAddress uint16 = arrOffsetLookup[by].ptrAddresses[intRandomIdx]
 							binary.Write(ptrOutput, binary.LittleEndian, intAddress)
 						}
@@ -327,14 +350,12 @@ func main()
 	var err error = nil
 	var blnEncodeOk bool = false
 	
-	fmt.Println("UNSIGNAL Protocol Encoder")
-	fmt.Println("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
+	fmt.Println("UNSIGNAL Protocol Encoder v20260303")
+	fmt.Println("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
 
 	strArgs := os.Args
 	if len(strArgs) == 4 
 	{
-		rand.Seed(time.Now().UnixNano())
-		
 		ptrRom, err = loadRom(strArgs[1])
 		if err == nil && ptrRom != nil 
 		{

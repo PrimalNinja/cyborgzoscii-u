@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260301
+// Cyborg UNSIGNAL Protocol v20260303
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -111,6 +111,17 @@ static void buildLookupTable(RomData* ptrRom_a)
         uint8_t by = ptrRom_a->ptrROMData[lngI];
         ptrRom_a->arrLookup[by].ptrAddresses[ptrRom_a->arrLookup[by].intCount++] = (uint32_t)lngI;
     }
+
+    // Seed rand based on ROM content
+    uint32_t intRomHash = 0;
+    for (lngI = 0; lngI < ptrRom_a->lngROMSize; lngI++)
+    {
+        intRomHash = (intRomHash * 33) + ptrRom_a->ptrROMData[lngI];
+    }
+    
+    intRomHash ^= (uint32_t)time(NULL);
+    
+    srand(intRomHash);
 }
 
 static RomData* loadRom(const char* strFilename_a)
@@ -362,13 +373,11 @@ int main(int intArgC_a, char* strArgv_a[])
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    printf("UNSIGNAL Protocol Encoder\n");
-    printf("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
+    printf("UNSIGNAL Protocol Encoder v20260303\n");
+    printf("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
 
     if (intArgC_a == 4)
     {
-        srand((unsigned int)time(NULL));
-        
         ptrRom = loadRom(strArgv_a[1]);
         if (ptrRom)
         {

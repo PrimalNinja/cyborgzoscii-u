@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Cyborg UNSIGNAL Protocol v20260301
+# Cyborg UNSIGNAL Protocol v20260303
 # (c) 2026 Cyborg Unicorn Pty Ltd.
 # This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 # ZOSCII core logic remains under MIT License.
@@ -79,6 +79,15 @@ def buildLookupTable(ptrRom_a):
         by = ptrRom_a.ptrROMData[lngI]
         ptrRom_a.arrLookup[by].ptrAddresses[ptrRom_a.arrLookup[by].intCount] = lngI
         ptrRom_a.arrLookup[by].intCount += 1
+
+    # Seed random based on ROM content
+    intRomHash = 0
+    for lngI in range(ptrRom_a.lngROMSize):
+        intRomHash = (intRomHash * 33) + ptrRom_a.ptrROMData[lngI]
+
+    intRomHash ^= int(time.time() * 1000000)
+
+    random.seed(intRomHash)
 
 def loadRom(strFilename_a):
     ptrRom = None
@@ -218,12 +227,10 @@ def main():
     ptrRom = None
     blnEncodeOk = False
     
-    print("UNSIGNAL Protocol Encoder")
-    print("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
+    print("UNSIGNAL Protocol Encoder v20260303")
+    print("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
     
     if len(sys.argv) == 4:
-        random.seed(int(time.time()))
-        
         ptrRom = loadRom(sys.argv[1])
         if ptrRom:
             blnEncodeOk = encodeFile(ptrRom, sys.argv[2], sys.argv[3])

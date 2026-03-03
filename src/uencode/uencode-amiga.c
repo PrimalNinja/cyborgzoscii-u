@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260301
+// Cyborg UNSIGNAL Protocol v20260303
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -28,6 +28,28 @@ typedef struct
     long lngROMSize;
     ByteAddresses arrLookup[256];
 } RomData;
+
+static void leWrite(const void* ptrData_a, size_t intSize_a, size_t intCount_a, FILE* ptrFile_a)
+{
+    size_t lngI = 0;
+    const uint8_t* ptrSrc = (const uint8_t*)ptrData_a;
+    
+    for (lngI = 0; lngI < intCount_a; lngI++)
+    {
+        if (intSize_a == 2)
+        {
+            uint16_t intValue = *(const uint16_t*)(ptrSrc + (lngI * intSize_a));
+            uint8_t arrBytes[2];
+            arrBytes[0] = (uint8_t)(intValue & 0xFF);
+            arrBytes[1] = (uint8_t)(intValue >> 8);
+            fwrite(arrBytes, 1, 2, ptrFile_a);
+        }
+        else
+        {
+            fwrite(ptrSrc + (lngI * intSize_a), intSize_a, 1, ptrFile_a);
+        }
+    }
+}
 
 static uint16_t findOffset(uint8_t byLow_a, uint8_t byHigh_a, long lngROMSize_a)
 {
@@ -110,6 +132,17 @@ static void buildLookupTable(RomData* ptrRom_a)
         uint8_t by = ptrRom_a->ptrROMData[lngI];
         ptrRom_a->arrLookup[by].ptrAddresses[ptrRom_a->arrLookup[by].intCount++] = (uint32_t)lngI;
     }
+
+	// seed rand based on ROM
+    uint32_t intRomHash = 0;
+    for (lngI = 0; lngI < ptrRom_a->lngROMSize; lngI++) 
+    {
+        intRomHash = (intRomHash * 33) + ptrRom_a->ptrROMData[lngI];
+    }
+    
+    intRomHash ^= (uint32_t)time(NULL);
+    
+    srand(intRomHash);
 }
 
 static RomData* loadRom(const char* strFilename_a)
@@ -278,13 +311,13 @@ static bool encodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
                     if (ptrOutput) 
                     {
                         // Write header (4 x 16-bit addresses)
-                        fwrite(&intH1, sizeof(uint16_t), 1, ptrOutput);
-                        fwrite(&intH2, sizeof(uint16_t), 1, ptrOutput);
-                        fwrite(&intH3, sizeof(uint16_t), 1, ptrOutput);
-                        fwrite(&intH4, sizeof(uint16_t), 1, ptrOutput);
+                        leWrite(&intH1, sizeof(uint16_t), 1, ptrOutput);
+                        leWrite(&intH2, sizeof(uint16_t), 1, ptrOutput);
+                        leWrite(&intH3, sizeof(uint16_t), 1, ptrOutput);
+                        leWrite(&intH4, sizeof(uint16_t), 1, ptrOutput);
                         
                         // Write prefix
-                        fwrite(ptrPrefix, 1, byPrefixLen, ptrOutput);
+                        leWrite(ptrPrefix, 1, byPrefixLen, ptrOutput);
                         
                         // Stream-encode input
                         while ((intCh = fgetc(ptrInput)) != EOF) 
@@ -295,12 +328,12 @@ static bool encodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
                                 uint16_t intAddress = (uint16_t)(
                                     arrOffsetLookup[by].ptrAddresses[rand() % arrOffsetLookup[by].intCount]
                                 );
-                                fwrite(&intAddress, sizeof(uint16_t), 1, ptrOutput);
+                                leWrite(&intAddress, sizeof(uint16_t), 1, ptrOutput);
                             }
                         }
                         
                         // Write suffix
-                        fwrite(ptrSuffix, 1, bySuffixLen, ptrOutput);
+                        leWrite(ptrSuffix, 1, bySuffixLen, ptrOutput);
                         
                         blnSuccess = true;
                         
@@ -337,11 +370,9 @@ int main(int intArgC_a, char* strArgv_a[])
     RomData* ptrRom = NULL;
     bool blnEncodeOk = false;
     
-    printf("UNSIGNAL Protocol Encoder\n");
+    printf("UNSIGNAL Protocol Encoder v20260303\n");
     printf("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
     
-    srand((unsigned int)time(NULL));
-
     if (intArgC_a == 4) 
     {
         ptrRom = loadRom(strArgv_a[1]);

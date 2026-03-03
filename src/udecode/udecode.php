@@ -46,14 +46,21 @@ function loadRom($strFilename_a)
     if (file_exists($strFilename_a)) 
     {
         $ptrRom = new RomData();
-        $ptrRom->ptrROMData = file_get_contents($strFilename_a);
-        if ($ptrRom->ptrROMData !== false) 
+        
+        $ptrFile = fopen($strFilename_a, 'rb');
+        if ($ptrFile) 
         {
-            $ptrRom->lngROMSize = strlen($ptrRom->ptrROMData);
-            if ($ptrRom->lngROMSize > UNSIGNAL_ROM_LOAD_MAX) 
+            $data = fread($ptrFile, UNSIGNAL_ROM_LOAD_MAX);
+            fclose($ptrFile);
+            
+            if ($data !== false) 
             {
-                $ptrRom->ptrROMData = substr($ptrRom->ptrROMData, 0, UNSIGNAL_ROM_LOAD_MAX);
-                $ptrRom->lngROMSize = UNSIGNAL_ROM_LOAD_MAX;
+                $ptrRom->ptrROMData = $data;
+                $ptrRom->lngROMSize = strlen($data);
+            } 
+            else 
+            {
+                $ptrRom = null;
             }
         } 
         else 

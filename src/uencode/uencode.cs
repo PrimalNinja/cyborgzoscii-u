@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260301
+// Cyborg UNSIGNAL Protocol v20260303
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -63,6 +63,8 @@ class Program
         return intResult;
     }
 
+	private static Random ptrRand;
+	
     private static void BuildLookupTable(ref RomData ptrRom_a)
     {
         uint[] arrCounts = new uint[256];
@@ -101,6 +103,18 @@ class Program
             byte by = ptrRom_a.ptrROMData[lngI];
             ptrRom_a.arrLookup[by].ptrAddresses[ptrRom_a.arrLookup[by].intCount++] = (uint)lngI;
         }
+
+		// Seed Random based on ROM content
+		uint romHash = 0;
+		for (long lngI = 0; lngI < ptrRom_a.lngROMSize; lngI++)
+		{
+			romHash = (romHash * 33) + ptrRom_a.ptrROMData[lngI];
+		}
+		
+		/* XOR with current time for per-run uniqueness */
+		romHash ^= (uint)Environment.TickCount;
+		
+		ptrRand = new Random((int)romHash);
     }
 
     private static RomData LoadRom(string strFilename_a)
@@ -158,15 +172,12 @@ class Program
         byte[] ptrPrefix = null;
         byte[] ptrSuffix = null;
         long lngEffectiveSize = 0;
-        Random ptrRand = null;
         long lngI = 0;
         int intI = 0;
         bool blnLookupValid = true;
         FileStream ptrInput = null;
         FileStream ptrOutput = null;
         int intCh = 0;
-        
-        ptrRand = new Random();
         
         // Initialize offset lookup array
         for (intI = 0; intI < 256; intI++)
@@ -311,8 +322,8 @@ class Program
         RomData ptrRom = new RomData();
         bool blnEncodeOk = false;
         
-        Console.WriteLine("UNSIGNAL Protocol Encoder");
-        Console.WriteLine("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1");
+        Console.WriteLine("UNSIGNAL Protocol Encoder v20260303");
+        Console.WriteLine("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1");
         Console.WriteLine();
 
         if (strArgs_a.Length == 3)
