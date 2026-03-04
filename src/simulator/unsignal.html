@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZOSCII / UNSIGNAL Visual Demonstration</title>
+    <style>
+* {
+    box-sizing: border-box;
+    font-family: 'Courier New', monospace;
+}
+body {
+    margin: 0;
+    padding: 20px;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+.container {
+    max-width: 100%;
+    width: 100%;
+	margin: 0 auto;
+}
+
+/* Title and subtitle full width */
+.container > h1,
+.container > .subtitle {
+    width: 100%;
+    text-align: center;
+}
+
+h1 {
+    text-align: center;
+    color: #00ff00;
+    text-shadow: 0 0 10px #00ff00;
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 2.5em;
+}
+.subtitle {
+    text-align: center;
+    color: #888;
+    margin-bottom: 30px;
+    font-style: italic;
+}
+.mode-selector {
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #444;
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+}
+.mode-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.mode-option input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: #00ff00;
+}
+.mode-option label {
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.mode-option.zoscii label {
+    color: #00ff00;
+}
+.mode-option.unsignal label {
+    color: #ff6600;
+}
+.input-section {
+    background: #2a2a2a;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #444;
+}
+label {
+    display: block;
+    margin-bottom: 8px;
+    color: #00ff00;
+    font-weight: bold;
+}
+.unsignal-mode label {
+    color: #ff6600;
+}
+textarea {
+    width: 100%;
+    padding: 12px;
+    background: #333;
+    border: 1px solid #555;
+    color: #e0e0e0;
+    font-size: 16px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    resize: vertical;
+    font-family: 'Courier New', monospace;
+}
+textarea:focus {
+    outline: none;
+    border-color: #00ff00;
+    box-shadow: 0 0 10px rgba(0,255,0,0.3);
+}
+.unsignal-mode textarea:focus {
+    border-color: #ff6600;
+    box-shadow: 0 0 10px rgba(255,102,0,0.3);
+}
+.readonly {
+    background: #222;
+    color: #00ff00;
+    font-weight: bold;
+}
+.unsignal-mode .readonly {
+    color: #ff6600;
+}
+.output-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+.output-box {
+    flex: 1;
+    min-width: 200px;
+}
+.output-box label {
+    color: #00ff00;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+.unsignal-mode .output-box label {
+    color: #ff6600;
+}
+.output-box textarea {
+    height: 100px;
+    font-size: 14px;
+    resize: vertical;
+}
+.canvas-container {
+    background: #2a2a2a;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #444;
+    text-align: center;
+}
+canvas {
+    border: 2px solid #444;
+    background: #000;
+    cursor: crosshair;
+    max-width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+.canvas-label {
+    margin-bottom: 10px;
+    color: #00ff00;
+    font-weight: bold;
+}
+.unsignal-mode .canvas-label {
+    color: #ff6600;
+}
+.canvas-hint {
+    color: #888;
+    font-size: 14px;
+    margin-top: 10px;
+    font-style: italic;
+}
+.stats {
+    display: flex;
+    gap: 20px;
+    justify-content: space-between;
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #444;
+    flex-wrap: wrap;
+}
+.stat-item {
+    flex: 1;
+    min-width: 150px;
+}
+.stat-label {
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+.stat-value {
+    color: #00ff00;
+    font-size: 20px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+}
+.unsignal-mode .stat-value {
+    color: #ff6600;
+}
+.button-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+button {
+    background: #333;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex: 1;
+    min-width: 120px;
+}
+button:hover {
+    background: #444;
+    border-color: #00ff00;
+    color: #00ff00;
+}
+.unsignal-mode button:hover {
+    border-color: #ff6600;
+    color: #ff6600;
+}
+button.primary {
+    background: #006600;
+    border-color: #00ff00;
+    color: #00ff00;
+}
+button.primary:hover {
+    background: #008800;
+}
+.unsignal-mode button.primary {
+    background: #663300;
+    border-color: #ff6600;
+    color: #ff6600;
+}
+.unsignal-mode button.primary:hover {
+    background: #884400;
+}
+.footer {
+    text-align: center;
+    color: #666;
+    font-size: 12px;
+    margin-top: 30px;
+}
+.highlight {
+    color: #00ff00;
+    font-weight: bold;
+}
+.unsignal-mode .highlight {
+    color: #ff6600;
+}
+.window-info {
+    background: #333;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+    font-family: 'Courier New', monospace;
+    border-left: 4px solid #00ff00;
+}
+.unsignal-mode .window-info {
+    border-left-color: #ff6600;
+}
+.window-label {
+    color: #00ff00;
+    font-weight: bold;
+}
+.unsignal-mode .window-label {
+    color: #ff6600;
+}
+.header-details {
+    background: #222;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #555;
+    display: none;
+}
+.unsignal-mode .header-details {
+    display: block;
+}
+.header-row {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+.header-item {
+    background: #333;
+    padding: 8px 12px;
+    border-radius: 3px;
+    border-left: 3px solid #ff6600;
+}
+.header-item span {
+    color: #ff6600;
+    font-weight: bold;
+}
+.pointer-line {
+    color: #888;
+    font-size: 12px;
+    font-style: italic;
+}
+#zosciiHeader {
+    display: none;
+}
+
+/* Default stacked layout - always column */
+.container {
+    display: flex;
+    flex-direction: column;
+}
+
+@media (min-width: 1920px) {
+    .container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    
+    .container > h1,
+    .container > .subtitle {
+        grid-column: 1 / -1;
+    }
+    
+    /* Left column */
+    .mode-selector {
+        grid-column: 1;
+        grid-row: 3;
+    }
+    
+    .input-section {
+        grid-column: 1;
+        grid-row: 4;
+    }
+    
+    /* Right column - align canvas with input section */
+    .right-column {
+        grid-column: 2;
+        grid-row: 4 / span 2;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    /* Footer spans both columns at the bottom */
+    .footer {
+        grid-column: 1 / -1;
+        grid-row: 6;
+        margin-top: 20px;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="mainTitle">🔷 ZOSCII / UNSIGNAL VISUAL DEMONSTRATION</h1>
+        <div class="subtitle">Choose encoding mode • I(M;A)=0 • Quantum-Proof</div>
+        
+        <!-- Mode Selection -->
+        <div class="mode-selector">
+            <div class="mode-option zoscii">
+                <input type="radio" id="modeZOSCII" name="encodingMode" value="zoscii">
+                <label for="modeZOSCII">🔷 ZOSCII (64KB ROM)</label>
+            </div>
+            <div class="mode-option unsignal">
+                <input type="radio" id="modeUNSIGNAL" name="encodingMode" value="unsignal" checked>
+                <label for="modeUNSIGNAL">🔶 UNSIGNAL (128KB ROM + sliding window)</label>
+            </div>
+        </div>
+        
+        <div class="input-section" id="inputSection">
+            <label>📝 ENTER MESSAGE TO ENCODE:</label>
+            <textarea id="inputMessage" rows="3" placeholder="Type your message here...">Process slowed for visual animation purposes only!</textarea>
+            
+            <div class="button-row">
+                <button id="encodeBtn" class="primary">🔷 ENCODE</button>
+                <button id="randomROM">🎲 GENERATE RANDOM ROM</button>
+                <button id="clearBtn">🗑️ CLEAR ALL</button>
+            </div>
+            
+            <!-- ZOSCII-specific info (minimal) -->
+            <div id="zosciiInfo" class="window-info">
+                <span class="window-label">🔷 ZOSCII MODE:</span> Using first 64KB of 128KB ROM (no sliding window)
+            </div>
+            
+            <!-- UNSIGNAL-specific info -->
+            <div id="unsignalInfo" class="window-info" style="display: none;">
+                <span class="window-label">🔶 CURRENT WINDOW:</span> Not yet encoded
+            </div>
+            
+            <!-- UNSIGNAL Header Details (hidden in ZOSCII mode) -->
+            <div class="header-details" id="headerDetails">
+                <div style="color:#ff6600; font-weight:bold; margin-bottom:10px;">📋 HEADER INDIRECTION (Addresses → Values)</div>
+                <div class="header-row" id="headerRow1">
+                    <div class="header-item">
+                        <span>H1:</span> <span id="h1Addr">---</span> → points to <span id="h1Val">---</span> (offset low)
+                    </div>
+                    <div class="header-item">
+                        <span>H2:</span> <span id="h2Addr">---</span> → points to <span id="h2Val">---</span> (offset high)
+                    </div>
+                </div>
+                <div class="header-row" id="headerRow2">
+                    <div class="header-item">
+                        <span>H3:</span> <span id="h3Addr">---</span> → points to <span id="h3Val">---</span> (prefix length)
+                    </div>
+                    <div class="header-item">
+                        <span>H4:</span> <span id="h4Addr">---</span> → points to <span id="h4Val">---</span> (suffix length)
+                    </div>
+                </div>
+                <div class="pointer-line">
+                    Window offset = <span id="offsetCalc">---</span> • Prefix length = <span id="prefixLen">---</span> • Suffix length = <span id="suffixLen">---</span>
+                </div>
+            </div>
+            
+            <!-- Output sections - different for each mode -->
+            <div id="zosciiOutput" style="display: block;">
+                <label>🔷 ZOSCII ENCODED ADDRESSES:</label>
+                <textarea id="zosciiAddresses" class="readonly" rows="3" readonly placeholder="Encoded addresses will appear here..."></textarea>
+            </div>
+            
+            <div id="unsignalOutput" style="display: none;">
+                <div class="output-row">
+                    <div class="output-box">
+                        <label>🔶 HEADER (4 × 16-bit addresses)</label>
+                        <textarea id="headerOutput" class="readonly" rows="3" readonly placeholder="Header addresses..."></textarea>
+                    </div>
+                    <div class="output-box">
+                        <label>🔶 PREFIX (random bytes)</label>
+                        <textarea id="prefixOutput" class="readonly" rows="3" readonly placeholder="Random prefix..."></textarea>
+                    </div>
+                    <div class="output-box">
+                        <label>🔶 SUFFIX (random bytes)</label>
+                        <textarea id="suffixOutput" class="readonly" rows="3" readonly placeholder="Random suffix..."></textarea>
+                    </div>
+                </div>
+                <label>🔶 ENCODED MESSAGE ADDRESSES (within window):</label>
+                <textarea id="messageOutput" class="readonly" rows="3" readonly placeholder="Encoded message addresses will appear here..."></textarea>
+            </div>
+        </div>
+        
+		<div class="right-column">
+			<div class="canvas-container">
+				<div class="canvas-label" id="canvasLabel">🔷 ROM VISUALIZATION (512x256 • 128KB)</div>
+				<canvas id="romCanvas" width="1024" height="512"></canvas>
+				<div class="canvas-hint" id="canvasHint">
+					💡 Drag & drop any file onto the canvas to use as ROM • 
+					<span style="color:#00ff00">Green dots</span> = ROM values •
+					<span style="color:#00ffff">Cyan dots</span> = header addresses (UNSIGNAL only) •
+					<span style="color:#00ff00">Green box</span> = ZOSCII mode (first 64KB) •
+					<span style="color:#ff6600">Orange box</span> = UNSIGNAL window
+				</div>
+			</div>
+			
+			<div class="stats">
+				<div class="stat-item">
+					<div class="stat-label">ROM SIZE</div>
+					<div class="stat-value" id="romSize">0 / 131072 bytes</div>
+				</div>
+				<div class="stat-item">
+					<div class="stat-label">UNIQUE BYTES</div>
+					<div class="stat-value" id="uniqueBytes">0 / 256</div>
+				</div>
+				<div class="stat-item">
+					<div class="stat-label" id="windowLabel">WINDOW OFFSET</div>
+					<div class="stat-value" id="windowOffset">---</div>
+				</div>
+				<div class="stat-item">
+					<div class="stat-label">OUTPUT SIZE</div>
+					<div class="stat-value" id="outputBytes">0</div>
+				</div>
+			</div>
+		</div>
+        
+        <div class="footer">
+            ZOSCII Foundation • Cyborg Unicorn • I(M;A)=0 • Drag any file to use as ROM
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // ==================== CONSTANTS ====================
+            const ROM_SIZE = 131072;           // 128KB fixed for both modes
+            const WINDOW_SIZE = 65536;          // 64KB window
+            const GRID_WIDTH = 512;              // 512 columns
+            const GRID_HEIGHT = 256;              // 256 rows
+            const PIXEL_SIZE = 2;                 // Each cell = 2×2 pixels
+            
+            // Keep these for backward compatibility
+            const ZOSCII_ROM_SIZE = ROM_SIZE;
+            const UNSIGNAL_ROM_SIZE = ROM_SIZE;
+            const ZOSCII_GRID_WIDTH = GRID_WIDTH;
+            const ZOSCII_GRID_HEIGHT = GRID_HEIGHT;
+            const UNSIGNAL_GRID_WIDTH = GRID_WIDTH;
+            const UNSIGNAL_GRID_HEIGHT = GRID_HEIGHT;
+            
+            // ==================== STATE ====================
+            let currentMode = 'unsignal';  // 'zoscii' or 'unsignal'
+            let rom = new Uint8Array(ROM_SIZE);
+            let lookup = new Array(256);
+            let canvas, ctx;
+            let animationTimer = null;
+            let isAnimating = false;
+            let currentCharIndex = 0;
+            let currentMessage = [];
+            let currentMessageAddresses = [];
+            let currentWindowOffset = 0;
+            let currentHeader = { 
+                h1Addr:0, h2Addr:0, h3Addr:0, h4Addr:0,
+                h1Val:0, h2Val:0, h3Val:0, h4Val:0,
+                prefixLen:0, suffixLen:0, prefix: [], suffix: []
+            };
+			let highlightedCells = []; // Store addresses of cells currently highlighted in yellow
+			let pulseInterval = null;
+            
+            // ==================== INITIALIZATION ====================
+            function init() {
+                canvas = document.getElementById('romCanvas');
+                ctx = canvas.getContext('2d');
+                
+                // Set up radio buttons
+                document.getElementById('modeZOSCII').addEventListener('change', switchMode);
+                document.getElementById('modeUNSIGNAL').addEventListener('change', switchMode);
+                
+                // Set initial mode
+                switchMode();
+                
+                generateRandomROM();
+                
+                document.getElementById('encodeBtn').addEventListener('click', startEncoding);
+                document.getElementById('randomROM').addEventListener('click', generateRandomROM);
+                document.getElementById('clearBtn').addEventListener('click', clearAll);
+                
+                canvas.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    canvas.style.borderColor = currentMode === 'zoscii' ? '#00ff00' : '#ff6600';
+                });
+                
+                canvas.addEventListener('dragleave', () => {
+                    canvas.style.borderColor = '#444';
+                });
+                
+                canvas.addEventListener('drop', handleROMDrop);
+                canvas.addEventListener('click', inspectROMAddress);
+                
+                updateStats();
+            }
+            
+            // ==================== MODE SWITCHING ====================
+            function switchMode() {
+                let zosciiRadio = document.getElementById('modeZOSCII');
+                let unsignalRadio = document.getElementById('modeUNSIGNAL');
+                
+                currentMode = zosciiRadio.checked ? 'zoscii' : 'unsignal';
+                
+                // Update body class for styling
+                document.body.classList.toggle('unsignal-mode', currentMode === 'unsignal');
+                
+                // Update UI elements based on mode
+                document.getElementById('zosciiInfo').style.display = currentMode === 'zoscii' ? 'block' : 'none';
+                document.getElementById('unsignalInfo').style.display = currentMode === 'unsignal' ? 'block' : 'none';
+                document.getElementById('zosciiOutput').style.display = currentMode === 'zoscii' ? 'block' : 'none';
+                document.getElementById('unsignalOutput').style.display = currentMode === 'unsignal' ? 'block' : 'none';
+                document.getElementById('headerDetails').style.display = currentMode === 'unsignal' ? 'block' : 'none';
+                
+                // Update labels and titles
+                document.getElementById('mainTitle').innerHTML = currentMode === 'zoscii' ? 
+                    '🔷 ZOSCII VISUAL DEMONSTRATION' : '🔶 UNSIGNAL PROTOCOL VISUAL DEMONSTRATION';
+                
+                document.getElementById('canvasLabel').innerHTML = currentMode === 'zoscii' ?
+                    '🔷 ROM VISUALIZATION (512x256 • 128KB) - First 64KB highlighted (green box)' : 
+                    '🔶 ROM VISUALIZATION (512x256 • 128KB) - Sliding 64KB window (orange box)';
+                
+                document.getElementById('windowLabel').innerText = currentMode === 'zoscii' ? 
+                    'FIXED OFFSET' : 'WINDOW OFFSET';
+                
+                // Update window offset display
+                document.getElementById('windowOffset').innerText = currentMode === 'zoscii' ? '0' : '---';
+                
+                // ROM size stays the same, just re-render
+                renderROM();
+                updateStats();
+                clearAll();
+            }
+            
+            // ==================== ROM GENERATION ====================
+            function generateRandomROM() {
+                for (let i = 0; i < ROM_SIZE; i++) {
+                    rom[i] = Math.floor(Math.random() * 256);
+                }
+                rebuildLookup();
+                renderROM();
+                updateStats();
+                clearAll();
+                console.log('Generated new random 128KB ROM');
+            }
+            
+            // ==================== LOOKUP TABLE BUILDING ====================
+            function rebuildLookup() {
+                for (let i = 0; i < 256; i++) {
+                    lookup[i] = [];
+                }
+                // First 64KB only for header addresses
+                for (let i = 0; i < 65536; i++) {
+                    let val = rom[i];
+                    lookup[val].push(i);
+                }
+            }
+            
+            // ==================== ROM RENDERING ====================
+            function renderROM() {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw each ROM cell
+                for (let y = 0; y < GRID_HEIGHT; y++) {
+                    for (let x = 0; x < GRID_WIDTH; x++) {
+                        let index = y * GRID_WIDTH + x;
+                        if (index < ROM_SIZE) {
+                            let value = rom[index];
+                            let green = value;
+                            
+                            ctx.fillStyle = `rgb(0, ${green}, 0)`;
+                            ctx.fillRect(
+                                x * PIXEL_SIZE, 
+                                y * PIXEL_SIZE, 
+                                PIXEL_SIZE, 
+                                PIXEL_SIZE
+                            );
+                        }
+                    }
+                }
+                
+                // Draw window/highlight box based on mode
+                if (currentMode === 'zoscii') {
+                    drawZosciiHighlight();
+                } else {
+                    if (currentWindowOffset !== undefined && currentWindowOffset !== null) {
+                        drawWindowBox(currentWindowOffset);
+                    }
+                }
+                
+                // Draw header address markers (cyan) only in UNSIGNAL mode
+                if (currentMode === 'unsignal' && currentHeader.h1Addr) {
+                    highlightAddress(currentHeader.h1Addr, '#00ffff', 'L');
+                    highlightAddress(currentHeader.h2Addr, '#00ffff', 'H');
+                    highlightAddress(currentHeader.h3Addr, '#00ffff', 'P');
+                    highlightAddress(currentHeader.h4Addr, '#00ffff', 'S');
+                }
+            }
+
+            // ==================== ZOSCII HIGHLIGHT ====================
+            function drawZosciiHighlight() {
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([6, 4]);
+                
+                // Draw rectangle around first 128 rows (addresses 0-65535)
+                ctx.strokeRect(
+                    1.5, 1.5,
+                    GRID_WIDTH * PIXEL_SIZE - 3,
+                    128 * PIXEL_SIZE - 3
+                );
+                
+                // Add subtle label
+                ctx.setLineDash([]);
+                ctx.font = 'bold 12px "Courier New"';
+                ctx.fillStyle = '#00ff00';
+                ctx.fillText('FIRST 64KB', 10, 25);
+                
+                ctx.setLineDash([]);
+            }
+
+            // ==================== WINDOW BOX DRAWING ====================
+            function drawWindowBox(offset) {
+                if (offset === undefined || offset === null) return;
+                
+                let startRow = Math.floor(offset / GRID_WIDTH);
+                let startCol = 0;
+                let windowRows = 128;
+                let windowCols = GRID_WIDTH;
+                
+                ctx.strokeStyle = '#ff6600';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([6, 4]);
+                
+                ctx.strokeRect(
+                    startCol * PIXEL_SIZE + 1.5,
+                    startRow * PIXEL_SIZE + 1.5,
+                    windowCols * PIXEL_SIZE - 3,
+                    windowRows * PIXEL_SIZE - 3
+                );
+                
+                ctx.setLineDash([]);
+            }
+            
+            // ==================== HIGHLIGHT ADDRESS ====================
+			function highlightAddress(address, color, ch) {
+				if (address === undefined || address === null) return;
+				let x = address % GRID_WIDTH;
+				let y = Math.floor(address / GRID_WIDTH);
+				
+				// Draw colored background
+				ctx.fillStyle = color;
+				ctx.fillRect(
+					x * PIXEL_SIZE, 
+					y * PIXEL_SIZE, 
+					PIXEL_SIZE * 10, 
+					PIXEL_SIZE * 10
+				);
+				
+				// Draw the character if provided
+				if (ch) {
+					ctx.font = 'bold 16px "Courier New"';
+					ctx.fillStyle = '#000000';
+					ctx.fillText(
+						ch,
+						x * PIXEL_SIZE + 5,
+						y * PIXEL_SIZE + 14
+					);
+				}
+			}
+            
+            // ==================== UNSIGNAL HEADER GENERATION ====================
+            function generateUNSIGNALHeader() {
+                let offsetLow = Math.floor(Math.random() * 256);
+                let offsetHigh = Math.floor(Math.random() * 256);
+                let prefixLen = Math.floor(Math.random() * 246) + 10;
+                let suffixLen = Math.floor(Math.random() * 246) + 10;
+                
+                let getRandomAddress = (val) => {
+                    if (lookup[val] && lookup[val].length > 0) {
+                        return lookup[val][Math.floor(Math.random() * lookup[val].length)];
+                    }
+                    for (let i = 0; i < 65536; i++) {
+                        if (rom[i] === val) return i;
+                    }
+                    return 0;
+                };
+                
+                let h1Addr = getRandomAddress(offsetLow);
+                let h2Addr = getRandomAddress(offsetHigh);
+                let h3Addr = getRandomAddress(prefixLen);
+                let h4Addr = getRandomAddress(suffixLen);
+                
+                let rawOffset = (offsetHigh << 8) | offsetLow;
+                let maxOffset = ROM_SIZE - WINDOW_SIZE;
+                let windowOffset = rawOffset % (maxOffset + 1);
+                windowOffset = Math.floor(windowOffset / GRID_WIDTH) * GRID_WIDTH;
+                
+                let prefix = [];
+                for (let i = 0; i < prefixLen; i++) {
+                    prefix.push(Math.floor(Math.random() * 256));
+                }
+                
+                let suffix = [];
+                for (let i = 0; i < suffixLen; i++) {
+                    suffix.push(Math.floor(Math.random() * 256));
+                }
+                
+                return {
+                    h1Addr, h2Addr, h3Addr, h4Addr,
+                    h1Val: offsetLow,
+                    h2Val: offsetHigh,
+                    h3Val: prefixLen,
+                    h4Val: suffixLen,
+                    windowOffset,
+                    rawOffset,
+                    prefixLen,
+                    suffixLen,
+                    prefix,
+                    suffix
+                };
+            }
+            
+            // ==================== ANIMATED ENCODING ====================
+            function startEncoding() {
+                if (isAnimating) {
+                    clearTimeout(animationTimer);
+                    isAnimating = false;
+                }
+                
+                let message = document.getElementById('inputMessage').value;
+                if (!message) {
+                    message = "Process slowed for visual animation purposes only!";
+                    document.getElementById('inputMessage').value = message;
+                }
+                
+                let encoder = new TextEncoder();
+                currentMessage = Array.from(encoder.encode(message));
+                currentMessageAddresses = [];
+                currentCharIndex = 0;
+                
+                if (currentMode === 'zoscii') {
+                    currentWindowOffset = 0;
+                    document.getElementById('zosciiAddresses').value = '';
+                    document.getElementById('outputBytes').innerText = '0';
+                    document.getElementById('windowOffset').innerText = '0';
+                    renderROM();
+                } else {
+                    currentHeader = generateUNSIGNALHeader();
+                    currentWindowOffset = currentHeader.windowOffset;
+                    
+                    document.getElementById('h1Addr').innerText = currentHeader.h1Addr;
+                    document.getElementById('h2Addr').innerText = currentHeader.h2Addr;
+                    document.getElementById('h3Addr').innerText = currentHeader.h3Addr;
+                    document.getElementById('h4Addr').innerText = currentHeader.h4Addr;
+                    
+                    document.getElementById('h1Val').innerText = '0x' + currentHeader.h1Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h1Val + ')';
+                    document.getElementById('h2Val').innerText = '0x' + currentHeader.h2Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h2Val + ')';
+                    document.getElementById('h3Val').innerText = '0x' + currentHeader.h3Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h3Val + ')';
+                    document.getElementById('h4Val').innerText = '0x' + currentHeader.h4Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h4Val + ')';
+                    
+                    let offsetHex = ((currentHeader.h2Val << 8) | currentHeader.h1Val).toString(16).toUpperCase().padStart(4,'0');
+                    document.getElementById('offsetCalc').innerHTML = `<b>0x${offsetHex} (${currentWindowOffset})</b>`;
+                    document.getElementById('prefixLen').innerText = currentHeader.prefixLen;
+                    document.getElementById('suffixLen').innerText = currentHeader.suffixLen;
+                    
+                    document.getElementById('windowOffset').innerText = currentWindowOffset;
+                    document.getElementById('unsignalInfo').innerHTML = 
+                        `<span class="window-label">🔶 CURRENT WINDOW:</span> ` +
+                        `Offset ${currentWindowOffset} - ${currentWindowOffset + WINDOW_SIZE - 1}`;
+                    
+                    document.getElementById('headerOutput').value = 
+                        `${currentHeader.h1Addr}, ${currentHeader.h2Addr}, ${currentHeader.h3Addr}, ${currentHeader.h4Addr}`;
+                    
+                    document.getElementById('prefixOutput').value = 
+                        currentHeader.prefix.map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                    
+                    document.getElementById('suffixOutput').value = 
+                        currentHeader.suffix.map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                    
+                    document.getElementById('messageOutput').value = '';
+                    document.getElementById('outputBytes').innerText = 
+                        8 + currentHeader.prefixLen + currentHeader.suffixLen;
+                    
+                    renderROM();
+                }
+                
+                isAnimating = true;
+                animateNextChar();
+            }
+			
+			function startPulseAnimation() {
+				if (pulseInterval) return;
+				
+				pulseInterval = setInterval(() => {
+					if (!window.recentSelections || window.recentSelections.length === 0) {
+						clearInterval(pulseInterval);
+						pulseInterval = null;
+						return;
+					}
+					
+					// Clear all pulse areas
+					for (let sel of window.recentSelections) {
+						for (let dy = -15; dy <= 15; dy++) {
+							for (let dx = -15; dx <= 15; dx++) {
+								let nx = sel.x + dx;
+								let ny = sel.y + dy;
+								if (nx >= 0 && nx < GRID_WIDTH && ny >= 0 && ny < GRID_HEIGHT) {
+									let addr = ny * GRID_WIDTH + nx;
+									if (addr < ROM_SIZE) {
+										let value = rom[addr];
+										ctx.fillStyle = `rgb(0, ${value}, 0)`;
+										ctx.fillRect(nx * PIXEL_SIZE, ny * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+									}
+								}
+							}
+						}
+					}
+
+					// Redraw the mode-specific box
+					if (currentMode === 'zoscii') {
+						drawZosciiHighlight();
+					} else if (currentMode === 'unsignal' && currentWindowOffset !== null) {
+						drawWindowBox(currentWindowOffset);
+					}
+
+					// Redraw header markers if in UNSIGNAL mode
+					if (currentMode === 'unsignal' && currentHeader.h1Addr) {
+						highlightAddress(currentHeader.h1Addr, '#00ffff', 'L');
+						highlightAddress(currentHeader.h2Addr, '#00ffff', 'H');
+						highlightAddress(currentHeader.h3Addr, '#00ffff', 'P');
+						highlightAddress(currentHeader.h4Addr, '#00ffff', 'S');
+					}
+					
+					// Draw all pulses
+					const totalPulses = window.recentSelections.length;
+					let allDead = true;
+					
+					for (let i = 0; i < totalPulses; i++) {
+						let sel = window.recentSelections[i];
+						
+						// Position in buffer (0 = oldest, 1 = newest)
+						let position = i / (totalPulses - 1 || 1);
+						
+						// Base size and alpha from position
+						let size = 2 + (position * 8);
+						let baseAlpha = 0.3 + (position * 0.7);
+						
+						// If encoding is done, fade based on age
+						let alpha = baseAlpha;
+						if (!isAnimating) {
+							// Age increases over time after encoding
+							let fadeFactor = Math.max(0, 1.0 - (sel.age / 50)); // Fade over 50 frames
+							alpha = baseAlpha * fadeFactor;
+							sel.age++;
+							
+							if (alpha > 0.01) allDead = false;
+						} else {
+							allDead = false;
+						}
+						
+						if (alpha > 0.01) {
+							ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+							ctx.fillRect(
+								(sel.x * PIXEL_SIZE) - (size * PIXEL_SIZE / 2),
+								(sel.y * PIXEL_SIZE) - (size * PIXEL_SIZE / 2),
+								size * PIXEL_SIZE,
+								size * PIXEL_SIZE
+							);
+						}
+					}
+					
+					// If all pulses are faded and encoding is done, clear everything
+					if (!isAnimating && allDead) {
+						window.recentSelections = [];
+					}
+					
+				}, 50/20);
+			}
+						
+			function animateNextChar() {
+				if (!isAnimating || currentCharIndex >= currentMessage.length) {
+					isAnimating = false;
+					
+					if (currentMode === 'unsignal') {
+						document.getElementById('outputBytes').innerText = 
+							8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
+					}
+					return;
+				}
+				
+				let byte = currentMessage[currentCharIndex];
+				
+				if (currentMode === 'zoscii') {
+					if (lookup[byte] && lookup[byte].length > 0) {
+						let possibleAddresses = lookup[byte];
+						
+						// Store and draw YELLOW for all possible addresses
+						highlightedCells = [];
+						for (let addr of possibleAddresses) {
+							highlightedCells.push(addr);
+							let x = addr % GRID_WIDTH;
+							let y = Math.floor(addr / GRID_WIDTH);
+							ctx.fillStyle = '#ffff00';
+							ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+						}
+						
+						setTimeout(() => {
+							// RESTORE all yellow cells back to original green
+							for (let addr of highlightedCells) {
+								let x = addr % GRID_WIDTH;
+								let y = Math.floor(addr / GRID_WIDTH);
+								let value = rom[addr];
+								ctx.fillStyle = `rgb(0, ${value}, 0)`;
+								ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+							}
+							
+							// SELECT and draw RED for the chosen address
+							let randomIndex = Math.floor(Math.random() * possibleAddresses.length);
+							let selectedAddr = possibleAddresses[randomIndex];
+							
+							let x = selectedAddr % GRID_WIDTH;
+							let y = Math.floor(selectedAddr / GRID_WIDTH);
+							
+							// Add to recent selections list (keep last 20)
+							if (!window.recentSelections) window.recentSelections = [];
+							window.recentSelections.push({
+								x: x,
+								y: y,
+								age: 0,
+								maxAge: 20
+							});
+							if (window.recentSelections.length > 20) {
+								window.recentSelections.shift();
+							}
+							
+							// Start the shared pulse animation loop
+							startPulseAnimation();
+							
+							// Update output
+							currentMessageAddresses.push(selectedAddr);
+							document.getElementById('zosciiAddresses').value = currentMessageAddresses.join(', ');
+							document.getElementById('outputBytes').innerText = currentMessageAddresses.length * 2;
+							
+							// Clear highlighted cells
+							highlightedCells = [];
+							
+							// Next character
+							currentCharIndex++;
+							animationTimer = setTimeout(animateNextChar, 400/20);
+						}, 250/20);
+					} else {
+						currentMessageAddresses.push(null);
+						currentCharIndex++;
+						animationTimer = setTimeout(animateNextChar, 200/20);
+					}
+				} else {
+					// UNSIGNAL mode - similar approach but with windowLookup
+					let windowLookup = new Array(256);
+					for (let i = 0; i < 256; i++) {
+						windowLookup[i] = [];
+					}
+					
+					for (let i = 0; i < WINDOW_SIZE; i++) {
+						let absAddr = currentWindowOffset + i;
+						if (absAddr < ROM_SIZE) {
+							let val = rom[absAddr];
+							windowLookup[val].push(i);
+						}
+					}
+					
+					if (windowLookup[byte] && windowLookup[byte].length > 0) {
+						let possibleAddresses = windowLookup[byte];
+						
+						// Store and draw YELLOW for all possible addresses
+						highlightedCells = [];
+						for (let relAddr of possibleAddresses) {
+							let absAddr = currentWindowOffset + relAddr;
+							highlightedCells.push(absAddr);
+							let x = absAddr % GRID_WIDTH;
+							let y = Math.floor(absAddr / GRID_WIDTH);
+							ctx.fillStyle = '#ffff00';
+							ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+						}
+						
+						setTimeout(() => {
+							// RESTORE all yellow cells back to original green
+							for (let addr of highlightedCells) {
+								let x = addr % GRID_WIDTH;
+								let y = Math.floor(addr / GRID_WIDTH);
+								let value = rom[addr];
+								ctx.fillStyle = `rgb(0, ${value}, 0)`;
+								ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+							}
+							
+							// SELECT and draw RED for the chosen address
+							let randomIndex = Math.floor(Math.random() * possibleAddresses.length);
+							let selectedRelAddr = possibleAddresses[randomIndex];
+							let selectedAbsAddr = currentWindowOffset + selectedRelAddr;
+							
+							let x = selectedAbsAddr % GRID_WIDTH;
+							let y = Math.floor(selectedAbsAddr / GRID_WIDTH);
+							
+							// Add to recent selections list (keep last 20)
+							if (!window.recentSelections) window.recentSelections = [];
+							window.recentSelections.push({
+								x: x,
+								y: y,
+								age: 0,
+								maxAge: 20
+							});
+							if (window.recentSelections.length > 20) {
+								window.recentSelections.shift();
+							}
+							
+							// Start the shared pulse animation loop
+							startPulseAnimation();
+							
+							// Update output
+							currentMessageAddresses.push(selectedRelAddr);
+							document.getElementById('messageOutput').value = currentMessageAddresses.join(', ');
+							document.getElementById('outputBytes').innerText = 
+								8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
+							
+							// Clear highlighted cells
+							highlightedCells = [];
+							
+							// Next character
+							currentCharIndex++;
+							animationTimer = setTimeout(animateNextChar, 400/20);
+						}, 250/20);
+					} else {
+						currentMessageAddresses.push(null);
+						currentCharIndex++;
+						animationTimer = setTimeout(animateNextChar, 200/20);
+					}
+				}
+			}
+            
+            // ==================== FILE HANDLING ====================
+            function handleROMDrop(e) {
+                e.preventDefault();
+                canvas.style.borderColor = '#444';
+                
+                let file = e.dataTransfer.files[0];
+                if (!file) return;
+                
+                let reader = new FileReader();
+                
+                reader.onload = function(event) {
+                    let arrayBuffer = event.target.result;
+                    let fileBytes = new Uint8Array(arrayBuffer);
+                    
+                    for (let i = 0; i < ROM_SIZE && i < fileBytes.length; i++) {
+                        rom[i] = fileBytes[i];
+                    }
+                    
+                    rebuildLookup();
+                    renderROM();
+                    updateStats();
+                    clearAll();
+                    
+                    console.log(`Loaded ROM from file: ${file.name} (${fileBytes.length} bytes)`);
+                };
+                
+                reader.readAsArrayBuffer(file);
+            }
+            
+            // ==================== INSPECT ADDRESS ====================
+            function inspectROMAddress(e) {
+                let rect = canvas.getBoundingClientRect();
+                let scaleX = canvas.width / rect.width;
+                let scaleY = canvas.height / rect.height;
+                
+                let x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
+                let y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+                
+                if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+                    let address = y * GRID_WIDTH + x;
+                    let value = rom[address];
+                    
+                    let isHeader = false;
+                    let headerInfo = '';
+                    
+                    if (currentMode === 'unsignal') {
+                        isHeader = (address === currentHeader.h1Addr || 
+                                   address === currentHeader.h2Addr ||
+                                   address === currentHeader.h3Addr || 
+                                   address === currentHeader.h4Addr);
+                        
+                        if (isHeader) {
+                            if (address === currentHeader.h1Addr) headerInfo = '\n🔶 H1: points to offset low byte';
+                            if (address === currentHeader.h2Addr) headerInfo = '\n🔶 H2: points to offset high byte';
+                            if (address === currentHeader.h3Addr) headerInfo = '\n🔶 H3: points to prefix length';
+                            if (address === currentHeader.h4Addr) headerInfo = '\n🔶 H4: points to suffix length';
+                        }
+                    }
+                    
+                    alert(`Address: ${address}\nValue: ${value} (0x${value.toString(16).padStart(2,'0')})${headerInfo}`);
+                    
+                    highlightAddress(address, '#00ffff', '');
+                    setTimeout(() => renderROM(), 500/100);
+                }
+            }
+            
+            // ==================== STATS UPDATE ====================
+            function updateStats() {
+                document.getElementById('romSize').innerText = ROM_SIZE + ' / ' + ROM_SIZE + ' bytes';
+                
+                let present = new Array(256).fill(false);
+                for (let i = 0; i < ROM_SIZE; i++) {
+                    present[rom[i]] = true;
+                }
+                let unique = present.filter(v => v).length;
+                document.getElementById('uniqueBytes').innerText = unique + ' / 256';
+            }
+            
+            // ==================== CLEAR ALL ====================
+            function clearAll() {
+                if (isAnimating) {
+                    clearTimeout(animationTimer);
+                    isAnimating = false;
+                }
+                
+                currentWindowOffset = currentMode === 'zoscii' ? 0 : null;
+                currentHeader = { 
+                    h1Addr:0, h2Addr:0, h3Addr:0, h4Addr:0,
+                    h1Val:0, h2Val:0, h3Val:0, h4Val:0,
+                    prefixLen:0, suffixLen:0, prefix: [], suffix: []
+                };
+                currentMessageAddresses = [];
+                currentMessage = [];
+                currentCharIndex = 0;
+                
+                if (currentMode === 'zoscii') {
+                    document.getElementById('windowOffset').innerText = '0';
+                } else {
+                    document.getElementById('windowOffset').innerText = '---';
+                }
+                
+                document.getElementById('unsignalInfo').innerHTML = 
+                    `<span class="window-label">🔶 CURRENT WINDOW:</span> Not yet encoded`;
+                
+                document.getElementById('h1Addr').innerText = '---';
+                document.getElementById('h2Addr').innerText = '---';
+                document.getElementById('h3Addr').innerText = '---';
+                document.getElementById('h4Addr').innerText = '---';
+                document.getElementById('h1Val').innerText = '---';
+                document.getElementById('h2Val').innerText = '---';
+                document.getElementById('h3Val').innerText = '---';
+                document.getElementById('h4Val').innerText = '---';
+                document.getElementById('offsetCalc').innerHTML = '---';
+                document.getElementById('prefixLen').innerText = '---';
+                document.getElementById('suffixLen').innerText = '---';
+                
+                document.getElementById('headerOutput').value = '';
+                document.getElementById('prefixOutput').value = '';
+                document.getElementById('suffixOutput').value = '';
+                document.getElementById('messageOutput').value = '';
+                document.getElementById('zosciiAddresses').value = '';
+                document.getElementById('outputBytes').innerText = '0';
+                
+                renderROM();
+            }
+            
+            // ==================== START ====================
+            window.addEventListener('load', init);
+        })();
+    </script>
+</body>
+</html>
