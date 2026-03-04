@@ -494,6 +494,7 @@ button.primary:hover {
             const GRID_WIDTH = 512;              // 512 columns
             const GRID_HEIGHT = 256;              // 256 rows
             const PIXEL_SIZE = 2;                 // Each cell = 2×2 pixels
+			const UNSIGNAL_OFFSET_LIMIT_PCT = 2;
             
             // Keep these for backward compatibility
             const ZOSCII_ROM_SIZE = ROM_SIZE;
@@ -521,6 +522,8 @@ button.primary:hover {
             };
 			let highlightedCells = []; // Store addresses of cells currently highlighted in yellow
 			let pulseInterval = null;
+			let windowLookup = null;
+			let actualROMSize = ROM_SIZE;
             
             // ==================== INITIALIZATION ====================
             function init() {
@@ -555,6 +558,13 @@ button.primary:hover {
                 updateStats();
             }
             
+			function toLE(addr) {
+				if (addr === null) return 'null';
+				let lo = addr & 0xFF;
+				let hi = (addr >> 8) & 0xFF;
+				return lo.toString(16).toUpperCase().padStart(2, '0') + hi.toString(16).toUpperCase().padStart(2, '0') + 'h';
+			}
+
             // ==================== MODE SWITCHING ====================
             function switchMode() {
                 let zosciiRadio = document.getElementById('modeZOSCII');
@@ -594,7 +604,8 @@ button.primary:hover {
             
             // ==================== ROM GENERATION ====================
             function generateRandomROM() {
-                for (let i = 0; i < ROM_SIZE; i++) {
+				actualROMSize = ROM_SIZE;
+                for (let i = 0; i < actualROMSize; i++) {
                     rom[i] = Math.floor(Math.random() * 256);
                 }
                 rebuildLookup();
@@ -605,16 +616,16 @@ button.primary:hover {
             }
             
             // ==================== LOOKUP TABLE BUILDING ====================
-            function rebuildLookup() {
-                for (let i = 0; i < 256; i++) {
-                    lookup[i] = [];
-                }
-                // First 64KB only for header addresses
-                for (let i = 0; i < 65536; i++) {
-                    let val = rom[i];
-                    lookup[val].push(i);
-                }
-            }
+			function rebuildLookup() {
+				for (let i = 0; i < 256; i++) {
+					lookup[i] = [];
+				}
+				let maxAddr = Math.min(actualROMSize, 65536);
+				for (let i = 0; i < maxAddr; i++) {
+					let val = rom[i];
+					lookup[val].push(i);
+				}
+			}
             
             // ==================== ROM RENDERING ====================
             function renderROM() {
@@ -625,7 +636,7 @@ button.primary:hover {
                 for (let y = 0; y < GRID_HEIGHT; y++) {
                     for (let x = 0; x < GRID_WIDTH; x++) {
                         let index = y * GRID_WIDTH + x;
-                        if (index < ROM_SIZE) {
+                        if (index < actualROMSize) {
                             let value = rom[index];
                             let green = value;
                             
@@ -651,57 +662,63 @@ button.primary:hover {
                 
                 // Draw header address markers (cyan) only in UNSIGNAL mode
                 if (currentMode === 'unsignal' && currentHeader.h1Addr) {
-                    highlightAddress(currentHeader.h1Addr, '#00ffff', 'L');
-                    highlightAddress(currentHeader.h2Addr, '#00ffff', 'H');
-                    highlightAddress(currentHeader.h3Addr, '#00ffff', 'P');
-                    highlightAddress(currentHeader.h4Addr, '#00ffff', 'S');
+                    highlightAddress(currentHeader.h1Addr, '#00ffff', '1');
+                    highlightAddress(currentHeader.h2Addr, '#00ffff', '2');
+                    highlightAddress(currentHeader.h3Addr, '#00ffff', '3');
+                    highlightAddress(currentHeader.h4Addr, '#00ffff', '4');
                 }
             }
 
             // ==================== ZOSCII HIGHLIGHT ====================
-            function drawZosciiHighlight() {
-                ctx.strokeStyle = '#00ff00';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([6, 4]);
-                
-                // Draw rectangle around first 128 rows (addresses 0-65535)
-                ctx.strokeRect(
-                    1.5, 1.5,
-                    GRID_WIDTH * PIXEL_SIZE - 3,
-                    128 * PIXEL_SIZE - 3
-                );
-                
-                // Add subtle label
-                ctx.setLineDash([]);
-                ctx.font = 'bold 12px "Courier New"';
-                ctx.fillStyle = '#00ff00';
-                ctx.fillText('FIRST 64KB', 10, 25);
-                
-                ctx.setLineDash([]);
-            }
+			function drawZosciiHighlight() {
+				let endAddr = Math.min(WINDOW_SIZE, actualROMSize);
+				let endRow = Math.ceil(endAddr / GRID_WIDTH);
+				if (endRow <= 0) return;
+				
+				ctx.strokeStyle = '#00ff00';
+				ctx.lineWidth = 3;
+				ctx.setLineDash([6, 4]);
+				
+				ctx.strokeRect(
+					1.5, 1.5,
+					GRID_WIDTH * PIXEL_SIZE - 3,
+					endRow * PIXEL_SIZE - 3
+				);
+				
+				ctx.setLineDash([]);
+				ctx.font = 'bold 12px "Courier New"';
+				ctx.fillStyle = '#00ff00';
+				ctx.fillText('FIRST 64KB', 10, 25);
+				
+				ctx.setLineDash([]);
+			}
 
             // ==================== WINDOW BOX DRAWING ====================
-            function drawWindowBox(offset) {
-                if (offset === undefined || offset === null) return;
-                
-                let startRow = Math.floor(offset / GRID_WIDTH);
-                let startCol = 0;
-                let windowRows = 128;
-                let windowCols = GRID_WIDTH;
-                
-                ctx.strokeStyle = '#ff6600';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([6, 4]);
-                
-                ctx.strokeRect(
-                    startCol * PIXEL_SIZE + 1.5,
-                    startRow * PIXEL_SIZE + 1.5,
-                    windowCols * PIXEL_SIZE - 3,
-                    windowRows * PIXEL_SIZE - 3
-                );
-                
-                ctx.setLineDash([]);
-            }
+			function drawWindowBox(offset) {
+				if (offset === undefined || offset === null) return;
+				
+				let startRow = Math.floor(offset / GRID_WIDTH);
+				let endAddr = Math.min(offset + WINDOW_SIZE, actualROMSize);
+				let endRow = Math.ceil(endAddr / GRID_WIDTH);
+				let windowRows = endRow - startRow;
+				if (windowRows <= 0) return;
+				
+				let startCol = 0;
+				let windowCols = GRID_WIDTH;
+				
+				ctx.strokeStyle = '#ff6600';
+				ctx.lineWidth = 3;
+				ctx.setLineDash([6, 4]);
+				
+				ctx.strokeRect(
+					startCol * PIXEL_SIZE + 1.5,
+					startRow * PIXEL_SIZE + 1.5,
+					windowCols * PIXEL_SIZE - 3,
+					windowRows * PIXEL_SIZE - 3
+				);
+				
+				ctx.setLineDash([]);
+			}
             
             // ==================== HIGHLIGHT ADDRESS ====================
 			function highlightAddress(address, color, ch) {
@@ -731,56 +748,78 @@ button.primary:hover {
 			}
             
             // ==================== UNSIGNAL HEADER GENERATION ====================
-            function generateUNSIGNALHeader() {
-                let offsetLow = Math.floor(Math.random() * 256);
-                let offsetHigh = Math.floor(Math.random() * 256);
-                let prefixLen = Math.floor(Math.random() * 246) + 10;
-                let suffixLen = Math.floor(Math.random() * 246) + 10;
-                
-                let getRandomAddress = (val) => {
-                    if (lookup[val] && lookup[val].length > 0) {
-                        return lookup[val][Math.floor(Math.random() * lookup[val].length)];
-                    }
-                    for (let i = 0; i < 65536; i++) {
-                        if (rom[i] === val) return i;
-                    }
-                    return 0;
-                };
-                
-                let h1Addr = getRandomAddress(offsetLow);
-                let h2Addr = getRandomAddress(offsetHigh);
-                let h3Addr = getRandomAddress(prefixLen);
-                let h4Addr = getRandomAddress(suffixLen);
-                
-                let rawOffset = (offsetHigh << 8) | offsetLow;
-                let maxOffset = ROM_SIZE - WINDOW_SIZE;
-                let windowOffset = rawOffset % (maxOffset + 1);
-                windowOffset = Math.floor(windowOffset / GRID_WIDTH) * GRID_WIDTH;
-                
-                let prefix = [];
-                for (let i = 0; i < prefixLen; i++) {
-                    prefix.push(Math.floor(Math.random() * 256));
-                }
-                
-                let suffix = [];
-                for (let i = 0; i < suffixLen; i++) {
-                    suffix.push(Math.floor(Math.random() * 256));
-                }
-                
-                return {
-                    h1Addr, h2Addr, h3Addr, h4Addr,
-                    h1Val: offsetLow,
-                    h2Val: offsetHigh,
-                    h3Val: prefixLen,
-                    h4Val: suffixLen,
-                    windowOffset,
-                    rawOffset,
-                    prefixLen,
-                    suffixLen,
-                    prefix,
-                    suffix
-                };
-            }
+			function generateUNSIGNALHeader() {
+				let offsetLow = 0;
+				let offsetHigh = 0;
+				let prefixLen = 0;
+				let suffixLen = 0;
+				
+				let getRandomAddress = (minVal, maxVal) => {
+					let candidates = [];
+					let maxAddr = Math.min(actualROMSize, 65536);
+					for (let v = minVal; v <= maxVal; v++) {
+						if (lookup[v] && lookup[v].length > 0) {
+							for (let addr of lookup[v]) {
+								if (addr < maxAddr) {
+									candidates.push(addr);
+								}
+							}
+						}
+					}
+					if (candidates.length > 0) {
+						return candidates[Math.floor(Math.random() * candidates.length)];
+					}
+					return 0;
+				};
+				
+				let h1Addr = getRandomAddress(0, 255);
+				let h2Addr = getRandomAddress(0, 255);
+				let h3Addr = getRandomAddress(10, 255);
+				let h4Addr = getRandomAddress(10, 255);
+				
+				offsetLow = rom[h1Addr];
+				offsetHigh = rom[h2Addr];
+				prefixLen = rom[h3Addr];
+				suffixLen = rom[h4Addr];
+				
+				let rawOffset = (offsetHigh << 8) | offsetLow;
+				let windowOffset = 0;
+				
+				if (actualROMSize >= ROM_SIZE) {
+					windowOffset = rawOffset;
+				} else {
+					let maxOffset = Math.floor((actualROMSize * UNSIGNAL_OFFSET_LIMIT_PCT) / 100);
+					if (maxOffset > 0) {
+						windowOffset = rawOffset % (maxOffset + 1);
+					}
+				}
+				
+				windowOffset = Math.floor(windowOffset / GRID_WIDTH) * GRID_WIDTH;
+				
+				let prefix = [];
+				for (let i = 0; i < prefixLen; i++) {
+					prefix.push(Math.floor(Math.random() * 256));
+				}
+				
+				let suffix = [];
+				for (let i = 0; i < suffixLen; i++) {
+					suffix.push(Math.floor(Math.random() * 256));
+				}
+				
+				return {
+					h1Addr, h2Addr, h3Addr, h4Addr,
+					h1Val: offsetLow,
+					h2Val: offsetHigh,
+					h3Val: prefixLen,
+					h4Val: suffixLen,
+					windowOffset,
+					rawOffset,
+					prefixLen,
+					suffixLen,
+					prefix,
+					suffix
+				};
+			}
             
             // ==================== ANIMATED ENCODING ====================
             function startEncoding() {
@@ -810,18 +849,18 @@ button.primary:hover {
                     currentHeader = generateUNSIGNALHeader();
                     currentWindowOffset = currentHeader.windowOffset;
                     
-                    document.getElementById('h1Addr').innerText = currentHeader.h1Addr;
-                    document.getElementById('h2Addr').innerText = currentHeader.h2Addr;
-                    document.getElementById('h3Addr').innerText = currentHeader.h3Addr;
-                    document.getElementById('h4Addr').innerText = currentHeader.h4Addr;
+                    document.getElementById('h1Addr').innerText = toLE(currentHeader.h1Addr);
+                    document.getElementById('h2Addr').innerText = toLE(currentHeader.h2Addr);
+                    document.getElementById('h3Addr').innerText = toLE(currentHeader.h3Addr);
+                    document.getElementById('h4Addr').innerText = toLE(currentHeader.h4Addr);
                     
-                    document.getElementById('h1Val').innerText = '0x' + currentHeader.h1Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h1Val + ')';
-                    document.getElementById('h2Val').innerText = '0x' + currentHeader.h2Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h2Val + ')';
-                    document.getElementById('h3Val').innerText = '0x' + currentHeader.h3Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h3Val + ')';
-                    document.getElementById('h4Val').innerText = '0x' + currentHeader.h4Val.toString(16).padStart(2,'0') + ' (' + currentHeader.h4Val + ')';
+                    document.getElementById('h1Val').innerText = currentHeader.h1Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h1Val + ')';
+                    document.getElementById('h2Val').innerText = currentHeader.h2Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h2Val + ')';
+                    document.getElementById('h3Val').innerText = currentHeader.h3Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h3Val + ')';
+                    document.getElementById('h4Val').innerText = currentHeader.h4Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h4Val + ')';
                     
                     let offsetHex = ((currentHeader.h2Val << 8) | currentHeader.h1Val).toString(16).toUpperCase().padStart(4,'0');
-                    document.getElementById('offsetCalc').innerHTML = `<b>0x${offsetHex} (${currentWindowOffset})</b>`;
+                    document.getElementById('offsetCalc').innerHTML = `<b>${offsetHex}h (${currentWindowOffset})</b>`;
                     document.getElementById('prefixLen').innerText = currentHeader.prefixLen;
                     document.getElementById('suffixLen').innerText = currentHeader.suffixLen;
                     
@@ -830,8 +869,7 @@ button.primary:hover {
                         `<span class="window-label">🔶 CURRENT WINDOW:</span> ` +
                         `Offset ${currentWindowOffset} - ${currentWindowOffset + WINDOW_SIZE - 1}`;
                     
-                    document.getElementById('headerOutput').value = 
-                        `${currentHeader.h1Addr}, ${currentHeader.h2Addr}, ${currentHeader.h3Addr}, ${currentHeader.h4Addr}`;
+                    document.getElementById('headerOutput').value = toLE(currentHeader.h1Addr) + ', ' + toLE(currentHeader.h2Addr) + ', ' + toLE(currentHeader.h3Addr) + ', ' + toLE(currentHeader.h4Addr);
                     
                     document.getElementById('prefixOutput').value = 
                         currentHeader.prefix.map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
@@ -846,6 +884,19 @@ button.primary:hover {
                     renderROM();
                 }
                 
+				windowLookup = new Array(256);
+				for (let i = 0; i < 256; i++) {
+					windowLookup[i] = [];
+				}
+				
+				for (let i = 0; i < WINDOW_SIZE; i++) {
+					let absAddr = currentWindowOffset + i;
+					if (absAddr < actualROMSize) {
+						let val = rom[absAddr];
+						windowLookup[val].push(i);
+					}
+				}
+
                 isAnimating = true;
                 animateNextChar();
             }
@@ -887,10 +938,10 @@ button.primary:hover {
 
 					// Redraw header markers if in UNSIGNAL mode
 					if (currentMode === 'unsignal' && currentHeader.h1Addr) {
-						highlightAddress(currentHeader.h1Addr, '#00ffff', 'L');
-						highlightAddress(currentHeader.h2Addr, '#00ffff', 'H');
-						highlightAddress(currentHeader.h3Addr, '#00ffff', 'P');
-						highlightAddress(currentHeader.h4Addr, '#00ffff', 'S');
+						highlightAddress(currentHeader.h1Addr, '#00ffff', '1');
+						highlightAddress(currentHeader.h2Addr, '#00ffff', '2');
+						highlightAddress(currentHeader.h3Addr, '#00ffff', '3');
+						highlightAddress(currentHeader.h4Addr, '#00ffff', '4');
 					}
 					
 					// Draw all pulses
@@ -1000,7 +1051,7 @@ button.primary:hover {
 							
 							// Update output
 							currentMessageAddresses.push(selectedAddr);
-							document.getElementById('zosciiAddresses').value = currentMessageAddresses.join(', ');
+							document.getElementById('zosciiAddresses').value = currentMessageAddresses.map(toLE).join(', ');
 							document.getElementById('outputBytes').innerText = currentMessageAddresses.length * 2;
 							
 							// Clear highlighted cells
@@ -1017,19 +1068,6 @@ button.primary:hover {
 					}
 				} else {
 					// UNSIGNAL mode - similar approach but with windowLookup
-					let windowLookup = new Array(256);
-					for (let i = 0; i < 256; i++) {
-						windowLookup[i] = [];
-					}
-					
-					for (let i = 0; i < WINDOW_SIZE; i++) {
-						let absAddr = currentWindowOffset + i;
-						if (absAddr < ROM_SIZE) {
-							let val = rom[absAddr];
-							windowLookup[val].push(i);
-						}
-					}
-					
 					if (windowLookup[byte] && windowLookup[byte].length > 0) {
 						let possibleAddresses = windowLookup[byte];
 						
@@ -1079,7 +1117,7 @@ button.primary:hover {
 							
 							// Update output
 							currentMessageAddresses.push(selectedRelAddr);
-							document.getElementById('messageOutput').value = currentMessageAddresses.join(', ');
+							document.getElementById('messageOutput').value = currentMessageAddresses.map(toLE).join(', ');
 							document.getElementById('outputBytes').innerText = 
 								8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
 							
@@ -1111,9 +1149,17 @@ button.primary:hover {
                 reader.onload = function(event) {
                     let arrayBuffer = event.target.result;
                     let fileBytes = new Uint8Array(arrayBuffer);
+					actualROMSize = fileBytes.length;
                     
-                    for (let i = 0; i < ROM_SIZE && i < fileBytes.length; i++) {
-                        rom[i] = fileBytes[i];
+                    for (let i = 0; i < ROM_SIZE; i++) {
+						if (i < fileBytes.length)
+						{
+							rom[i] = fileBytes[i];
+						}
+						else
+						{
+							rom[i] = 0;
+						}
                     }
                     
                     rebuildLookup();
@@ -1157,7 +1203,7 @@ button.primary:hover {
                         }
                     }
                     
-                    alert(`Address: ${address}\nValue: ${value} (0x${value.toString(16).padStart(2,'0')})${headerInfo}`);
+                    alert(`Address: ${address}\nValue: ${value} (${value.toString(16).padStart(2,'0')})${headerInfo}h`);
                     
                     highlightAddress(address, '#00ffff', '');
                     setTimeout(() => renderROM(), 500/100);
@@ -1166,10 +1212,10 @@ button.primary:hover {
             
             // ==================== STATS UPDATE ====================
             function updateStats() {
-                document.getElementById('romSize').innerText = ROM_SIZE + ' / ' + ROM_SIZE + ' bytes';
+                document.getElementById('romSize').innerText = actualROMSize + ' / ' + actualROMSize + ' bytes';
                 
                 let present = new Array(256).fill(false);
-                for (let i = 0; i < ROM_SIZE; i++) {
+                for (let i = 0; i < actualROMSize; i++) {
                     present[rom[i]] = true;
                 }
                 let unique = present.filter(v => v).length;
