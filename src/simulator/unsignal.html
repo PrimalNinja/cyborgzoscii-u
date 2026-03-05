@@ -859,15 +859,16 @@ button.primary:hover {
                     document.getElementById('h3Val').innerText = currentHeader.h3Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h3Val + ')';
                     document.getElementById('h4Val').innerText = currentHeader.h4Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h4Val + ')';
                     
-                    let offsetHex = ((currentHeader.h2Val << 8) | currentHeader.h1Val).toString(16).toUpperCase().padStart(4,'0');
-                    document.getElementById('offsetCalc').innerHTML = `<b>${offsetHex}h (${currentWindowOffset})</b>`;
+                    let offsetHex = currentHeader.h1Val.toString(16).toUpperCase().padStart(2,'0') + currentHeader.h2Val.toString(16).toUpperCase().padStart(2,'0');
+					let rawOffset = (currentHeader.h2Val << 8) | currentHeader.h1Val;
+                    document.getElementById('offsetCalc').innerHTML = `<b>${offsetHex}h (${rawOffset})</b>`;
                     document.getElementById('prefixLen').innerText = currentHeader.prefixLen;
                     document.getElementById('suffixLen').innerText = currentHeader.suffixLen;
                     
                     document.getElementById('windowOffset').innerText = currentWindowOffset;
                     document.getElementById('unsignalInfo').innerHTML = 
                         `<span class="window-label">🔶 CURRENT WINDOW:</span> ` +
-                        `Offset ${currentWindowOffset} - ${currentWindowOffset + WINDOW_SIZE - 1}`;
+                        `Offset ${offsetHex}h`;
                     
                     document.getElementById('headerOutput').value = toLE(currentHeader.h1Addr) + ', ' + toLE(currentHeader.h2Addr) + ', ' + toLE(currentHeader.h3Addr) + ', ' + toLE(currentHeader.h4Addr);
                     
