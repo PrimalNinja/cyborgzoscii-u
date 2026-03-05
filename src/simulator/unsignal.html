@@ -794,7 +794,7 @@ button.primary:hover {
 					}
 				}
 				
-				windowOffset = Math.floor(windowOffset / GRID_WIDTH) * GRID_WIDTH;
+				//windowOffset = Math.floor(windowOffset / GRID_WIDTH) * GRID_WIDTH;
 				
 				let prefix = [];
 				for (let i = 0; i < prefixLen; i++) {
@@ -865,7 +865,7 @@ button.primary:hover {
                     document.getElementById('prefixLen').innerText = currentHeader.prefixLen;
                     document.getElementById('suffixLen').innerText = currentHeader.suffixLen;
                     
-                    document.getElementById('windowOffset').innerText = currentWindowOffset;
+                    document.getElementById('windowOffset').innerText = toLE(currentWindowOffset);
                     document.getElementById('unsignalInfo').innerHTML = 
                         `<span class="window-label">🔶 CURRENT WINDOW:</span> ` +
                         `Offset ${offsetHex}h`;
