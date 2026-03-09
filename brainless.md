@@ -11,7 +11,7 @@ You don't need complex algorithms when you start with I(M;A)=0.
 
 ZOSCII already provides information-theoretic security (mathematically unbreakable, quantum-proof forever).
 
-BRAINLESS adds one thing: an Ouroboros XOR chain.
+BRAINLESS adds one thing: an Ouroboros XOR chain.  BRAINLESS can be added to any of the ZOSCII family after encoding and removed before decoding.
 
 The Ouroboros: Ancient symbol of a snake eating its own tail. Self-sustaining. No beginning, no end. Infinite cycle.
 

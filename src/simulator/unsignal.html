@@ -52,6 +52,7 @@ h1 {
     display: flex;
     gap: 30px;
     justify-content: center;
+    flex-wrap: wrap;
 }
 .mode-option {
     display: flex;
@@ -74,6 +75,26 @@ h1 {
 }
 .mode-option.unsignal label {
     color: #ff6600;
+}
+.brainless-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 20px;
+    padding-left: 20px;
+    border-left: 2px solid #444;
+}
+.brainless-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: #00ff00;
+}
+.brainless-checkbox label {
+    font-size: 18px;
+    font-weight: bold;
+    color: #888;
+    cursor: pointer;
 }
 .input-section {
     background: #2a2a2a;
@@ -313,6 +334,49 @@ button.primary:hover {
 #zosciiHeader {
     display: none;
 }
+.file-output {
+    margin-top: 15px;
+    border-top: 2px dashed #444;
+    padding-top: 15px;
+}
+.file-output label {
+    color: #888;
+}
+.file-output label.brainless-active {
+    color: #ff00ff;
+}
+.save-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    justify-content: flex-start;
+}
+.save-button {
+    background: #333;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex: 0 1 auto;
+    min-width: 120px;
+}
+.save-button:hover {
+    background: #444;
+    border-color: #00ff00;
+    color: #00ff00;
+}
+.unsignal-mode .save-button:hover {
+    border-color: #ff6600;
+    color: #ff6600;
+}
+.brainless-mode .save-button:hover {
+    border-color: #ff00ff;
+    color: #ff00ff;
+}
 
 /* Default stacked layout - always column */
 .container {
@@ -375,6 +439,10 @@ button.primary:hover {
             <div class="mode-option unsignal">
                 <input type="radio" id="modeUNSIGNAL" name="encodingMode" value="unsignal" checked>
                 <label for="modeUNSIGNAL">🔶 UNSIGNAL (128KB ROM + sliding window)</label>
+            </div>
+            <div class="brainless-checkbox">
+                <input type="checkbox" id="brainlessMode">
+                <label for="brainlessMode">🐍 BRAINLESS (XOR entire file)</label>
             </div>
         </div>
         
@@ -446,6 +514,17 @@ button.primary:hover {
                 <label>🔶 ENCODED MESSAGE ADDRESSES (within window):</label>
                 <textarea id="messageOutput" class="readonly" rows="3" readonly placeholder="Encoded message addresses will appear here..."></textarea>
             </div>
+            
+            <!-- SINGLE FILE OUTPUT - alternates between original and XOR based on checkbox -->
+            <div class="file-output">
+                <label id="fileOutputLabel">📄 FULL FILE (Header + Prefix + Message + Suffix):</label>
+                <textarea id="fileOutput" class="readonly" rows="3" readonly placeholder="Assembled file will appear here after encoding..."></textarea>
+                
+                <!-- Save button -->
+                <div class="save-row">
+                    <button id="saveButton" class="save-button">💾 SAVE AS BINARY</button>
+                </div>
+            </div>
         </div>
         
 		<div class="right-column">
@@ -506,6 +585,7 @@ button.primary:hover {
             
             // ==================== STATE ====================
             let currentMode = 'unsignal';  // 'zoscii' or 'unsignal'
+            let brainlessEnabled = false;   // BRAINLESS checkbox state
             let rom = new Uint8Array(ROM_SIZE);
             let lookup = new Array(256);
             let canvas, ctx;
@@ -534,6 +614,12 @@ button.primary:hover {
                 document.getElementById('modeZOSCII').addEventListener('change', switchMode);
                 document.getElementById('modeUNSIGNAL').addEventListener('change', switchMode);
                 
+                // Set up BRAINLESS checkbox
+                document.getElementById('brainlessMode').addEventListener('change', toggleBrainless);
+                
+                // Set up save button
+                document.getElementById('saveButton').addEventListener('click', saveFile);
+                
                 // Set initial mode
                 switchMode();
                 
@@ -558,13 +644,124 @@ button.primary:hover {
                 updateStats();
             }
             
-			function toLE(addr) {
+			function addressOut(addr) {
 				if (addr === null) return 'null';
 				let lo = addr & 0xFF;
 				let hi = (addr >> 8) & 0xFF;
-				return lo.toString(16).toUpperCase().padStart(2, '0') + hi.toString(16).toUpperCase().padStart(2, '0') + 'h';
+				return hi.toString(16).toUpperCase().padStart(2, '0') + lo.toString(16).toUpperCase().padStart(2, '0');
 			}
-
+			
+            // ==================== SAVE FILE ====================
+            function saveFile() {
+                let fileContent = document.getElementById('fileOutput').value;
+                if (!fileContent || fileContent.trim() === '') {
+                    alert('No data to save');
+                    return;
+                }
+                
+                // Parse hex string to bytes
+                let hexBytes = fileContent.trim().split(/\s+/);
+                let byteArray = new Uint8Array(hexBytes.length);
+                
+                for (let i = 0; i < hexBytes.length; i++) {
+                    byteArray[i] = parseInt(hexBytes[i], 16);
+                }
+                
+                // Create filename based on current mode
+                let mode = currentMode === 'zoscii' ? 'ZOSCII' : 'UNSIGNAL';
+                let brainless = brainlessEnabled ? '_BRAINLESS' : '';
+                let filename = `${mode}${brainless}_${new Date().toISOString().slice(0,10)}.bin`;
+                
+                // Create and download file
+                let blob = new Blob([byteArray], { type: 'application/octet-stream' });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            
+            // ==================== TOGGLE BRAINLESS ====================
+            function toggleBrainless() {
+                brainlessEnabled = document.getElementById('brainlessMode').checked;
+                
+                // Update label color based on mode
+                let label = document.getElementById('fileOutputLabel');
+                if (brainlessEnabled) {
+                    label.innerHTML = '🐍 BRAINLESS XOR CHAIN (ENTIRE FILE):';
+                    label.style.color = '#ff00ff';
+                } else {
+                    label.innerHTML = '📄 FULL FILE (Header + Prefix + Message + Suffix):';
+                    label.style.color = '#888';
+                }
+                
+                // Refresh display if we have data
+                if (currentMessageAddresses.length > 0) {
+                    updateFileDisplay();
+                }
+            }
+            
+			// ==================== UPDATE FILE DISPLAY ====================
+			function updateFileDisplay() {
+				// Build the full file as bytes (LITTLE ENDIAN for addresses)
+				let fullFileBytes = [];
+				
+				if (currentMode === 'unsignal') {
+					// Header addresses - split into low/high bytes (little-endian)
+					fullFileBytes.push(currentHeader.h1Addr & 0xFF);        // Low byte
+					fullFileBytes.push((currentHeader.h1Addr >> 8) & 0xFF); // High byte
+					fullFileBytes.push(currentHeader.h2Addr & 0xFF);
+					fullFileBytes.push((currentHeader.h2Addr >> 8) & 0xFF);
+					fullFileBytes.push(currentHeader.h3Addr & 0xFF);
+					fullFileBytes.push((currentHeader.h3Addr >> 8) & 0xFF);
+					fullFileBytes.push(currentHeader.h4Addr & 0xFF);
+					fullFileBytes.push((currentHeader.h4Addr >> 8) & 0xFF);
+					
+					// Prefix bytes (already bytes, no conversion)
+					fullFileBytes.push(...currentHeader.prefix);
+				}
+				
+				// Message addresses - split into low/high bytes (little-endian)
+				for (let addr of currentMessageAddresses) {
+					if (addr !== null) {
+						fullFileBytes.push(addr & 0xFF);        // Low byte
+						fullFileBytes.push((addr >> 8) & 0xFF); // High byte
+					}
+				}
+				
+				if (currentMode === 'unsignal') {
+					// Suffix bytes (already bytes, no conversion)
+					fullFileBytes.push(...currentHeader.suffix);
+				}
+				
+				// If BRAINLESS is enabled, show XOR chain on bytes
+				if (brainlessEnabled && fullFileBytes.length > 0) {
+					// Create a copy to work with
+					let chain = [...fullFileBytes];
+					
+					// Reverse XOR chain: from second-to-last to first
+					for (let i = chain.length - 2; i >= 0; i--) {
+						chain[i] = chain[i] ^ chain[i + 1];
+					}
+					
+					// Ouroboros step: tail XOR'd against head
+					chain[chain.length - 1] = chain[chain.length - 1] ^ chain[0];
+					
+					// Format as space-separated hex bytes
+					document.getElementById('fileOutput').value = chain.map(b => 
+						b.toString(16).toUpperCase().padStart(2, '0')
+					).join(' ');
+				} else {
+					// Show original bytes
+					document.getElementById('fileOutput').value = fullFileBytes.map(b => 
+						b.toString(16).toUpperCase().padStart(2, '0')
+					).join(' ');
+				}
+			}
+            
             // ==================== MODE SWITCHING ====================
             function switchMode() {
                 let zosciiRadio = document.getElementById('modeZOSCII');
@@ -839,6 +1036,9 @@ button.primary:hover {
                 currentMessageAddresses = [];
                 currentCharIndex = 0;
                 
+                // Clear file output
+                document.getElementById('fileOutput').value = '';
+                
                 if (currentMode === 'zoscii') {
                     currentWindowOffset = 0;
                     document.getElementById('zosciiAddresses').value = '';
@@ -849,10 +1049,10 @@ button.primary:hover {
                     currentHeader = generateUNSIGNALHeader();
                     currentWindowOffset = currentHeader.windowOffset;
                     
-                    document.getElementById('h1Addr').innerText = toLE(currentHeader.h1Addr);
-                    document.getElementById('h2Addr').innerText = toLE(currentHeader.h2Addr);
-                    document.getElementById('h3Addr').innerText = toLE(currentHeader.h3Addr);
-                    document.getElementById('h4Addr').innerText = toLE(currentHeader.h4Addr);
+                    document.getElementById('h1Addr').innerText = addressOut(currentHeader.h1Addr);
+                    document.getElementById('h2Addr').innerText = addressOut(currentHeader.h2Addr);
+                    document.getElementById('h3Addr').innerText = addressOut(currentHeader.h3Addr);
+                    document.getElementById('h4Addr').innerText = addressOut(currentHeader.h4Addr);
                     
                     document.getElementById('h1Val').innerText = currentHeader.h1Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h1Val + ')';
                     document.getElementById('h2Val').innerText = currentHeader.h2Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h2Val + ')';
@@ -865,12 +1065,12 @@ button.primary:hover {
                     document.getElementById('prefixLen').innerText = currentHeader.prefixLen;
                     document.getElementById('suffixLen').innerText = currentHeader.suffixLen;
                     
-                    document.getElementById('windowOffset').innerText = toLE(currentWindowOffset);
+                    document.getElementById('windowOffset').innerText = addressOut(currentWindowOffset);
                     document.getElementById('unsignalInfo').innerHTML = 
                         `<span class="window-label">🔶 CURRENT WINDOW:</span> ` +
                         `Offset ${offsetHex}h`;
                     
-                    document.getElementById('headerOutput').value = toLE(currentHeader.h1Addr) + ', ' + toLE(currentHeader.h2Addr) + ', ' + toLE(currentHeader.h3Addr) + ', ' + toLE(currentHeader.h4Addr);
+                    document.getElementById('headerOutput').value = addressOut(currentHeader.h1Addr) + ' ' + addressOut(currentHeader.h2Addr) + ' ' + addressOut(currentHeader.h3Addr) + ' ' + addressOut(currentHeader.h4Addr);
                     
                     document.getElementById('prefixOutput').value = 
                         currentHeader.prefix.map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
@@ -998,7 +1198,13 @@ button.primary:hover {
 					if (currentMode === 'unsignal') {
 						document.getElementById('outputBytes').innerText = 
 							8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
+					} else {
+						document.getElementById('outputBytes').innerText = currentMessageAddresses.length * 2;
 					}
+					
+					// Update the file display (will show original or XOR based on checkbox)
+					updateFileDisplay();
+					
 					return;
 				}
 				
@@ -1052,7 +1258,7 @@ button.primary:hover {
 							
 							// Update output
 							currentMessageAddresses.push(selectedAddr);
-							document.getElementById('zosciiAddresses').value = currentMessageAddresses.map(toLE).join(', ');
+							document.getElementById('zosciiAddresses').value = currentMessageAddresses.map(addressOut).join(' ');
 							document.getElementById('outputBytes').innerText = currentMessageAddresses.length * 2;
 							
 							// Clear highlighted cells
@@ -1118,7 +1324,7 @@ button.primary:hover {
 							
 							// Update output
 							currentMessageAddresses.push(selectedRelAddr);
-							document.getElementById('messageOutput').value = currentMessageAddresses.map(toLE).join(', ');
+							document.getElementById('messageOutput').value = currentMessageAddresses.map(addressOut).join(' ');
 							document.getElementById('outputBytes').innerText = 
 								8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
 							
@@ -1175,41 +1381,42 @@ button.primary:hover {
             }
             
             // ==================== INSPECT ADDRESS ====================
-            function inspectROMAddress(e) {
-                let rect = canvas.getBoundingClientRect();
-                let scaleX = canvas.width / rect.width;
-                let scaleY = canvas.height / rect.height;
-                
-                let x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
-                let y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
-                
-                if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
-                    let address = y * GRID_WIDTH + x;
-                    let value = rom[address];
-                    
-                    let isHeader = false;
-                    let headerInfo = '';
-                    
-                    if (currentMode === 'unsignal') {
-                        isHeader = (address === currentHeader.h1Addr || 
-                                   address === currentHeader.h2Addr ||
-                                   address === currentHeader.h3Addr || 
-                                   address === currentHeader.h4Addr);
-                        
-                        if (isHeader) {
-                            if (address === currentHeader.h1Addr) headerInfo = '\n🔶 H1: points to offset low byte';
-                            if (address === currentHeader.h2Addr) headerInfo = '\n🔶 H2: points to offset high byte';
-                            if (address === currentHeader.h3Addr) headerInfo = '\n🔶 H3: points to prefix length';
-                            if (address === currentHeader.h4Addr) headerInfo = '\n🔶 H4: points to suffix length';
-                        }
-                    }
-                    
-                    alert(`Address: ${address}\nValue: ${value} (${value.toString(16).padStart(2,'0')})${headerInfo}h`);
-                    
-                    highlightAddress(address, '#00ffff', '');
-                    setTimeout(() => renderROM(), 500/100);
-                }
-            }
+			function inspectROMAddress(e) {
+				let rect = canvas.getBoundingClientRect();
+				let scaleX = canvas.width / rect.width;
+				let scaleY = canvas.height / rect.height;
+				
+				let x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
+				let y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+				
+				if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+					let address = y * GRID_WIDTH + x;
+					let value = rom[address];
+					
+					let isHeader = false;
+					let headerInfo = '';
+					
+					if (currentMode === 'unsignal') {
+						isHeader = (address === currentHeader.h1Addr || 
+								   address === currentHeader.h2Addr ||
+								   address === currentHeader.h3Addr || 
+								   address === currentHeader.h4Addr);
+						
+						if (isHeader) {
+							if (address === currentHeader.h1Addr) headerInfo = '\n🔶 H1: points to offset low byte';
+							if (address === currentHeader.h2Addr) headerInfo = '\n🔶 H2: points to offset high byte';
+							if (address === currentHeader.h3Addr) headerInfo = '\n🔶 H3: points to prefix length';
+							if (address === currentHeader.h4Addr) headerInfo = '\n🔶 H4: points to suffix length';
+						}
+					}
+					
+					// Show value as hex with 'h' suffix
+					alert(`Address: ${address.toString(16).toUpperCase()} (${address})\nValue: ${value.toString(16).toUpperCase().padStart(2, '0')} (${value})${headerInfo}`);
+					
+					highlightAddress(address, '#00ffff', '');
+					setTimeout(() => renderROM(), 500/100);
+				}
+			}
             
             // ==================== STATS UPDATE ====================
             function updateStats() {
@@ -1266,6 +1473,7 @@ button.primary:hover {
                 document.getElementById('suffixOutput').value = '';
                 document.getElementById('messageOutput').value = '';
                 document.getElementById('zosciiAddresses').value = '';
+                document.getElementById('fileOutput').value = '';
                 document.getElementById('outputBytes').innerText = '0';
                 
                 renderROM();
