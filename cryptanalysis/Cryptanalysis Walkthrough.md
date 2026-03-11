@@ -1,5 +1,7 @@
 # UNSIGNAL Protocol: Intelligence Analysis Walkthrough
-# ====================================================
+
+**Author:** Julian Cassin  
+**Date:** 2026-03-11
 
 1. The Intercept
    - Raw file obtained: no headers, no magic bytes, no structure
