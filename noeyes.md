@@ -1,5 +1,8 @@
 # ZOSCII NoEyes Handshake Protocol
 
+**Author:** Julian Cassin  
+**Date:** 2026-02-28
+
 ## Overview
 
 A trust establishment mechanism that uses existing Certificate Authorities (CAs) as disposable bootstrap facilitators, not ongoing security providers. Once the handshake completes, the CAs are permanently out of the loop.

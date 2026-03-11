@@ -1,5 +1,8 @@
 # UNSIGNAL Protocol Specification
 
+**Author:** Julian Cassin  
+**Date:** 2026-02-26
+
 ## SOFTWARE LICENSE v1.1
 
 UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1

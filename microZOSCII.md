@@ -2,8 +2,9 @@
 ## A Practical Solution for Secure Key Distribution
 
 **Version 1.2** (DRAFT) 
-**Julian Cassin, Cyborg Unicorn Pty Ltd**  
-**February 2026**
+**Author:** Julian Cassin  
+**Date:** 2026-02-26
+**Last Update:** 2026-03-09
 
 ---
 
