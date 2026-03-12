@@ -1,0 +1,125 @@
+some tests on ZOSCII encoding using the ENT randomness test using the bundled selfie.jpg as the ROM.
+
+Test 1: "eeeee" (five identical bytes)
+
+• Original: entropy 0.00, chi-square <0.01% (completely predictable)
+• After ZOSCII: entropy 3.12-3.32, chi-square up to 64.57% (looks random)
+• After UNSIGNAL: entropy 6.75-7.18, chi-square 28-64% (approaching perfect)
+• Same input, two outputs: completely different bytes, zero correlation
+• Five identical letters transformed into statistically random data
+
+Test 2: JWT
+
+• Started with a standard 113-byte JWT (structured JSON)
+• Original: entropy 4.57, chi-square <0.01% (clearly structured)
+• After ZOSCII: entropy 7.05, chi-square 24.6% (looks random)
+• After UNSIGNAL: entropy 7.68, chi-square 85.3% (statistically perfect)
+• No trace of "John Doe" or any JSON structure remained.
+
+Test 3: Gone With The Wind (2.3 million characters)
+
+• Original text: entropy 4.47, chi-square <0.01% (obvious English patterns)
+• After ZOSCII: entropy 7.89, chi-square <0.01% (but vastly improved)
+• After UNSIGNAL: entropy 7.975, mean 127.2 (ideal is 127.5)
+• Same input, two outputs: completely different bytes, zero correlation
+
+Test 4: Gone With The Wind (ZIP compressed)
+
+• Original ZIP: entropy 7.998, mean 127.63 (already near-perfect)
+• After ZOSCII: entropy 7.984, mean shifted to 132.5 (different distribution)
+• After UNSIGNAL: entropy 7.998, mean 129.6 (smoothed closer to ideal)
+• Even already-random data gets transformed into something completely different
+
+Test 5: Selfie (188KB JPEG)
+
+• Original selfie: entropy 7.95, mean 121.0 (natural photo distribution)
+• After ZOSCII: entropy 7.993, mean ~130.7-130.8 (near-perfect)
+• After UNSIGNAL: entropy 7.994-7.996, mean 131.6-132.1 (smoothed)
+• Same selfie encoded with itself → completely different outputs each time
+• The ROM (selfie) becomes the key that unlocks its own encoded versions
+
+Test 6: Korean EDM MP3 (4.3MB audio file)
+
+• Original MP3: entropy 7.97, mean 122.4 (compressed audio)
+• After ZOSCII: entropy 7.987, mean ~131.8 (2× size, shifted distribution)
+• After UNSIGNAL: entropy 7.99972-7.99976, mean 127.1-127.14 (virtually perfect)
+• UNSIGNAL chi-square improved dramatically: from 254K → ~3K
+• Mean shifted from 122.4 → 127.1 (almost exactly ideal)
+• Same 4.3MB audio file, two outputs: completely different, zero correlation
+• Even complex audio data gets transformed into statistically perfect randomness
+
+Test 7: Empty file (0 bytes)
+
+• Original: 0 bytes, entropy undefined
+• After ZOSCII: 0 bytes (nothing in, nothing out)
+• After UNSIGNAL: 286-344 bytes of pure random data
+• UNSIGNAL adds random headers/footers even with no input
+• Entropy: 7.26-7.35, chi-square 37-49% (statistically ideal)
+• Mean: 127.8-127.9 (almost exactly the ideal 127.5)
+• Proof: UNSIGNAL generates perfect randomness even from nothing
+
+Test 10: 64KB of Pure Zeros
+
+Original zeros file:
+
+• Entropy: 0.000000 (lowest possible - completely predictable)
+• Mean: 0.0 (far from ideal 127.5)
+• Compression: 100% reducible (all identical)
+
+After ZOSCII:
+
+• Entropy: 7.42-7.42 (massive jump from 0 to near-random!)
+• Mean: 112.6-112.8 (still lower than ideal, but no longer zero)
+• Serial correlation: -0.05 (effectively random)
+
+After UNSIGNAL:
+
+• Entropy: 7.51-7.51 (slightly higher than ZOSCII)
+• Mean: 111.2-111.4 (similar to ZOSCII)
+• Serial correlation: -0.09 to -0.10 (still effectively random)
+
+Test 11: 64KB of Pure 0xFF
+
+Original 0xFF file:
+
+• Entropy: 0.000000 (lowest possible - all identical)
+• Mean: 255.0 (opposite extreme from zeros test)
+• Compression: 100% reducible (all bytes the same)
+
+After ZOSCII:
+
+• Entropy: 7.374 (massive jump from 0 to near-random)
+• Mean: 132.4-132.8 (shifted toward ROM distribution)
+• Serial correlation: 0.009-0.015 (effectively zero)
+
+After UNSIGNAL:
+
+• Entropy: 7.45-7.46 (slightly higher)
+• Mean: 134.7-136.8 (higher than ZOSCII)
+• Serial correlation: 0.005-0.031 (still near zero)
+
+Test 12: Single Ramp 0→255 (256 bytes)
+
+Original ramp:
+
+• Entropy: 8.000000 (perfect - every byte value once)
+• Chi-square: >99.99% (perfect uniform distribution)
+• Mean: 127.5 (ideal)
+• Serial correlation: 0.977 (high due to sequential ordering)
+
+After ZOSCII:
+
+• Entropy: 7.54-7.61 (excellent for just 512 bytes)
+• Chi-square: 12.6-79.8% (within random range!)
+• Mean: 132.3-138.1 (shifted)
+• Serial correlation: -0.03 to 0.08 (pattern destroyed)
+
+After UNSIGNAL:
+
+• Entropy: 7.71-7.75 (higher)
+• Chi-square: 41.5-82.6% (ideal random range)
+• Mean: 127.6-132.0 (t12a.sig mean is 127.57 - virtually perfect!)
+• Serial correlation: 0.0008-0.047 (effectively zero)
+
+The above analysis is really just fun, it's just testing the analysis of pointers to random data - which itself has no real meaning - the actual data is unknown.
+
