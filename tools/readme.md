@@ -27,7 +27,7 @@ When you activate a ROM from the ROMs explorer, the system decodes it and writes
 ### Basic Encode / Decode
 Use these to encode or decode any file. Basic Encode and Basic Decode use your **resident ROM** — the ROM you logged in with, which is held in memory only and never touches disk. The ROM is indexed to build the address table used for encoding and decoding. These operations do not use `active.rom`.
 
-### Detailed ROM Analysis (Coming soon)
+### Detailed ROM Analysis
 Provides a detailed ROM analysis of its entropy to ensure that the ROM file you chose is up for the job. Colour JPEG files make really good candidates and we recommend you use them for ease of identification.
 
 ### Data Protection (Coming soon)
@@ -100,7 +100,7 @@ With encryption, when brute force finds a key that produces valid plaintext, the
 ---
 
 ## Release Candidate 1
-This software is currently RC1 — Release Candidate 1. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
+This software is currently RC2 — Release Candidate 2. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
 The most significant feature still to come is **Detailed ROM Analysis** — a tool that will analyse your ROM file's entropy and give you a clear picture of its suitability for encoding. Colour JPEG photographs make excellent ROMs and are easy to identify; the analyser will confirm whether your chosen file is up to the job. This is a priority for the next release.
 
