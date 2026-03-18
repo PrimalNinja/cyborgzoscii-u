@@ -66,14 +66,6 @@ This is the reason ZOSCII is correctly described as **encoding** and not **encry
 
 Unlike OTP, ZOSCII does not require the key (ROM) to be as long as the message, does not prohibit reuse, and requires no synchronisation — because the ROM is not XORed against fixed positions. Random selection of which ROM address to use for each byte is what creates the independence. This is expressed as `I(M;A) = 0`: the mutual information between message and address stream is zero. The same Shannon guarantee, through a completely different and more practical mechanism.
 
-ZOSCII main website: zoscii.com
-ZOSCII mathematical proofs: https://github.com/PrimalNinja/cyborgzoscii/tree/master/proofs
-ZOSCII Foundation: https://zoscii.com/foundation.html
-ZOSCII MQ (Message Queue): https://zoscii.com/zosciimq/
-ZOSCII Trumpet Blower: https://zoscii.com/zosciitrumpetblower/readme.html
-ZOSCII MIT repository: https://github.com/PrimalNinja/cyborgzoscii
-ZOSCII UNINTELLIGENCE License repository: https://github.com/PrimalNinja/cyborgzoscii-u
-
 ### UNSIGNAL Protocol
 UNSIGNAL is an advanced ZOSCII implementation designed to neutralise pattern recognition and heuristic analysis. Its name reflects its intent: a signal that carries no exploitable signal. Even with the same ROM and the same message, UNSIGNAL will never produce the same output twice.
 
