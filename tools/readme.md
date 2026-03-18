@@ -1,4 +1,4 @@
-# Cyborg Neptune — Nuclear Tight Security Suite
+# Cyborg Neptune Nuclear Tight Security
 
 This is a closed‑source, free software tool for Windows that demonstrates the power of the UNSIGNAL Protocol and ZOSCII encoding. It provides information‑theoretic security for your files.
 
