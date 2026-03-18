@@ -99,23 +99,21 @@ With encryption, when brute force finds a key that produces valid plaintext, the
 
 ---
 
-## Release Candidate 1
+## Release Candidate 2
 This software is currently RC2 — Release Candidate 2. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
-
-The most significant feature still to come is **Detailed ROM Analysis** — a tool that will analyse your ROM file's entropy and give you a clear picture of its suitability for encoding. Colour JPEG photographs make excellent ROMs and are easy to identify; the analyser will confirm whether your chosen file is up to the job. This is a priority for the next release.
 
 ## Trust
 This software contains no backdoors, we do not phone home and we do not capture your ROMs. We cannot guarantee the OS you are using however has the same guarantees.
 
-User Guidelines: https://github.com/PrimalNinja/cyborgzoscii/blob/master/docs/user-guidelines.md
-Securing Your PC Running Windows 10+: https://github.com/PrimalNinja/cyborgzoscii/blob/master/docs/securing-pc.md
+- [User Guidelines](https://github.com/PrimalNinja/cyborgzoscii/blob/master/docs/user-guidelines.md)
+- [Securing Your PC Running Windows 10+](https://github.com/PrimalNinja/cyborgzoscii/blob/master/docs/securing-pc.md)
 
 ---
 
 ## About Cyborg Unicorn Pty Ltd
 Cyborg Unicorn Pty Ltd is an Australian software company focused on low-level systems engineering, information-theoretic security, and high-performance computing. We build tools that respect the intelligence of the people who use them — tools that are grounded in real computer science rather than marketing.
 
-Website: cyborgunicorn.com.au
+Website: [cyborgunicorn.com.au](https://cyborgunicorn.com.au)
 WhatsApp support channel: CyborgUnicorn
 
 ### Nuclear Tight Security Suite
@@ -124,27 +122,27 @@ The product you are currently using. A file encoding suite built on ZOSCII and t
 ### ZOSCII — Zero Overhead Secure Code Information Interchange
 The encoding protocol at the heart of this product. ZOSCII originated from NTC (Native Threaded Code) work on Z80 systems, where the goal was to make text output faster by replacing computed transformations with direct table lookups. That same principle — a single `LD A, (HL)` instruction, no algorithm, just an address lookup — became the foundation of an information-theoretically secure encoding system. ZOSCII achieves the same `I = 0` Shannon guarantee as the One-Time Pad and Shamir's Secret Sharing, but without their practical restrictions: the ROM is reusable, requires no length matching to the message, and needs no synchronisation.
 
-ZOSCII website: zoscii.com
-ZOSCII Foundation: https://zoscii.com/foundation.html
-ZOSCII MQ: https://zoscii.com/zosciimq/
-ZOSCII Trumpet Blower: https://zoscii.com/zosciitrumpetblower/readme.html
-ZOSCII MIT repository: https://github.com/PrimalNinja/cyborgzoscii
-ZOSCII UNINTELLIGENCE License repository: https://github.com/PrimalNinja/cyborgzoscii-u
+- ZOSCII website: [zoscii.com](https://zoscii.com)
+- ZOSCII Foundation: [zoscii.com/foundation.html](https://zoscii.com/foundation.html)
+- ZOSCII MQ: [zoscii.com/zosciimq](https://zoscii.com/zosciimq/)
+- ZOSCII Trumpet Blower: [zoscii.com/zosciitrumpetblower](https://zoscii.com/zosciitrumpetblower/readme.html)
+- ZOSCII MIT repository: [github.com/PrimalNinja/cyborgzoscii](https://github.com/PrimalNinja/cyborgzoscii)
+- ZOSCII UNINTELLIGENCE License repository: [github.com/PrimalNinja/cyborgzoscii-u](https://github.com/PrimalNinja/cyborgzoscii-u)
 
 ### NTC — Native Threaded Code
 The origin of ZOSCII. NTC is a compiler technique for Z80 systems that uses the hardware stack pointer as an instruction pointer, eliminating the CALL/RET overhead of conventional high-level language implementations and achieving 46–64% reduction in execution overhead. The same table-lookup insight that made NTC fast for text output became the basis for ZOSCII encoding.
 
-NTC repository: https://github.com/PrimalNinja/ntc
+NTC repository: [github.com/PrimalNinja/ntc](https://github.com/PrimalNinja/ntc)
 
 ### Cyborg Designer
 A visual design tool built by Cyborg Unicorn, MIT licensed.
 
-Repository: https://github.com/PrimalNinja/cyborgdesigner
+Repository: [github.com/PrimalNinja/cyborgdesigner](https://github.com/PrimalNinja/cyborgdesigner)
 
 ### Cuboids — Tri-Sword Framework
 A high-performance GPU computing framework implementing the Tri-Sword architecture: Memory Sovereignty, Logic & Arithmetic Primitives, and Pipeline Orchestration. Achieves breakthrough performance on constrained hardware by treating the GPU as a sovereign Turing-complete platform rather than a peripheral device. MIT licensed.
 
-Repository: https://github.com/PrimalNinja/cuboids
+Repository: [github.com/PrimalNinja/cuboids](https://github.com/PrimalNinja/cuboids)
 
 ---
 
