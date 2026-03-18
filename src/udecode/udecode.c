@@ -214,8 +214,8 @@ int main(int argc_a, char* strArgv_a[])
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    printf("UNSIGNAL Protocol Decoder\n");
-    printf("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
+    printf("UNSIGNAL Protocol Decoder v20260301\n");
+    printf("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
 
     if (argc_a == 4) 
     {

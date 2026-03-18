@@ -207,7 +207,7 @@ int main(int intArgC_a, char* strArgv_a[])
     RomData* ptrRom = NULL;
     int intDecodeOk = 0;
     
-    printf("UNSIGNAL Protocol Decoder\n");
+    printf("UNSIGNAL Protocol Decoder v20260301\n");
     printf("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
 
     if (intArgC_a == 4) 

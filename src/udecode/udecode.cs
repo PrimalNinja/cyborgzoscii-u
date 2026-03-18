@@ -168,8 +168,8 @@ class Program
         RomData ptrRom = null;
         bool blnDecodeOk = false;
         
-        Console.WriteLine("UNSIGNAL Protocol Decoder");
-        Console.WriteLine("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1");
+        Console.WriteLine("UNSIGNAL Protocol Decoder v20260301");
+        Console.WriteLine("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1");
         Console.WriteLine();
 
         if (strArgs_a.Length == 3)

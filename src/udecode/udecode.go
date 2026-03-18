@@ -191,8 +191,8 @@ func main()
 	var err error = nil
 	var blnDecodeOk bool = false
 	
-	fmt.Println("UNSIGNAL Protocol Decoder")
-	fmt.Println("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
+	fmt.Println("UNSIGNAL Protocol Decoder v20260301")
+	fmt.Println("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
 
 	strArgs := os.Args
 	if len(strArgs) == 4 

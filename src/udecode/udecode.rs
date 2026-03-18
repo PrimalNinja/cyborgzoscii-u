@@ -232,8 +232,8 @@ fn main()
     let ptrRom: RomData;
     let blnDecodeOk: bool;
     
-    println!("UNSIGNAL Protocol Decoder");
-    println!("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n");
+    println!("UNSIGNAL Protocol Decoder v20260301");
+    println!("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n");
 
     let strArgs: Vec<String> = env::args().collect();
     

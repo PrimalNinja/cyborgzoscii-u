@@ -201,8 +201,8 @@ function main()
     $ptrRom = null;
     $blnDecodeOk = false;
     
-    echo "UNSIGNAL Protocol Decoder\n";
-    echo "(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n";
+    echo "UNSIGNAL Protocol Decoder v20260301\n";
+    echo "(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n";
     
     // Test harness - hardcoded filenames for testing
     $strRomFile = 'rom.bin';

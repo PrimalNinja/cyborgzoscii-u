@@ -139,8 +139,8 @@ def main():
     ptrRom = None
     blnDecodeOk = False
     
-    print("UNSIGNAL Protocol Decoder")
-    print("(c) 2026 Cyborg Unicorn Pty Ltd v20260301 - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
+    print("UNSIGNAL Protocol Decoder v20260301")
+    print("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n")
     
     if len(sys.argv) == 4:
         ptrRom = loadRom(sys.argv[1])
