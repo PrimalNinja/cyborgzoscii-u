@@ -56,7 +56,7 @@ class Program
         
         if (ptrLookup_a[byTarget_a].intCount > 0)
         {
-            uint intRandomIdx = (uint)(new Random().Next((int)ptrLookup_a[byTarget_a].intCount));
+            uint intRandomIdx = (uint)(ptrRand.Next((int)ptrLookup_a[byTarget_a].intCount));
             intResult = ptrLookup_a[byTarget_a].ptrAddresses[intRandomIdx];
         }
         
