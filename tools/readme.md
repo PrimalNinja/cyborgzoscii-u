@@ -30,7 +30,7 @@ Use these to encode or decode any file. Basic Encode and Basic Decode use your *
 ### Detailed ROM Analysis
 Provides a detailed ROM analysis of its entropy to ensure that the ROM file you chose is up for the job. Colour JPEG files make really good candidates and we recommend you use them for ease of identification.
 
-### Data Protection (Coming soon)
+### Data Protection
 Store sensitive information in GUID-based folders organised by type (e.g. Bank Accounts, Passwords).
 
 ### Secure Delete
@@ -91,8 +91,8 @@ With encryption, when brute force finds a key that produces valid plaintext, the
 
 ---
 
-## Release Candidate 2
-This software is currently RC2 — Release Candidate 2. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
+## Release Candidate 3
+This software is currently RC3 — Release Candidate 3. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
 ## Trust
 This software contains no backdoors, we do not phone home and we do not capture your ROMs. We cannot guarantee the OS you are using however has the same guarantees.
