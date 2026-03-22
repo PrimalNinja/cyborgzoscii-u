@@ -2,6 +2,12 @@
 
 This is a closed‑source, free software tool for Windows that demonstrates the power of the UNSIGNAL Protocol and ZOSCII encoding. It provides information‑theoretic security for your files.
 
+## Release Candidate 5
+This software is currently RC5 - Release Candidate 5. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
+
+## Languages
+Software is localised in English, Japanese, Chinese (Simplified), Korean, Russian, Bahasa Indonesian and Spanish.
+
 ## License
 
 This tool is free for **PERMITTED USERS** under the terms of the **UNINTELLIGENCE SOFTWARE LICENSE v1.1**. Please see the **License Agreement** section within the application for full details on permitted users (individuals, private commercial entities, NGOs, etc.) and prohibited users (government intelligence, military, law enforcement, etc.) - Prohibited users (government intelligence agencies, military organizations, defense contractors, law enforcement, and mass surveillance entities) are not authorized to use this free version. Such entities may contact Cyborg Unicorn for commercial licensing options.
@@ -103,9 +109,6 @@ Before an adversary can attempt to break ZOSCII, they first need to know they ar
 With encryption, when brute force finds a key that produces valid plaintext, the adversary knows they have found the answer - ciphertext decrypts deterministically to one specific result. ZOSCII has no such property. Because encoding is non-deterministic, different ROMs will decode the same address sequence into different, equally plausible messages. There is no correct answer to verify against, no checksum, no validation, no way to distinguish the real plaintext from any other valid interpretation. This is not a clever trick - it is the mathematical proof of information-theoretic security. If multiple messages are equally likely given everything an adversary can observe, the adversary has gained zero information. The same address sequence can legitimately decode to completely different content depending on which ROM is applied, and no ROM can be proven more "correct" than another without independent knowledge of which ROM was used.
 
 ---
-
-## Release Candidate 4
-This software is currently RC4 - Release Candidate 4. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
 ## Trust
 This software contains no backdoors, we do not phone home and we do not capture your ROMs. We cannot guarantee the OS you are using however has the same guarantees.
