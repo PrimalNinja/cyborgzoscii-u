@@ -6,7 +6,7 @@ This is a closed‑source, free software tool for Windows that demonstrates the 
 This software is currently RC5 - Release Candidate 5. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
 ## Languages
-Software is localised in English, Japanese, Chinese (Simplified), Korean, Russian, Bahasa Indonesian and Spanish.
+Software is localised in English, Bahasa Indonesian, Chinese (Simplified), Czech, Dutch, French, German, Greek, Hausa, Hindi, Igbo, Italian, Japanese, Korean, Polish, Portuguese, Romanian, Russian, Spanish, Swahili, Swedish, Tagalog, Thai, Turkish, Ukrainian, Vietnamese and Yoruba.
 
 ## License
 
