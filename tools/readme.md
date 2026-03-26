@@ -5,6 +5,9 @@ This is a closed‑source, free software tool for Windows that demonstrates the 
 ## Release Candidate 6
 This software is currently RC6 - Release Candidate 6. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
+## Key Files
+The Nuclear Tight Security (NTS) suite now uses keyfiles as a licensing and integrity check. Embedded within the application is the encoded keyfile.rom which has a compatible signature. This keyfile is created by UNSIGNAL encoding the JPEG with itself. Because it is non-deterministic encoding, in "non-free" versions of NTS, it isn't possible to fake a signature for the customer's keyfile.rom, for which they solely possess. Cyborg Neptune Nuclear Tight Security is the only version distributed with the actual keyfile.rom - it is not used for the security of data at all; it is purely for license and program integrity.
+
 ## Languages
 Software is localised in English, Bahasa Indonesian, Chinese (Simplified), Czech, Dutch, French, German, Greek, Hausa, Hindi, Igbo, Italian, Japanese, Korean, Polish, Portuguese, Romanian, Russian, Spanish, Swahili, Swedish, Tagalog, Thai, Turkish, Ukrainian, Vietnamese and Yoruba.
 
