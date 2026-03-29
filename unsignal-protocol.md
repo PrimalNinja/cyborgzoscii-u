@@ -37,6 +37,8 @@ All addresses are stored in little-endian format. Every UNSIGNAL Protocol file b
 
 5.  Assemble: Concatenate [H1, H2, H3, H4] + [Prefix] + [Encoded Address Stream] + [Suffix].
 
+Note: H3 and H4 can point to odd or even numbers having the effect of shifting all addresses a byte from the start or end without an attacker knowing one way or another. The prefix prevents the start of the message to be known, the suffix prevents the end being known for working backwards.
+
 ### 4. DECODING STEPS
 
 1.  Read Header: Extract the first 4 addresses (H1-H4).

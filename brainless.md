@@ -45,6 +45,12 @@ The Message
 
 - Circular defense with no endpoints to attack
 
+## Real Benefits
+
+- XOR is considered encryption, so although the encoding below isn't encrypted, BRAINLESS is for those who have checkbox OCD and require encryption.
+
+- If a transmission occurs in packets, a packet in isolation is impossible to decrypt without first having the entire message.
+
 ## What Intelligence Agencies Will Find
 
 They'll analyze the XOR chain: Simple, reversible, alone would be weak.
