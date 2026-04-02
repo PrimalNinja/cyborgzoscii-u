@@ -1,4 +1,4 @@
-# Protocol Enabling Notorised Information Security
+# Protocol Enabling Notarised Information Security
 
 **Version 1.0** (DRAFT) 
 **Author:** Julian Cassin  
@@ -12,7 +12,7 @@ UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 
 ## Overview
 
-**Protocol Enabling Notorised Information Security** is to secure, attested data creation by a third party (Customer) for submission back to the issuing party (Originator).
+**Protocol Enabling Notarised Information Security** is to secure, attested data creation by a third party (Customer) for submission back to the issuing party (Originator).
 
 It is **not** a key exchange protocol. Its purpose is to:
 
