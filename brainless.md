@@ -3,6 +3,10 @@
 **Author:** Julian Cassin  
 **Date:** 2026-01-29
 
+## SOFTWARE LICENSE v1.1
+
+UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+
 ## BRAINLESS = ZOSCII + Ouroboros Encryption🐍
 
 You don't need complex algorithms when you start with I(M;A)=0.
@@ -66,8 +70,6 @@ The irony writes itself.
 ## Available Now
 
 Works on everything from 1971 Intel 4004 to modern GPUs.
-
-Open source. UNINTELLIGENCE licensed. Free for everyone except those planning mass surveillance (see: ALMOST like MIT License).
 
 ## The Philosophy
 

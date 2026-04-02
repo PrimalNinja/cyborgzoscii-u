@@ -3,6 +3,10 @@
 **Author:** Julian Cassin  
 **Date:** 2026-02-28
 
+## SOFTWARE LICENSE v1.1
+
+UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+
 ## Overview
 
 A trust establishment mechanism that uses existing Certificate Authorities (CAs) as disposable bootstrap facilitators, not ongoing security providers. Once the handshake completes, the CAs are permanently out of the loop.
@@ -11,7 +15,7 @@ A trust establishment mechanism that uses existing Certificate Authorities (CAs)
 
 ### Components
 
-- **microZOSCII**: 240-byte dynamically generated microROM (UNINTELLIGENCE Licensed)
+- **microZOSCII**: 240-byte dynamically generated microROM
 - **3 Independent Middlemen**: Certificate Authorities or equivalent trust brokers
 - **2 Endpoints**: The communicating parties, client and server
 
@@ -129,12 +133,6 @@ Certificates retain exactly one job: **identity verification**.
 - Compromising 1 or even 2 authorities is insufficient — you need all 3 ROMs to decode
 - Each authority operates independently — no coordination between them
 - After endpoints exchange a private ROM, all 3 session ROMs become irrelevant
-
-## License
-
-- **microZOSCII**: UNINTELLIGENCE SOFTWARE LICENSE v1.0
-- **UNSIGNAL Protocol**: UNINTELLIGENCE SOFTWARE LICENSE v1.1
-- **Core ZOSCII**: MIT Licensed forever
 
 ---
 

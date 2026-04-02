@@ -1,10 +1,14 @@
 # microZOSCII: Quantum-Proof Bootstrap Protocol
 ## A Practical Solution for Secure Key Distribution
 
-**Version 1.2** (DRAFT) 
+**Version 1.3** (DRAFT) 
 **Author:** Julian Cassin  
 **Date:** 2026-02-26
-**Last Update:** 2026-03-09
+**Last Update:** 2026-04-02
+
+## SOFTWARE LICENSE v1.1
+
+UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 
 ---
 
@@ -1104,30 +1108,6 @@ A: QKD requires specialized hardware, dedicated fiber optics or satellites, and 
 **Q: Can I use this today?**
 
 A: Yes. microZOSCII is pure software, requires no special hardware, and works on any platform. Implementations available in JavaScript, Python, C, and more.
-
----
-
-## License
-
-UNINTELLIGENCE SOFTWARE LICENSE v1.0
-
-This software is free for:
-- Individuals
-- Private commercial entities
-- NGOs
-- Academia
-- Journalists
-
-**Permanently.**
-
-Excluded from free use:
-- Government intelligence agencies
-- Military organizations
-- Mass surveillance operations
-
-Commercial licenses available for enterprise deployment.
-
-Full license: https://github.com/PrimalNinja/cyborgzoscii-u
 
 ---
 
