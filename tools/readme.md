@@ -5,6 +5,25 @@ This is a closed‑source, free software tool for Windows that demonstrates the 
 ## Release Candidate 7
 This software is currently RC7 - Release Candidate 7. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
+## Installation
+To install Cyborg Neptune Nuclear Tight Security, you will need to install CyborgNeptuneNTS-Setup.exe if you want to use either the data concealment or the secure chat. CyborgNeptuneNTSChat-Setup.exe is required in addition if you wish to use secure chat. 
+
+The reason for separation is that the data concealment portion has no network activity at all - if you see any, you may have been exploited - report it to us.  Chat does require network activity and is secured separated securely from the core program - read the instructions below for more information how it does this with the chat ROMs.
+
+## Quick Start (5 minutes)
+1. Install CyborgNeptuneNTS-Setup.exe
+2. Launch the application
+3. Drag a JPEG photo onto the login screen (this becomes your ROM)
+4. Click "Continue"
+5. You're ready to encode files or set up secure chat
+
+For chat:
+6. Install CyborgNeptuneNTSChat-Setup.exe (separate installer)
+7. In NTS, go to Contacts → Contact ROMs → select 1-3 ROMs
+8. Create contacts with their published ROMs
+9. Click Publish
+10. Launch the Chat program with your chat ROMs
+
 ## Key Files
 The Nuclear Tight Security (NTS) suite now uses keyfiles as a licensing and integrity check. Embedded within the application is the encoded keyfile.rom which has a compatible signature. This keyfile is created by UNSIGNAL encoding the JPEG with itself. Because it is non-deterministic encoding, in "non-free" versions of NTS, it isn't possible to fake a signature for the customer's keyfile.rom, for which they solely possess. Cyborg Neptune Nuclear Tight Security is the only version distributed with the actual keyfile.rom - it is not used for the security of data at all; it is purely for license and program integrity.
 
