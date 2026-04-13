@@ -5,6 +5,11 @@ This is a closed‑source, free software tool for Windows that demonstrates the 
 ## Release Candidate 8
 This software is currently RC8 - Release Candidate 8. The core encoding and decoding functionality is complete and the information-theoretic security properties are fully intact, but this is an early release and we are actively taking feedback. If you encounter any bugs or unexpected behaviour please let us know via the WhatsApp support channel: **CyborgUnicorn**.
 
+Quick Preview Videos are here on YouTube:
+
+https://www.youtube.com/watch?v=xQOPfDIr0iI (Main Module)
+https://www.youtube.com/watch?v=g7Vf5DjJLqI (Chat / Radio / TrumpetBlower Module)
+
 ## Installation
 To install Cyborg Neptune Nuclear Tight Security, you will need to install CyborgNeptuneNTS-Setup.exe if you want to use either the data concealment or the secure chat. CyborgNeptuneNTSChat-Setup.exe is required in addition if you wish to use secure chat. 
 
