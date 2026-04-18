@@ -66,23 +66,22 @@ static uint8_t* loadFile(const char* strFilename_a, long* lngSize_a)
 
 int main(int intArgC_a, char* strArgv_a[])
 {
-    int intResult = 1;
-    int intInputCount = 0;
-    const char* strOutputPath = NULL;
     uint8_t* arrInputData[3] = {NULL};
     long arrInputSize[3] = {0};
-    double dblStep[3] = {0.0};
-    double dblPos[3] = {0.0};
     uint8_t arrROM[ROM_SIZE] = {0};
-    long lngBytesPerFile = 0;
-    long lngRemainder = 0;
     long arrShare[3] = {0};
-    long lngOutPos = 0;
+    double dblPos[3] = {0.0};
+    double dblStep[3] = {0.0};
+    long intBytesPerFile = 0;
     int intFileIdx = 0;
-    long lngI = 0;
-    long lngSamplePos = 0;
     int intI = 0;
+    int intInputCount = 0;
+    long intOutPos = 0;
+    long intRemainder = 0;
+    int intResult = 1;
+    long intSamplePos = 0;
     FILE* ptrOutput = NULL;
+    const char* strOutputPath = NULL;
 
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
@@ -137,13 +136,13 @@ int main(int intArgC_a, char* strArgv_a[])
     }
 
     // Calculate bytes each file contributes and step size
-    lngBytesPerFile = ROM_SIZE / intInputCount;
-    lngRemainder = ROM_SIZE % intInputCount;
+    intBytesPerFile = ROM_SIZE / intInputCount;
+    intRemainder = ROM_SIZE % intInputCount;
 
     for (intI = 0; intI < intInputCount; intI++)
     {
-        arrShare[intI] = lngBytesPerFile;
-        if (intI < lngRemainder)
+        arrShare[intI] = intBytesPerFile;
+        if (intI < intRemainder)
         {
             arrShare[intI]++;
         }
@@ -152,22 +151,22 @@ int main(int intArgC_a, char* strArgv_a[])
     }
 
     // Build ROM by alternating through input files
-    lngOutPos = 0;
-    while (lngOutPos < ROM_SIZE)
+    intOutPos = 0;
+    while (intOutPos < ROM_SIZE)
     {
-        for (intFileIdx = 0; intFileIdx < intInputCount && lngOutPos < ROM_SIZE; intFileIdx++)
+        for (intFileIdx = 0; intFileIdx < intInputCount && intOutPos < ROM_SIZE; intFileIdx++)
         {
             if (arrShare[intFileIdx] > 0)
             {
-                lngSamplePos = (long)dblPos[intFileIdx];
-                if (lngSamplePos >= arrInputSize[intFileIdx])
+                intSamplePos = (long)dblPos[intFileIdx];
+                if (intSamplePos >= arrInputSize[intFileIdx])
                 {
-                    lngSamplePos = arrInputSize[intFileIdx] - 1;
+                    intSamplePos = arrInputSize[intFileIdx] - 1;
                 }
-                arrROM[lngOutPos] = arrInputData[intFileIdx][lngSamplePos];
+                arrROM[intOutPos] = arrInputData[intFileIdx][intSamplePos];
                 dblPos[intFileIdx] += dblStep[intFileIdx];
                 arrShare[intFileIdx]--;
-                lngOutPos++;
+                intOutPos++;
             }
         }
     }

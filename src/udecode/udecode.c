@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
 #ifdef _WIN32
@@ -20,25 +21,25 @@ typedef struct
 {
     uint8_t* ptrROMData;
     long lngROMSize;
-} RomData;
+} ROMData;
 
 static uint16_t findOffset(uint8_t byLow_a, uint8_t byHigh_a, long lngROMSize_a)
 {
-    uint16_t intResult = 0;
     uint16_t intRaw = (uint16_t)byLow_a | ((uint16_t)byHigh_a << 8);
+    uint16_t intResult = 0;
     
-    if (lngROMSize_a >= 131072L) 
+    if (lngROMSize_a >= 131072L)
     {
         intResult = intRaw;
-    } 
-    else 
+    }
+    else
     {
         long lngMax = (lngROMSize_a * UNSIGNAL_OFFSET_LIMIT_PCT) / 100;
-        if (lngMax == 0) 
+        if (lngMax == 0)
         {
             intResult = 0;
-        } 
-        else 
+        }
+        else
         {
             intResult = (uint16_t)(intRaw % (lngMax + 1));
         }
@@ -47,66 +48,83 @@ static uint16_t findOffset(uint8_t byLow_a, uint8_t byHigh_a, long lngROMSize_a)
     return intResult;
 }
 
-static RomData* loadRom(const char* strFilename_a)
+static ROMData* loadROM(const char* strFilename_a)
 {
-    RomData* ptrRom = NULL;
-    FILE* ptrROM = NULL;
+    ROMData* ptrROMData = NULL;
+    FILE* ptrROMFile = NULL;
     
-    ptrROM = fopen(strFilename_a, "rb");
-    if (ptrROM) 
+    ptrROMData = (ROMData*)malloc(sizeof(ROMData));
+    if (ptrROMData)
     {
-        ptrRom = malloc(sizeof(RomData));
-        if (ptrRom) 
+        // Initialize
+        memset(ptrROMData, 0, sizeof(ROMData));
+        
+        ptrROMFile = fopen(strFilename_a, "rb");
+        if (ptrROMFile)
         {
-            fseek(ptrROM, 0, SEEK_END);
-            ptrRom->lngROMSize = ftell(ptrROM);
-            fseek(ptrROM, 0, SEEK_SET);
+            fseek(ptrROMFile, 0, SEEK_END);
+            ptrROMData->lngROMSize = ftell(ptrROMFile);
+            fseek(ptrROMFile, 0, SEEK_SET);
             
-            if (ptrRom->lngROMSize > UNSIGNAL_ROM_LOAD_MAX) 
+            if (ptrROMData->lngROMSize > UNSIGNAL_ROM_LOAD_MAX)
             {
-                ptrRom->lngROMSize = UNSIGNAL_ROM_LOAD_MAX;
+                ptrROMData->lngROMSize = UNSIGNAL_ROM_LOAD_MAX;
             }
             
-            ptrRom->ptrROMData = malloc(ptrRom->lngROMSize);
-            if (ptrRom->ptrROMData) 
+            ptrROMData->ptrROMData = (uint8_t*)malloc(ptrROMData->lngROMSize);
+            if (ptrROMData->ptrROMData)
             {
-                fread(ptrRom->ptrROMData, 1, ptrRom->lngROMSize, ptrROM);
-            } 
-            else 
-            {
-                free(ptrRom);
-                ptrRom = NULL;
+                fread(ptrROMData->ptrROMData, 1, ptrROMData->lngROMSize, ptrROMFile);
             }
+            else
+            {
+                free(ptrROMData);
+                ptrROMData = NULL;
+            }
+            
+            fclose(ptrROMFile);
         }
-        fclose(ptrROM);
+        else
+        {
+            free(ptrROMData);
+            ptrROMData = NULL;
+        }
     }
     
-    return ptrRom;
+    return ptrROMData;
 }
 
-static void freeRom(RomData* ptrRom_a)
+
+static void unloadROM(ROMData* ptrROMData_a)
 {
-    if (ptrRom_a) 
+    if (ptrROMData_a)
     {
-        if (ptrRom_a->ptrROMData) 
+        if (ptrROMData_a->ptrROMData)
         {
-            free(ptrRom_a->ptrROMData);
+            free(ptrROMData_a->ptrROMData);
         }
-        free(ptrRom_a);
+        
+        free(ptrROMData_a);
     }
 }
 
-static bool decodeFile(const RomData* ptrRom_a, const char* strInputFile_a, const char* strOutputFile_a)
+static bool decodeFile(const ROMData* ptrROMData_a, const char* strInputFile_a, const char* strOutputFile_a)
 {
+    uint16_t arrAddrs[4] = {0};
+    uint8_t arrBuf[2];
     bool blnSuccess = false;
+	uint8_t byOffsetHigh = 0;
+    uint8_t byOffsetLow = 0;
+	uint8_t byPrefixLen = 0;
+	uint8_t bySuffixLen = 0;
+	long intDataSize = 0;
+	long intEffectiveSize = 0;
+    int intI = 0;
+    long intInputSize = 0;
+    uint16_t intOffset = 0;
+	long intSlots = 0;
     FILE* ptrInput = NULL;
     FILE* ptrOutput = NULL;
-    uint8_t arrBuf[2];
-    uint16_t arrAddrs[4] = {0};
-    uint8_t byOffsetLow = 0, byOffsetHigh = 0, byPrefixLen = 0, bySuffixLen = 0;
-    uint16_t intOffset = 0;
-    long lngInputSize = 0, lngDataSize = 0, lngSlots = 0, lngEffSize = 0;
-    int intI = 0;
     
     ptrInput = fopen(strInputFile_a, "rb");
     if (ptrInput) 
@@ -119,7 +137,7 @@ static bool decodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
                 break;
             }
             arrAddrs[intI] = (uint16_t)arrBuf[0] | ((uint16_t)arrBuf[1] << 8);
-            if (arrAddrs[intI] >= ptrRom_a->lngROMSize) 
+            if (arrAddrs[intI] >= ptrROMData_a->lngROMSize) 
             {
                 break;
             }
@@ -127,22 +145,22 @@ static bool decodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
         
         if (intI == 4) 
         {
-            byOffsetLow = ptrRom_a->ptrROMData[arrAddrs[0]];
-            byOffsetHigh = ptrRom_a->ptrROMData[arrAddrs[1]];
-            byPrefixLen = ptrRom_a->ptrROMData[arrAddrs[2]];
-            bySuffixLen = ptrRom_a->ptrROMData[arrAddrs[3]];
+            byOffsetLow = ptrROMData_a->ptrROMData[arrAddrs[0]];
+            byOffsetHigh = ptrROMData_a->ptrROMData[arrAddrs[1]];
+            byPrefixLen = ptrROMData_a->ptrROMData[arrAddrs[2]];
+            bySuffixLen = ptrROMData_a->ptrROMData[arrAddrs[3]];
             
-            intOffset = findOffset(byOffsetLow, byOffsetHigh, ptrRom_a->lngROMSize);
+            intOffset = findOffset(byOffsetLow, byOffsetHigh, ptrROMData_a->lngROMSize);
             
             // Calculate number of slots
             fseek(ptrInput, 0, SEEK_END);
-            lngInputSize = ftell(ptrInput);
+            intInputSize = ftell(ptrInput);
             fseek(ptrInput, HEADER_SIZE, SEEK_SET);
             
-            lngDataSize = lngInputSize - HEADER_SIZE - byPrefixLen - bySuffixLen;
-            lngSlots = lngDataSize / 2;
+            intDataSize = intInputSize - HEADER_SIZE - byPrefixLen - bySuffixLen;
+            intSlots = intDataSize / 2;
             
-            if (lngSlots >= 0) 
+            if (intSlots >= 0) 
             {
                 // Skip prefix
                 for (intI = 0; intI < byPrefixLen; intI++) 
@@ -158,14 +176,14 @@ static bool decodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
                     ptrOutput = fopen(strOutputFile_a, "wb");
                     if (ptrOutput) 
                     {
-                        lngEffSize = ptrRom_a->lngROMSize - intOffset;
-                        if (lngEffSize > 65536) 
+                        intEffectiveSize = ptrROMData_a->lngROMSize - intOffset;
+                        if (intEffectiveSize > 65536) 
                         {
-                            lngEffSize = 65536;
+                            intEffectiveSize = 65536;
                         }
                         
                         // Decode
-                        for (intI = 0; intI < lngSlots; intI++) 
+                        for (intI = 0; intI < intSlots; intI++) 
                         {
                             if (fread(arrBuf, 2, 1, ptrInput) != 1) 
                             {
@@ -173,16 +191,16 @@ static bool decodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
                             }
                             
                             uint16_t intAddr = (uint16_t)arrBuf[0] | ((uint16_t)arrBuf[1] << 8);
-                            if (intAddr < lngEffSize) 
+                            if (intAddr < intEffectiveSize) 
                             {
-                                if (fputc(ptrRom_a->ptrROMData[intOffset + intAddr], ptrOutput) == EOF) 
+                                if (fputc(ptrROMData_a->ptrROMData[intOffset + intAddr], ptrOutput) == EOF) 
                                 {
                                     break;
                                 }
                             }
                         }
                         
-                        if (intI == lngSlots) 
+                        if (intI == intSlots) 
                         {
                             blnSuccess = true;
                         }
@@ -205,9 +223,9 @@ static bool decodeFile(const RomData* ptrRom_a, const char* strInputFile_a, cons
 
 int main(int argc_a, char* strArgv_a[])
 {
-    int intResult = 1;
-    RomData* ptrRom = NULL;
     bool blnDecodeOk = false;
+    int intResult = 1;
+    ROMData* ptrROMData = NULL;
     
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
@@ -219,11 +237,11 @@ int main(int argc_a, char* strArgv_a[])
 
     if (argc_a == 4) 
     {
-        ptrRom = loadRom(strArgv_a[1]);
-        if (ptrRom) 
+        ptrROMData = loadROM(strArgv_a[1]);
+        if (ptrROMData) 
         {
-            blnDecodeOk = decodeFile(ptrRom, strArgv_a[2], strArgv_a[3]);
-            freeRom(ptrRom);
+            blnDecodeOk = decodeFile(ptrROMData, strArgv_a[2], strArgv_a[3]);
+            unloadROM(ptrROMData);
             
             if (blnDecodeOk) 
             {

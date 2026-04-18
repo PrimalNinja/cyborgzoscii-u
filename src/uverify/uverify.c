@@ -23,90 +23,101 @@ typedef struct
 {
     uint8_t* ptrROMData;
     long lngROMSize;
-} RomData;
-
-static RomData* loadRom(const char* strFilename_a)
-{
-    RomData* ptrRom = NULL;
-    FILE* ptrROM = NULL;
-
-    ptrROM = fopen(strFilename_a, "rb");
-    if (ptrROM) 
-    {
-        ptrRom = malloc(sizeof(RomData));
-        if (ptrRom) 
-        {
-            fseek(ptrROM, 0, SEEK_END);
-            ptrRom->lngROMSize = ftell(ptrROM);
-            fseek(ptrROM, 0, SEEK_SET);
-
-            if (ptrRom->lngROMSize > ROM_LOAD_MAX) 
-            {
-                ptrRom->lngROMSize = ROM_LOAD_MAX;
-            }
-
-            ptrRom->ptrROMData = malloc(ptrRom->lngROMSize);
-            if (ptrRom->ptrROMData) 
-            {
-                fread(ptrRom->ptrROMData, 1, ptrRom->lngROMSize, ptrROM);
-            } 
-            else 
-            {
-                free(ptrRom);
-                ptrRom = NULL;
-            }
-        }
-        fclose(ptrROM);
-    }
-
-    return ptrRom;
-}
-
-static void freeRom(RomData* ptrRom_a)
-{
-    if (ptrRom_a) 
-    {
-        if (ptrRom_a->ptrROMData) 
-        {
-            free(ptrRom_a->ptrROMData);
-        }
-        free(ptrRom_a);
-    }
-}
+} ROMData;
 
 static uint16_t findOffset(uint8_t byLow_a, uint8_t byHigh_a, long lngROMSize_a)
 {
-    uint16_t intResult = 0;
     uint16_t intRaw = (uint16_t)byLow_a | ((uint16_t)byHigh_a << 8);
-
-    if (lngROMSize_a >= 131072L) 
+    uint16_t intResult = 0;
+    
+    if (lngROMSize_a >= 131072L)
     {
         intResult = intRaw;
-    } 
-    else 
+    }
+    else
     {
         long lngMax = (lngROMSize_a * UNSIGNAL_OFFSET_LIMIT_PCT) / 100;
-        if (lngMax == 0) 
+        if (lngMax == 0)
         {
             intResult = 0;
-        } 
-        else 
+        }
+        else
         {
             intResult = (uint16_t)(intRaw % (lngMax + 1));
         }
     }
-
+    
     return intResult;
+}
+
+static ROMData* loadROM(const char* strFilename_a)
+{
+    ROMData* ptrROMData = NULL;
+    FILE* ptrROMFile = NULL;
+    
+    ptrROMData = (ROMData*)malloc(sizeof(ROMData));
+    if (ptrROMData)
+    {
+        // Initialize
+        memset(ptrROMData, 0, sizeof(ROMData));
+        
+        ptrROMFile = fopen(strFilename_a, "rb");
+        if (ptrROMFile)
+        {
+            fseek(ptrROMFile, 0, SEEK_END);
+            ptrROMData->lngROMSize = ftell(ptrROMFile);
+            fseek(ptrROMFile, 0, SEEK_SET);
+            
+            if (ptrROMData->lngROMSize > ROM_LOAD_MAX)
+            {
+                ptrROMData->lngROMSize = ROM_LOAD_MAX;
+            }
+            
+            ptrROMData->ptrROMData = (uint8_t*)malloc(ptrROMData->lngROMSize);
+            if (ptrROMData->ptrROMData)
+            {
+                fread(ptrROMData->ptrROMData, 1, ptrROMData->lngROMSize, ptrROMFile);
+            }
+            else
+            {
+                free(ptrROMData);
+                ptrROMData = NULL;
+            }
+            
+            fclose(ptrROMFile);
+        }
+        else
+        {
+            free(ptrROMData);
+            ptrROMData = NULL;
+        }
+    }
+    
+    return ptrROMData;
+}
+
+
+static void unloadROM(ROMData* ptrROMData_a)
+{
+    if (ptrROMData_a)
+    {
+        if (ptrROMData_a->ptrROMData)
+        {
+            free(ptrROMData_a->ptrROMData);
+        }
+        
+        free(ptrROMData_a);
+    }
 }
 
 static bool compareBinary(const char* strFile1_a, const char* strFile2_a)
 {
+    bool blnDone = false;
     bool blnMatch = false;
-    FILE* ptrFile1 = NULL;
-    FILE* ptrFile2 = NULL;
     int intByte1 = 0;
     int intByte2 = 0;
-    bool blnDone = false;
+    FILE* ptrFile1 = NULL;
+    FILE* ptrFile2 = NULL;
 
     ptrFile1 = fopen(strFile1_a, "rb");
     if (ptrFile1)
@@ -146,19 +157,25 @@ static bool compareBinary(const char* strFile1_a, const char* strFile2_a)
     return blnMatch;
 }
 
-static bool compareUnsignal(const RomData* ptrRom_a, const char* strSigFile_a, const char* strPlainFile_a)
+static bool compareUnsignal(const ROMData* ptrROMData_a, const char* strSigFile_a, const char* strPlainFile_a)
 {
-    bool blnMatch = false;
-    FILE* ptrSig = NULL;
-    FILE* ptrPlain = NULL;
-    uint8_t arrBuf[2];
     uint16_t arrAddrs[4] = {0};
-    uint8_t byOffsetLow = 0, byOffsetHigh = 0, byPrefixLen = 0, bySuffixLen = 0;
-    uint16_t intOffset = 0;
-    long lngInputSize = 0, lngDataSize = 0, lngSlots = 0, lngEffSize = 0;
-    int intI = 0;
-    int intPlainByte = 0;
+    uint8_t arrBuf[2];
     bool blnDone = false;
+    bool blnMatch = false;
+	uint8_t byOffsetHigh = 0;
+    uint8_t byOffsetLow = 0;
+	uint8_t byPrefixLen = 0;
+	uint8_t bySuffixLen = 0;
+	long intDataSize = 0;
+	long intEffectiveSize = 0;
+    int intI = 0;
+    long intInputSize = 0;
+    uint16_t intOffset = 0;
+    int intPlainByte = 0;
+	long intSlots = 0;
+    FILE* ptrPlain = NULL;
+    FILE* ptrSig = NULL;
 
     ptrSig = fopen(strSigFile_a, "rb");
     if (ptrSig)
@@ -171,7 +188,7 @@ static bool compareUnsignal(const RomData* ptrRom_a, const char* strSigFile_a, c
                 break;
             }
             arrAddrs[intI] = (uint16_t)arrBuf[0] | ((uint16_t)arrBuf[1] << 8);
-            if (arrAddrs[intI] >= ptrRom_a->lngROMSize)
+            if (arrAddrs[intI] >= ptrROMData_a->lngROMSize)
             {
                 break;
             }
@@ -179,22 +196,22 @@ static bool compareUnsignal(const RomData* ptrRom_a, const char* strSigFile_a, c
 
         if (intI == 4)
         {
-            byOffsetLow = ptrRom_a->ptrROMData[arrAddrs[0]];
-            byOffsetHigh = ptrRom_a->ptrROMData[arrAddrs[1]];
-            byPrefixLen = ptrRom_a->ptrROMData[arrAddrs[2]];
-            bySuffixLen = ptrRom_a->ptrROMData[arrAddrs[3]];
+            byOffsetLow = ptrROMData_a->ptrROMData[arrAddrs[0]];
+            byOffsetHigh = ptrROMData_a->ptrROMData[arrAddrs[1]];
+            byPrefixLen = ptrROMData_a->ptrROMData[arrAddrs[2]];
+            bySuffixLen = ptrROMData_a->ptrROMData[arrAddrs[3]];
 
-            intOffset = findOffset(byOffsetLow, byOffsetHigh, ptrRom_a->lngROMSize);
+            intOffset = findOffset(byOffsetLow, byOffsetHigh, ptrROMData_a->lngROMSize);
 
             // Calculate number of slots
             fseek(ptrSig, 0, SEEK_END);
-            lngInputSize = ftell(ptrSig);
+            intInputSize = ftell(ptrSig);
             fseek(ptrSig, UNSIGNAL_HEADER_SIZE, SEEK_SET);
 
-            lngDataSize = lngInputSize - UNSIGNAL_HEADER_SIZE - byPrefixLen - bySuffixLen;
-            lngSlots = lngDataSize / 2;
+            intDataSize = intInputSize - UNSIGNAL_HEADER_SIZE - byPrefixLen - bySuffixLen;
+            intSlots = intDataSize / 2;
 
-            if (lngSlots >= 0)
+            if (intSlots >= 0)
             {
                 // Skip prefix
                 for (intI = 0; intI < byPrefixLen; intI++)
@@ -210,14 +227,14 @@ static bool compareUnsignal(const RomData* ptrRom_a, const char* strSigFile_a, c
                     ptrPlain = fopen(strPlainFile_a, "rb");
                     if (ptrPlain)
                     {
-                        lngEffSize = ptrRom_a->lngROMSize - intOffset;
-                        if (lngEffSize > 65536)
+                        intEffectiveSize = ptrROMData_a->lngROMSize - intOffset;
+                        if (intEffectiveSize > 65536)
                         {
-                            lngEffSize = 65536;
+                            intEffectiveSize = 65536;
                         }
 
                         blnMatch = true;
-                        for (intI = 0; intI < lngSlots && !blnDone; intI++)
+                        for (intI = 0; intI < intSlots && !blnDone; intI++)
                         {
                             if (fread(arrBuf, 2, 1, ptrSig) != 1)
                             {
@@ -234,12 +251,12 @@ static bool compareUnsignal(const RomData* ptrRom_a, const char* strSigFile_a, c
                                 blnMatch = false;
                                 blnDone = true;
                             }
-                            else if (intAddr >= lngEffSize)
+                            else if (intAddr >= intEffectiveSize)
                             {
                                 blnMatch = false;
                                 blnDone = true;
                             }
-                            else if (ptrRom_a->ptrROMData[intOffset + intAddr] != (uint8_t)intPlainByte)
+                            else if (ptrROMData_a->ptrROMData[intOffset + intAddr] != (uint8_t)intPlainByte)
                             {
                                 blnMatch = false;
                                 blnDone = true;
@@ -274,34 +291,34 @@ static bool compareUnsignal(const RomData* ptrRom_a, const char* strSigFile_a, c
     return blnMatch;
 }
 
-static bool compareZoscii(const RomData* ptrRom_a, const char* strZosFile_a, const char* strPlainFile_a)
+static bool compareZOSCII(const ROMData* ptrROMData_a, const char* strZosFile_a, const char* strPlainFile_a)
 {
-    bool blnMatch = false;
-    FILE* ptrZos = NULL;
-    FILE* ptrPlain = NULL;
     uint8_t arrBuf[2];
-    long lngInputSize = 0;
-    long lngSlots = 0;
-    long lngI = 0;
-    int intPlainByte = 0;
     bool blnDone = false;
+    bool blnMatch = false;
+    long intI = 0;
+    long intInputSize = 0;
+    int intPlainByte = 0;
+    long intSlots = 0;
+    FILE* ptrPlain = NULL;
+    FILE* ptrZOSCII = NULL;
 
-    ptrZos = fopen(strZosFile_a, "rb");
-    if (ptrZos)
+    ptrZOSCII = fopen(strZosFile_a, "rb");
+    if (ptrZOSCII)
     {
-        fseek(ptrZos, 0, SEEK_END);
-        lngInputSize = ftell(ptrZos);
-        fseek(ptrZos, 0, SEEK_SET);
+        fseek(ptrZOSCII, 0, SEEK_END);
+        intInputSize = ftell(ptrZOSCII);
+        fseek(ptrZOSCII, 0, SEEK_SET);
 
-        lngSlots = lngInputSize / 2;
+        intSlots = intInputSize / 2;
 
         ptrPlain = fopen(strPlainFile_a, "rb");
         if (ptrPlain)
         {
             blnMatch = true;
-            for (lngI = 0; lngI < lngSlots && !blnDone; lngI++)
+            for (intI = 0; intI < intSlots && !blnDone; intI++)
             {
-                if (fread(arrBuf, 2, 1, ptrZos) != 1)
+                if (fread(arrBuf, 2, 1, ptrZOSCII) != 1)
                 {
                     blnMatch = false;
                     blnDone = true;
@@ -316,12 +333,12 @@ static bool compareZoscii(const RomData* ptrRom_a, const char* strZosFile_a, con
                     blnMatch = false;
                     blnDone = true;
                 }
-                else if (intAddr >= ptrRom_a->lngROMSize)
+                else if (intAddr >= ptrROMData_a->lngROMSize)
                 {
                     blnMatch = false;
                     blnDone = true;
                 }
-                else if (ptrRom_a->ptrROMData[intAddr] != (uint8_t)intPlainByte)
+                else if (ptrROMData_a->ptrROMData[intAddr] != (uint8_t)intPlainByte)
                 {
                     blnMatch = false;
                     blnDone = true;
@@ -343,7 +360,7 @@ static bool compareZoscii(const RomData* ptrRom_a, const char* strZosFile_a, con
         {
             fprintf(stderr, "Error: Cannot open file: %s\n", strPlainFile_a);
         }
-        fclose(ptrZos);
+        fclose(ptrZOSCII);
     }
     else
     {
@@ -355,10 +372,10 @@ static bool compareZoscii(const RomData* ptrRom_a, const char* strZosFile_a, con
 
 int main(int intArgC_a, char* strArgv_a[])
 {
-    int intResult = 1;
-    RomData* ptrRom = NULL;
     bool blnMatch = false;
     bool blnZoscii = false;
+    int intResult = 1;
+    ROMData* ptrROMData = NULL;
 
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
@@ -399,18 +416,18 @@ int main(int intArgC_a, char* strArgv_a[])
             }
         }
 
-        ptrRom = loadRom(strArgv_a[1]);
-        if (ptrRom)
+        ptrROMData = loadROM(strArgv_a[1]);
+        if (ptrROMData)
         {
             if (blnZoscii)
             {
                 printf("ZOSCII compare: %s + %s vs %s\n", strArgv_a[1], strArgv_a[2], strArgv_a[3]);
-                blnMatch = compareZoscii(ptrRom, strArgv_a[2], strArgv_a[3]);
+                blnMatch = compareZOSCII(ptrROMData, strArgv_a[2], strArgv_a[3]);
             }
             else
             {
                 printf("UNSIGNAL compare: %s + %s vs %s\n", strArgv_a[1], strArgv_a[2], strArgv_a[3]);
-                blnMatch = compareUnsignal(ptrRom, strArgv_a[2], strArgv_a[3]);
+                blnMatch = compareUnsignal(ptrROMData, strArgv_a[2], strArgv_a[3]);
             }
 
             if (blnMatch)
@@ -423,7 +440,7 @@ int main(int intArgC_a, char* strArgv_a[])
                 printf("MISMATCH\n");
             }
 
-            freeRom(ptrRom);
+            unloadROM(ptrROMData);
         }
         else
         {

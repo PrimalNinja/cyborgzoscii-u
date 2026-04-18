@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260416
+// Cyborg UNSIGNAL Protocol v20260418
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -16,6 +16,7 @@
     #include <io.h>
 #endif
 
+#define CHUNK_SIZE 4096
 #define SHARE_COUNT 5
 #define PATTERN_LEN 10
 
@@ -50,6 +51,121 @@ static bool fileExists(const char* strPath_a)
     return blnResult;
 }
 
+static bool secureDelete(const char* strPath_a)
+{
+    uint8_t* arr00 = NULL;
+    uint8_t* arrFF = NULL;
+    bool blnResult = false;
+    int intI = 0;
+    long intLength = 0;
+    long intToWrite = 0;
+    long intWritten = 0;
+    FILE* ptrFile = NULL;
+    
+    if (!fileExists(strPath_a))
+    {
+        fprintf(stderr, "File not found: %s\n", strPath_a);
+        return false;
+    }
+    
+    // Get file size
+    ptrFile = fopen(strPath_a, "rb");
+    if (!ptrFile)
+    {
+        fprintf(stderr, "Cannot open file: %s\n", strPath_a);
+        return false;
+    }
+    
+    fseek(ptrFile, 0, SEEK_END);
+    intLength = ftell(ptrFile);
+    fclose(ptrFile);
+    
+    if (intLength <= 0)
+    {
+        // Empty file or error, just delete
+        remove(strPath_a);
+        return true;
+    }
+    
+    // Allocate buffers
+    arrFF = (uint8_t*)malloc(CHUNK_SIZE);
+    arr00 = (uint8_t*)malloc(CHUNK_SIZE);
+    
+    if (!arrFF || !arr00)
+    {
+        fprintf(stderr, "Memory allocation failed\n");
+        if (arrFF) free(arrFF);
+        if (arr00) free(arr00);
+        return false;
+    }
+    
+    // Initialize buffers
+    for (intI = 0; intI < CHUNK_SIZE; intI++)
+    {
+        arrFF[intI] = 0xFF;
+        arr00[intI] = 0x00;
+    }
+    
+    // Pass 1: overwrite with 0xFF
+    ptrFile = fopen(strPath_a, "rb+");
+    if (!ptrFile)
+    {
+        fprintf(stderr, "Cannot open file for writing: %s\n", strPath_a);
+        free(arrFF);
+        free(arr00);
+        return false;
+    }
+    
+    intWritten = 0;
+    while (intWritten < intLength)
+    {
+        intToWrite = (intLength - intWritten < CHUNK_SIZE) ? (intLength - intWritten) : CHUNK_SIZE;
+        if (fwrite(arrFF, 1, intToWrite, ptrFile) != (size_t)intToWrite)
+        {
+            fprintf(stderr, "Write failed during 0xFF pass\n");
+            fclose(ptrFile);
+            free(arrFF);
+            free(arr00);
+            return false;
+        }
+        intWritten += intToWrite;
+    }
+    fflush(ptrFile);
+    
+    // Pass 2: overwrite with 0x00
+    fseek(ptrFile, 0, SEEK_SET);
+    intWritten = 0;
+    while (intWritten < intLength)
+    {
+        intToWrite = (intLength - intWritten < CHUNK_SIZE) ? (intLength - intWritten) : CHUNK_SIZE;
+        if (fwrite(arr00, 1, intToWrite, ptrFile) != (size_t)intToWrite)
+        {
+            fprintf(stderr, "Write failed during 0x00 pass\n");
+            fclose(ptrFile);
+            free(arrFF);
+            free(arr00);
+            return false;
+        }
+        intWritten += intToWrite;
+    }
+    fflush(ptrFile);
+    fclose(ptrFile);
+    
+    // Delete the file
+    if (remove(strPath_a) == 0)
+    {
+        blnResult = true;
+    }
+    else
+    {
+        fprintf(stderr, "Failed to delete file after overwrite: %s\n", strPath_a);
+    }
+    
+    free(arrFF);
+    free(arr00);
+    return blnResult;
+}
+
 int main(int intArgC_a, char* strArgv_a[])
 {
     int intResult = 1;
@@ -68,7 +184,7 @@ int main(int intArgC_a, char* strArgv_a[])
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    printf("UNSIGNAL Split v20260416\n");
+    printf("UNSIGNAL Split v20260418\n");
     printf("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
 
     if (intArgC_a != 3)
@@ -159,7 +275,7 @@ int main(int intArgC_a, char* strArgv_a[])
         {
             if (fileExists(strSharePath[intI]))
             {
-                remove(strSharePath[intI]);
+                secureDelete(strSharePath[intI]);
             }
         }
     }
