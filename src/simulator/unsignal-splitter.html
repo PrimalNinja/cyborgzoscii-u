@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNSIGNAL Protocol - Complete ROM Encoder + 3-of-5 Splitter</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6600;
+            text-shadow: 0 0 10px #ff6600;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        
+        .flex-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            flex: 1;
+            min-width: 300px;
+        }
+        .panel-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #ff6600;
+            color: #ff6600;
+        }
+        .rom-preview {
+            background: #1a1a1a;
+            padding: 10px;
+            font-size: 11px;
+            margin: 10px 0;
+            word-break: break-all;
+            font-family: monospace;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            background: #333;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            font-size: 14px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: #ff6600;
+            box-shadow: 0 0 10px rgba(255,102,0,0.3);
+        }
+        .readonly {
+            background: #222;
+            color: #ff6600;
+            font-weight: bold;
+        }
+        
+        button {
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            transition: all 0.2s;
+            margin: 2px;
+        }
+        button:hover {
+            background: #444;
+            border-color: #ff6600;
+            color: #ff6600;
+        }
+        button.primary {
+            background: #663300;
+            border-color: #ff6600;
+            color: #ff6600;
+        }
+        button.primary:hover {
+            background: #884400;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            flex: 1;
+            text-align: center;
+        }
+        .stat-label {
+            color: #888;
+            font-size: 12px;
+        }
+        .stat-value {
+            color: #ff6600;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .share-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .share-card {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .share-header {
+            font-weight: bold;
+            color: #ff6600;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .share-status {
+            font-size: 11px;
+            text-align: center;
+            margin: 5px 0;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        .badge-online { background: #006600; color: #00ff00; }
+        .badge-offline { background: #660000; color: #ff0000; }
+        .badge-corrupt { background: #664400; color: #ffaa00; }
+        
+        .share-actions {
+            text-align: center;
+            margin-top: 8px;
+        }
+        .share-actions button {
+            font-size: 10px;
+            padding: 4px 8px;
+        }
+        
+        .log {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-success { color: #00ff00; }
+        .log-error { color: #ff0000; }
+        .log-warning { color: #ffaa00; }
+        .log-info { color: #00aaff; }
+        
+        hr {
+            border-color: #444;
+            margin: 15px 0;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 15px 0;
+        }
+        
+        .expansion-stats {
+            background: #0a2a0a;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+            border-left: 3px solid #ff6600;
+        }
+        
+        @media (max-width: 800px) {
+            .flex-row {
+                flex-direction: column;
+            }
+            .share-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔶 UNSIGNAL PROTOCOL + 3-of-5 COMBINATORIAL SPLITTER</h1>
+        <div class="subtitle">ROM-based Encoding (128KB) • 2x Expansion • CRC32 Integrity • Any 3 Shares Reconstruct</div>
+        
+        <div class="flex-row">
+            <div class="panel">
+                <div class="panel-title">🔑 ROM (THE KEY)</div>
+                <div class="button-group">
+                    <button id="btnGenerateROM">🎲 Generate Random ROM (128KB)</button>
+                    <button id="btnLoadROM">📂 Load ROM from File</button>
+                </div>
+                <div class="rom-preview" id="divROMPreview">No ROM loaded. Generate or load a ROM first.</div>
+                
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-label">ROM SIZE</div>
+                        <div class="stat-value" id="romSize">0 / 131072</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">UNIQUE BYTES</div>
+                        <div class="stat-value" id="uniqueBytes">0 / 256</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">ENCODE EXPANSION</div>
+                        <div class="stat-value">2x</div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="panel-title">📝 DATA TO ENCODE & SPLIT</div>
+                <textarea id="txtInputData" rows="4" placeholder="Enter your secret message here..."></textarea>
+                
+                <div class="button-group">
+                    <button id="btnEncodeAndSplit" class="primary">🔐 ENCODE (CRC32 + ROM) + SPLIT (3-of-5)</button>
+                    <button id="btnClear">🗑️ CLEAR ALL</button>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">🖥 5 SERVERS (Each holds 1 share)</div>
+                <div class="share-grid" id="shareGrid"></div>
+                
+                <div class="button-group">
+                    <button id="btnFetchAndReconstruct" class="primary">📡 FETCH & RECONSTRUCT (any 3 shares)</button>
+                    <button id="btnResetServers">⟳ Reset Servers</button>
+                </div>
+                
+                <hr>
+                
+                <div class="panel-title">⚠ CORRUPTION TESTING</div>
+                <div class="flex-row" style="gap: 10px;">
+                    <select id="selCorruptShare" style="flex:1;">
+                        <option value="">-- Select Share to Corrupt --</option>
+                        <option value="0">Share 1 (s1)</option>
+                        <option value="1">Share 2 (s2)</option>
+                        <option value="2">Share 3 (s3)</option>
+                        <option value="3">Share 4 (s4)</option>
+                        <option value="4">Share 5 (s5)</option>
+                    </select>
+                    <select id="selCorruptionType" style="flex:1;">
+                        <option value="firstbyte">Corrupt First Byte Only</option>
+                        <option value="random10">Random 10 Bytes</option>
+                        <option value="block50">Block Corruption (50 bytes)</option>
+                        <option value="scattered">Scattered (every 5th byte)</option>
+                    </select>
+                    <button id="btnApplyCorruption">⚠ Apply</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel" style="margin-top: 20px;">
+            <div class="panel-title">📊 ENCODING STATISTICS</div>
+            <div id="divExpansionStats" class="expansion-stats">
+                Ready. Generate a ROM, enter data, then click ENCODE + SPLIT.
+            </div>
+            
+            <div class="flex-row">
+                <div class="stat-item">
+                    <div class="stat-label">ORIGINAL SIZE</div>
+                    <div class="stat-value" id="originalSize">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">WITH CRC32</div>
+                    <div class="stat-value" id="crcSize">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">ENCODED SIZE (Addresses)</div>
+                    <div class="stat-value" id="encodedSize">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">EACH SHARE SIZE</div>
+                    <div class="stat-value" id="shareSize">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">TOTAL STORAGE (5 servers)</div>
+                    <div class="stat-value" id="totalStorage">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="log" id="log">
+            <span class="log-info">Ready. Generate a ROM first, then enter data and click ENCODE + SPLIT.</span>
+        </div>
+        
+        <div class="subtitle" style="margin-top: 20px;">
+            🔶 UNSIGNAL Protocol v20260418 • 3-of-5 Combinatorial Sharing • CRC32 Integrity • (c) 2026 Cyborg Unicorn Pty Ltd
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        // ====================================================================
+        // CONSTANTS
+        // ====================================================================
+        const ROM_SIZE = 131072;           // 128KB
+        const WINDOW_SIZE = 65536;          // 64KB sliding window
+        const SHARE_COUNT = 5;
+        const PATTERN_LEN = 10;
+        
+        // C(5,3) = 10 combinations
+        const COMBINATIONS = [
+            [0,1,2], [0,1,3], [0,1,4],
+            [0,2,3], [0,2,4], [0,3,4],
+            [1,2,3], [1,2,4], [1,3,4],
+            [2,3,4]
+        ];
+        
+        // ====================================================================
+        // STATE
+        // ====================================================================
+        let rom = new Uint8Array(ROM_SIZE);
+        let lookup = new Array(256);
+        let windowLookup = new Array(256);
+        let currentWindowOffset = 0;
+        let currentHeader = null;
+        
+        let masterShares = [[], [], [], [], []];
+        let shares = [[], [], [], [], []];
+        let serverOnline = [true, true, true, true, true];
+        let shareCorrupted = [false, false, false, false, false];
+        
+        let originalDataRaw = null;
+        let originalDataWithCRC = null;
+        let encodedAddresses = [];
+        
+        // ====================================================================
+        // CRC32 IMPLEMENTATION
+        // ====================================================================
+        let crc32Table = null;
+        
+        function buildCRC32Table() {
+            crc32Table = new Array(256);
+            for (let i = 0; i < 256; i++) {
+                let crc = i;
+                for (let j = 0; j < 8; j++) {
+                    crc = (crc & 1) ? (crc >>> 1) ^ 0xEDB88320 : crc >>> 1;
+                }
+                crc32Table[i] = crc;
+            }
+        }
+        
+        function calculateCRC32(data) {
+            if (!crc32Table) buildCRC32Table();
+            let crc = 0xFFFFFFFF;
+            for (let i = 0; i < data.length; i++) {
+                crc = (crc >>> 8) ^ crc32Table[(crc ^ data[i]) & 0xFF];
+            }
+            return (crc ^ 0xFFFFFFFF) >>> 0;
+        }
+        
+        function addCRC32(data) {
+            let crc = calculateCRC32(data);
+            let crcBytes = [
+                crc & 0xFF,
+                (crc >> 8) & 0xFF,
+                (crc >> 16) & 0xFF,
+                (crc >> 24) & 0xFF
+            ];
+            return crcBytes.concat(Array.from(data));
+        }
+        
+        function verifyCRC32(data) {
+            if (data.length < 4) return { valid: false, payload: null, error: "Data too short" };
+            let storedCRC = (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)) >>> 0;
+            let payload = data.slice(4);
+            let calculatedCRC = calculateCRC32(payload);
+            if (storedCRC === calculatedCRC) {
+                return { valid: true, payload: payload, error: null };
+            } else {
+                return { valid: false, payload: null, error: `CRC mismatch: stored 0x${storedCRC.toString(16)} != calculated 0x${calculatedCRC.toString(16)}` };
+            }
+        }
+        
+        // ====================================================================
+        // UTILITIES
+        // ====================================================================
+        function log(msg, type) {
+            let logDiv = document.getElementById('log');
+            let spanClass = 'log-info';
+            if (type === 'success') spanClass = 'log-success';
+            if (type === 'error') spanClass = 'log-error';
+            if (type === 'warning') spanClass = 'log-warning';
+            logDiv.innerHTML += `<span class="${spanClass}">${escapeHtml(msg)}</span><br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        function addressOut(addr) {
+            if (addr === null || addr === undefined) return '----';
+            let hi = (addr >> 8) & 0xFF;
+            let lo = addr & 0xFF;
+            return hi.toString(16).toUpperCase().padStart(2, '0') + lo.toString(16).toUpperCase().padStart(2, '0');
+        }
+        
+        function bytesToHex(bytes, max) {
+            let limit = max || 32;
+            let result = [];
+            for (let i = 0; i < Math.min(bytes.length, limit); i++) {
+                result.push(bytes[i].toString(16).toUpperCase().padStart(2, '0'));
+            }
+            if (bytes.length > limit) result.push('...');
+            return result.join(' ');
+        }
+        
+        // ====================================================================
+        // ROM FUNCTIONS
+        // ====================================================================
+        function rebuildLookup() {
+            for (let i = 0; i < 256; i++) lookup[i] = [];
+            let maxAddr = Math.min(ROM_SIZE, WINDOW_SIZE);
+            for (let i = 0; i < maxAddr; i++) {
+                lookup[rom[i]].push(i);
+            }
+            let missing = 0;
+            for (let i = 0; i < 256; i++) {
+                if (lookup[i].length === 0) missing++;
+            }
+            if (missing > 0) {
+                log(`Warning: ROM missing ${missing} byte values. Some bytes cannot be encoded.`, 'warning');
+            } else {
+                log(`ROM ready: All 256 byte values available in first 64KB.`, 'success');
+            }
+        }
+        
+        function rebuildWindowLookup() {
+            for (let i = 0; i < 256; i++) windowLookup[i] = [];
+            let windowEnd = Math.min(currentWindowOffset + WINDOW_SIZE, ROM_SIZE);
+            for (let i = currentWindowOffset; i < windowEnd; i++) {
+                let relAddr = i - currentWindowOffset;
+                windowLookup[rom[i]].push(relAddr);
+            }
+        }
+        
+        function generateRandomROM() {
+            for (let i = 0; i < ROM_SIZE; i++) {
+                rom[i] = Math.floor(Math.random() * 256);
+            }
+            rebuildLookup();
+            updateROMPreview();
+            updateStats();
+            log(`Generated new random 128KB ROM with full byte coverage.`, 'success');
+        }
+        
+        function updateROMPreview() {
+            let preview = '';
+            for (let i = 0; i < Math.min(64, ROM_SIZE); i++) {
+                preview += rom[i].toString(16).toUpperCase().padStart(2, '0') + ' ';
+                if ((i + 1) % 16 === 0) preview += '\n';
+            }
+            if (ROM_SIZE > 64) preview += '...';
+            document.getElementById('divROMPreview').innerHTML = `<strong>ROM loaded:</strong> ${ROM_SIZE} bytes<br><strong>First 64 bytes:</strong><br>${preview}`;
+        }
+        
+        function updateStats() {
+            let present = new Array(256).fill(false);
+            for (let i = 0; i < ROM_SIZE; i++) present[rom[i]] = true;
+            let unique = present.filter(v => v).length;
+            document.getElementById('romSize').innerText = `${ROM_SIZE} / ${ROM_SIZE}`;
+            document.getElementById('uniqueBytes').innerText = `${unique} / 256`;
+        }
+        
+        // ====================================================================
+        // UNSIGNAL HEADER GENERATION
+        // ====================================================================
+        function generateUNSIGNALHeader() {
+            let getRandomAddressFromFirst64KB = (minVal, maxVal) => {
+                let candidates = [];
+                for (let v = minVal; v <= maxVal; v++) {
+                    if (lookup[v] && lookup[v].length > 0) {
+                        candidates.push(...lookup[v]);
+                    }
+                }
+                if (candidates.length > 0) {
+                    return candidates[Math.floor(Math.random() * candidates.length)];
+                }
+                return 0;
+            };
+            
+            let h1Addr = getRandomAddressFromFirst64KB(0, 255);
+            let h2Addr = getRandomAddressFromFirst64KB(0, 255);
+            let h3Addr = getRandomAddressFromFirst64KB(10, 255);
+            let h4Addr = getRandomAddressFromFirst64KB(10, 255);
+            
+            let offsetLow = rom[h1Addr];
+            let offsetHigh = rom[h2Addr];
+            let prefixLen = rom[h3Addr];
+            let suffixLen = rom[h4Addr];
+            
+            let rawOffset = (offsetHigh << 8) | offsetLow;
+            let windowOffset = rawOffset;
+            
+            if (windowOffset + WINDOW_SIZE > ROM_SIZE) {
+                windowOffset = ROM_SIZE - WINDOW_SIZE;
+                if (windowOffset < 0) windowOffset = 0;
+            }
+            
+            let prefix = [];
+            for (let i = 0; i < prefixLen; i++) {
+                prefix.push(Math.floor(Math.random() * 256));
+            }
+            
+            let suffix = [];
+            for (let i = 0; i < suffixLen; i++) {
+                suffix.push(Math.floor(Math.random() * 256));
+            }
+            
+            return {
+                h1Addr, h2Addr, h3Addr, h4Addr,
+                h1Val: offsetLow, h2Val: offsetHigh,
+                h3Val: prefixLen, h4Val: suffixLen,
+                windowOffset, rawOffset,
+                prefixLen, suffixLen,
+                prefix, suffix
+            };
+        }
+        
+        // ====================================================================
+        // UNSIGNAL ENCODER / DECODER
+        // ====================================================================
+        function encodeToAddresses(bytes) {
+            let addresses = [];
+            for (let byte of bytes) {
+                let candidates = windowLookup[byte];
+                if (!candidates || candidates.length === 0) {
+                    log(`ERROR: Byte 0x${byte.toString(16).toUpperCase()} not found in window`, 'error');
+                    return null;
+                }
+                let randomIdx = Math.floor(Math.random() * candidates.length);
+                addresses.push(candidates[randomIdx]);
+            }
+            return addresses;
+        }
+        
+        function decodeFromAddresses(addresses, windowOffset) {
+            let bytes = [];
+            for (let relAddr of addresses) {
+                let absAddr = windowOffset + relAddr;
+                if (absAddr >= ROM_SIZE) {
+                    return null;
+                }
+                bytes.push(rom[absAddr]);
+            }
+            return bytes;
+        }
+        
+        // ====================================================================
+        // 3-of-5 SPLITTER / JOINER
+        // ====================================================================
+        function splitData(data) {
+            for (let i = 0; i < SHARE_COUNT; i++) {
+                masterShares[i] = [];
+                shares[i] = [];
+            }
+            
+            let pos = 0;
+            for (let byte of data) {
+                let row = pos % PATTERN_LEN;
+                let combo = COMBINATIONS[row];
+                for (let j = 0; j < 3; j++) {
+                    let shareIdx = combo[j];
+                    masterShares[shareIdx].push(byte);
+                    shares[shareIdx].push(byte);
+                }
+                pos++;
+            }
+            
+            log(`Split complete: ${pos} address bytes → 5 shares`, 'success');
+            for (let i = 0; i < SHARE_COUNT; i++) {
+                log(`  Share s${i+1}: ${shares[i].length} bytes`, 'info');
+            }
+            
+            updateShareDisplay();
+            return true;
+        }
+        
+        function joinShares(selectedShares) {
+            let present = [false, false, false, false, false];
+            for (let idx of selectedShares) {
+                present[idx] = true;
+            }
+            
+            let readFrom = [];
+            for (let row = 0; row < PATTERN_LEN; row++) {
+                let found = false;
+                for (let j = 0; j < 3; j++) {
+                    let shareIdx = COMBINATIONS[row][j];
+                    if (present[shareIdx]) {
+                        readFrom[row] = shareIdx;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return null;
+            }
+            
+            let shareData = {};
+            for (let idx of selectedShares) {
+                shareData[idx] = shares[idx];
+            }
+            
+            let sharePos = [0, 0, 0, 0, 0];
+            let shareSize = [0, 0, 0, 0, 0];
+            for (let idx of selectedShares) {
+                shareSize[idx] = shareData[idx].length;
+                sharePos[idx] = 0;
+            }
+            
+            let output = [];
+            let pos = 0;
+            
+            while (true) {
+                let row = pos % PATTERN_LEN;
+                let readShare = readFrom[row];
+                
+                if (sharePos[readShare] >= shareSize[readShare]) break;
+                
+                let byte = shareData[readShare][sharePos[readShare]];
+                sharePos[readShare]++;
+                
+                for (let j = 0; j < 3; j++) {
+                    let shareIdx = COMBINATIONS[row][j];
+                    if (shareIdx !== readShare && present[shareIdx]) {
+                        if (sharePos[shareIdx] < shareSize[shareIdx]) {
+                            sharePos[shareIdx]++;
+                        }
+                    }
+                }
+                
+                output.push(byte);
+                pos++;
+            }
+            
+            return output;
+        }
+        
+        function getAllCombinations(items, k) {
+            let result = [];
+            function combine(start, current) {
+                if (current.length === k) {
+                    result.push([...current]);
+                    return;
+                }
+                for (let i = start; i < items.length; i++) {
+                    current.push(items[i]);
+                    combine(i + 1, current);
+                    current.pop();
+                }
+            }
+            combine(0, []);
+            return result;
+        }
+        
+        // ====================================================================
+        // CORRUPTION FUNCTIONS
+        // ====================================================================
+        function corruptShare(shareIdx, type) {
+            if (!masterShares[shareIdx] || masterShares[shareIdx].length === 0) {
+                log(`Cannot corrupt: Share s${shareIdx+1} is empty`, 'error');
+                return false;
+            }
+            
+            let original = masterShares[shareIdx];
+            let corrupted = [...original];
+            
+            switch(type) {
+                case 'firstbyte':
+                    if (corrupted.length > 0) corrupted[0] ^= 0xFF;
+                    log(`Corrupted share s${shareIdx+1}: first byte flipped`, 'warning');
+                    break;
+                case 'random10':
+                    for (let i = 0; i < 10 && i < corrupted.length; i++) {
+                        let pos = Math.floor(Math.random() * corrupted.length);
+                        corrupted[pos] = Math.floor(Math.random() * 256);
+                    }
+                    log(`Corrupted share s${shareIdx+1}: 10 random bytes flipped`, 'warning');
+                    break;
+                case 'block50':
+                    let end = Math.min(20 + 50, corrupted.length);
+                    for (let i = 20; i < end; i++) {
+                        corrupted[i] = Math.floor(Math.random() * 256);
+                    }
+                    log(`Corrupted share s${shareIdx+1}: block corruption (bytes 20-69)`, 'warning');
+                    break;
+                case 'scattered':
+                    for (let i = 0; i < corrupted.length; i += 5) {
+                        corrupted[i] = Math.floor(Math.random() * 256);
+                    }
+                    log(`Corrupted share s${shareIdx+1}: scattered corruption (every 5th byte)`, 'warning');
+                    break;
+                default:
+                    return false;
+            }
+            
+            shares[shareIdx] = corrupted;
+            shareCorrupted[shareIdx] = true;
+            updateShareDisplay();
+            return true;
+        }
+        
+        function resetShares() {
+            for (let i = 0; i < SHARE_COUNT; i++) {
+                shares[i] = [...masterShares[i]];
+                shareCorrupted[i] = false;
+                serverOnline[i] = true;
+            }
+            log(`All shares restored to original (corruption cleared)`, 'success');
+            updateShareDisplay();
+        }
+        
+        // ====================================================================
+        // UI UPDATE
+        // ====================================================================
+        function updateShareDisplay() {
+            let grid = document.getElementById('shareGrid');
+            let html = '';
+            
+            for (let i = 0; i < SHARE_COUNT; i++) {
+                let online = serverOnline[i];
+                let corrupted = shareCorrupted[i];
+                let size = shares[i].length;
+                let preview = size > 0 ? bytesToHex(shares[i].slice(0, 4), 4) : '(empty)';
+                
+                let onlineClass = online ? 'badge-online' : 'badge-offline';
+                let onlineText = online ? 'ONLINE' : 'OFFLINE';
+                let corruptBadge = corrupted ? '<span class="badge badge-corrupt">CORRUPT</span>' : '';
+                
+                html += `
+                    <div class="share-card">
+                        <div class="share-header">🔶 SERVER s${i+1}</div>
+                        <div class="share-status">
+                            <span class="badge ${onlineClass}">${onlineText}</span>
+                            ${corruptBadge}
+                        </div>
+                        <div class="share-status">📦 ${size} bytes</div>
+                        <div class="share-status" style="font-size:10px;">${preview}</div>
+                        <div class="share-actions">
+                            <button onclick="window.toggleServer(${i})">Toggle Online</button>
+                        </div>
+                    </div>
+                `;
+            }
+            grid.innerHTML = html;
+        }
+        
+        window.toggleServer = function(idx) {
+            serverOnline[idx] = !serverOnline[idx];
+            updateShareDisplay();
+            log(`Server s${idx+1} is now ${serverOnline[idx] ? 'ONLINE' : 'OFFLINE'}`, 'info');
+        };
+        
+        // ====================================================================
+        // MAIN ACTIONS
+        // ====================================================================
+        function doEncodeAndSplit() {
+            let input = document.getElementById('txtInputData').value;
+            if (!input.trim()) {
+                log('ERROR: Please enter data to encode', 'error');
+                return;
+            }
+            
+            clearLog();
+            log('=== UNSIGNAL ENCODE + 3-of-5 SPLIT ===', 'info');
+            
+            // Step 1: Convert to bytes
+            let encoder = new TextEncoder();
+            originalDataRaw = encoder.encode(input);
+            log(`Original data: ${originalDataRaw.length} bytes`, 'info');
+            
+            // Step 2: Add CRC32 (4 bytes at the beginning)
+            originalDataWithCRC = addCRC32(originalDataRaw);
+            let crcValue = calculateCRC32(originalDataRaw);
+            log(`Added CRC32: 0x${crcValue.toString(16).toUpperCase()} (4 bytes) → Total ${originalDataWithCRC.length} bytes`, 'success');
+            
+            // Step 3: Generate header and set window
+            currentHeader = generateUNSIGNALHeader();
+            currentWindowOffset = currentHeader.windowOffset;
+            rebuildWindowLookup();
+            
+            log(`UNSIGNAL Header generated:`, 'info');
+            log(`  H1@${addressOut(currentHeader.h1Addr)} → ${currentHeader.h1Val} (offset low)`, 'info');
+            log(`  H2@${addressOut(currentHeader.h2Addr)} → ${currentHeader.h2Val} (offset high)`, 'info');
+            log(`  H3@${addressOut(currentHeader.h3Addr)} → ${currentHeader.h3Val} (prefix len)`, 'info');
+            log(`  H4@${addressOut(currentHeader.h4Addr)} → ${currentHeader.h4Val} (suffix len)`, 'info');
+            log(`Window offset: ${currentWindowOffset} (0x${currentWindowOffset.toString(16).toUpperCase()})`, 'success');
+            log(`Prefix: ${currentHeader.prefixLen} bytes, Suffix: ${currentHeader.suffixLen} bytes`, 'info');
+            
+            // Step 4: Encode to addresses (encode the CRC+data, NOT the raw data)
+            encodedAddresses = encodeToAddresses(originalDataWithCRC);
+            if (!encodedAddresses) {
+                log('ENCODE FAILED', 'error');
+                return;
+            }
+            
+            // Step 5: Build full encoded stream (header + prefix + addresses + suffix)
+            let fullStream = [];
+            // Header addresses (4 × 16-bit, little-endian)
+            fullStream.push(currentHeader.h1Addr & 0xFF, (currentHeader.h1Addr >> 8) & 0xFF);
+            fullStream.push(currentHeader.h2Addr & 0xFF, (currentHeader.h2Addr >> 8) & 0xFF);
+            fullStream.push(currentHeader.h3Addr & 0xFF, (currentHeader.h3Addr >> 8) & 0xFF);
+            fullStream.push(currentHeader.h4Addr & 0xFF, (currentHeader.h4Addr >> 8) & 0xFF);
+            // Prefix
+            fullStream.push(...currentHeader.prefix);
+            // Addresses (each as 16-bit little-endian)
+            for (let addr of encodedAddresses) {
+                fullStream.push(addr & 0xFF, (addr >> 8) & 0xFF);
+            }
+            // Suffix
+            fullStream.push(...currentHeader.suffix);
+            
+            log(`Full encoded stream: ${fullStream.length} bytes`, 'info');
+            log(`  CRC+Data encoded: ${originalDataWithCRC.length} bytes → ${encodedAddresses.length * 2} address bytes (2x expansion)`, 'info');
+            
+            // Step 6: Split into 5 shares
+            splitData(fullStream);
+            
+            // Update stats
+            document.getElementById('originalSize').innerText = originalDataRaw.length;
+            document.getElementById('crcSize').innerText = `${originalDataWithCRC.length} (+4 CRC)`;
+            document.getElementById('encodedSize').innerText = encodedAddresses.length * 2;
+            
+            let shareSizeVal = shares[0].length;
+            let totalStorage = shares.reduce((sum, s) => sum + s.length, 0);
+            document.getElementById('shareSize').innerText = shareSizeVal;
+            document.getElementById('totalStorage').innerText = totalStorage;
+            
+            let statsDiv = document.getElementById('divExpansionStats');
+            statsDiv.innerHTML = `
+                <strong>📊 Encoding Statistics:</strong><br>
+                Original data: ${originalDataRaw.length} bytes<br>
+                + CRC32 (4 bytes) = ${originalDataWithCRC.length} bytes<br>
+                After ROM encode: ${encodedAddresses.length * 2} bytes (2x expansion)<br>
+                + Header (8 bytes) + Prefix (${currentHeader.prefixLen}) + Suffix (${currentHeader.suffixLen})<br>
+                Total encoded stream: ${fullStream.length} bytes<br>
+                Each share: ~${shareSizeVal} bytes (${Math.round(shareSizeVal / fullStream.length * 100)}% of total)<br>
+                Total storage across 5 servers: ${totalStorage} bytes (${Math.round(totalStorage / originalDataRaw.length * 100)}% overhead)<br>
+                <strong>Security: ROM is the key. Without ROM, addresses are meaningless.</strong><br>
+                <strong>Integrity: CRC32 embedded in encoded data. Client verifies without original.</strong>
+            `;
+            
+            log('\n✓ Encoding and splitting complete. Shares ready on 5 servers.', 'success');
+        }
+        
+        function doFetchAndReconstruct() {
+            if (!originalDataWithCRC) {
+                log('ERROR: No data encoded yet. Run ENCODE + SPLIT first.', 'error');
+                return;
+            }
+            
+            if (!rom) {
+                log('ERROR: No ROM loaded. Cannot decode.', 'error');
+                return;
+            }
+            
+            clearLog();
+            log('=== CLIENT: FETCH + JOIN + DECODE ===', 'info');
+            
+            let availableShares = [];
+            let fetchedData = {};
+            
+            for (let i = 0; i < SHARE_COUNT; i++) {
+                if (serverOnline[i] && shares[i] && shares[i].length > 0) {
+                    fetchedData[i] = shares[i];
+                    availableShares.push(i);
+                    log(`Server s${i+1}: ${shares[i].length} bytes`, 'success');
+                } else {
+                    log(`Server s${i+1}: OFFLINE or empty`, 'error');
+                }
+            }
+            
+            log(`\nAvailable shares: ${availableShares.length} (s${availableShares.map(i=>i+1).join(', s')})`, 'info');
+            
+            if (availableShares.length < 3) {
+                log(`ERROR: Need at least 3 shares, only have ${availableShares.length}`, 'error');
+                return;
+            }
+            
+            let combos = availableShares.length === 3 ? [availableShares] : getAllCombinations(availableShares, 3);
+            log(`Will try ${combos.length} combination(s) of 3 shares\n`, 'info');
+            
+            let success = false;
+            let decodedPayload = null;
+            
+            for (let attempt = 0; attempt < combos.length; attempt++) {
+                let combo = combos[attempt];
+                let comboStr = combo.map(i => `s${i+1}`).join(', ');
+                log(`Attempt ${attempt+1}: Joining shares ${comboStr}`, 'info');
+                
+                let joined = joinShares(combo);
+                if (!joined) {
+                    log(`  Join failed - insufficient data`, 'error');
+                    continue;
+                }
+                log(`  Join successful: ${joined.length} bytes`, 'success');
+                
+                if (joined.length < 8) {
+                    log(`  Data too short for header`, 'error');
+                    continue;
+                }
+                
+                let h1Addr = (joined[1] << 8) | joined[0];
+                let h2Addr = (joined[3] << 8) | joined[2];
+                let h3Addr = (joined[5] << 8) | joined[4];
+                let h4Addr = (joined[7] << 8) | joined[6];
+                
+                if (h1Addr >= ROM_SIZE || h2Addr >= ROM_SIZE || h3Addr >= ROM_SIZE || h4Addr >= ROM_SIZE) {
+                    log(`  Header addresses out of ROM range`, 'error');
+                    continue;
+                }
+                
+                let offsetLow = rom[h1Addr];
+                let offsetHigh = rom[h2Addr];
+                let prefixLen = rom[h3Addr];
+                let suffixLen = rom[h4Addr];
+                let windowOffset = (offsetHigh << 8) | offsetLow;
+                
+                if (windowOffset + WINDOW_SIZE > ROM_SIZE) {
+                    windowOffset = ROM_SIZE - WINDOW_SIZE;
+                }
+                
+                log(`  Header valid: window offset = ${windowOffset} (0x${windowOffset.toString(16).toUpperCase()})`, 'success');
+                
+                let addrStart = 8 + prefixLen;
+                let addrEnd = joined.length - suffixLen;
+                
+                if (addrStart >= addrEnd || (addrEnd - addrStart) % 2 !== 0) {
+                    log(`  Invalid address section`, 'error');
+                    continue;
+                }
+                
+                let extractedAddresses = [];
+                for (let i = addrStart; i < addrEnd; i += 2) {
+                    let addr = (joined[i+1] << 8) | joined[i];
+                    extractedAddresses.push(addr);
+                }
+                
+                log(`  Extracted ${extractedAddresses.length} addresses`, 'info');
+                
+                let decodedBytes = decodeFromAddresses(extractedAddresses, windowOffset);
+                if (!decodedBytes) {
+                    log(`  Decode failed - addresses out of range`, 'error');
+                    continue;
+                }
+                
+                log(`  Decoded ${decodedBytes.length} bytes`, 'info');
+                
+                let crcResult = verifyCRC32(decodedBytes);
+                if (crcResult.valid) {
+                    log(`  ✓ CRC32 VALID - Data integrity confirmed!`, 'success');
+                    let decoder = new TextDecoder();
+                    decodedPayload = decoder.decode(new Uint8Array(crcResult.payload));
+                    success = true;
+                    break;
+                } else {
+                    log(`  ${crcResult.error}`, 'error');
+                }
+            }
+            
+            if (success) {
+                log(`\n✓✓✓ SUCCESS: Reconstructed using any 3 of 5 shares! ✓✓✓`, 'success');
+                log(`\n--- RECONSTRUCTED MESSAGE ---`, 'success');
+                log(decodedPayload, 'success');
+                log(`--- END ---`, 'success');
+            } else {
+                log(`\n✗ FAILURE: No valid combination found (all CRC checks failed)`, 'error');
+            }
+        }
+        
+        function doClear() {
+            originalDataRaw = null;
+            originalDataWithCRC = null;
+            encodedAddresses = [];
+            currentHeader = null;
+            for (let i = 0; i < SHARE_COUNT; i++) {
+                masterShares[i] = [];
+                shares[i] = [];
+                shareCorrupted[i] = false;
+                serverOnline[i] = true;
+            }
+            document.getElementById('txtInputData').value = '';
+            document.getElementById('originalSize').innerText = '0';
+            document.getElementById('crcSize').innerText = '0';
+            document.getElementById('encodedSize').innerText = '0';
+            document.getElementById('shareSize').innerText = '0';
+            document.getElementById('totalStorage').innerText = '0';
+            document.getElementById('divExpansionStats').innerHTML = 'Ready. Generate a ROM, enter data, then click ENCODE + SPLIT.';
+            updateShareDisplay();
+            clearLog();
+            log('All data cleared.', 'info');
+        }
+        
+        function doApplyCorruption() {
+            let shareSelect = document.getElementById('selCorruptShare');
+            let typeSelect = document.getElementById('selCorruptionType');
+            let shareIdx = parseInt(shareSelect.value);
+            let type = typeSelect.value;
+            
+            if (isNaN(shareIdx)) {
+                log('Please select a share to corrupt', 'error');
+                return;
+            }
+            
+            corruptShare(shareIdx, type);
+        }
+        
+        function doResetServers() {
+            resetShares();
+            log('Servers reset. All shares restored to original.', 'success');
+        }
+        
+        function doLoadROM() {
+            let input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = function(e) {
+                let file = e.target.files[0];
+                let reader = new FileReader();
+                reader.onload = function(evt) {
+                    let bytes = new Uint8Array(evt.target.result);
+                    for (let i = 0; i < ROM_SIZE && i < bytes.length; i++) {
+                        rom[i] = bytes[i];
+                    }
+                    if (bytes.length < ROM_SIZE) {
+                        for (let i = bytes.length; i < ROM_SIZE; i++) {
+                            rom[i] = Math.floor(Math.random() * 256);
+                        }
+                        log(`ROM loaded: ${bytes.length} bytes from file, padded to ${ROM_SIZE} bytes with random`, 'warning');
+                    } else {
+                        log(`ROM loaded: ${ROM_SIZE} bytes from file`, 'success');
+                    }
+                    rebuildLookup();
+                    updateROMPreview();
+                    updateStats();
+                };
+                reader.readAsArrayBuffer(file);
+            };
+            input.click();
+        }
+        
+        // ====================================================================
+        // INITIALIZATION
+        // ====================================================================
+        function init() {
+            buildCRC32Table();
+            generateRandomROM();
+            
+            let defaultMsg = "UNSIGNAL Protocol v20260418 - Complete Implementation\n";
+            defaultMsg += "This text will be:\n";
+            defaultMsg += "1. CRC32 added (4 bytes at the beginning)\n";
+            defaultMsg += "2. ENCODED using ROM addressing (byte → 16-bit address)\n";
+            defaultMsg += "3. SPLIT into 5 shares using 3-of-5 combinatorial pattern\n";
+            defaultMsg += "4. Any 3 shares can JOIN + DECODE back to original\n\n";
+            defaultMsg += "The ROM is the KEY. Without it, the addresses are meaningless.\n";
+            defaultMsg += "CRC32 provides integrity verification - no original data needed.\n";
+            defaultMsg += "Try corrupting a share - the client will try all 3-share combinations until CRC passes.";
+            document.getElementById('txtInputData').value = defaultMsg;
+            
+            document.getElementById('btnGenerateROM').onclick = generateRandomROM;
+            document.getElementById('btnLoadROM').onclick = doLoadROM;
+            document.getElementById('btnEncodeAndSplit').onclick = doEncodeAndSplit;
+            document.getElementById('btnFetchAndReconstruct').onclick = doFetchAndReconstruct;
+            document.getElementById('btnResetServers').onclick = doResetServers;
+            document.getElementById('btnClear').onclick = doClear;
+            document.getElementById('btnApplyCorruption').onclick = doApplyCorruption;
+            
+            updateShareDisplay();
+            
+            log('UNSIGNAL Protocol v20260418 Ready', 'success');
+            log('Features:', 'info');
+            log('  • 128KB ROM - THE KEY (generate random or load from file)', 'info');
+            log('  • CRC32 automatically added before encoding (4 bytes)', 'info');
+            log('  • ROM encode: 1 byte → 16-bit address (2x expansion)', 'info');
+            log('  • 3-of-5 combinatorial split: any 3 shares reconstruct', 'info');
+            log('  • Client verifies CRC32 - no original data needed', 'info');
+            log('  • Corrupt any share - client finds valid combination', 'info');
+        }
+        
+        window.addEventListener('load', init);
+    })();
+    </script>
+</body>
+</html>
