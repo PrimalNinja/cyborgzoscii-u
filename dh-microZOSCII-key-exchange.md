@@ -36,7 +36,7 @@ Note: For completely information-theoretically secure communications, this boots
 
 | Output | Size | Format |
 |--------|------|--------|
-| microROM | 512 × N nibbles per secret | Hex characters (0-F), where N = number of DH secrets |
+| microROM | 512 × N nibbles (where N = number of DH secrets, 1-4) | Hex characters (0-F), where N = number of DH secrets |
 
 ### 2.3 Algorithm
 
