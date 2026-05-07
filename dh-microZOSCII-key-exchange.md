@@ -14,9 +14,11 @@ DH-microZOSCII is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 
 This document specifies how to derive a microZOSCII ROM directly from Diffie-Hellman shared secrets.
 
-The derived ROM can then be used with any ZOSCII-family protocol (UNSIGNAL, microZOSCII, TEMPURA, etc.) for information-theoretically secure communications.
+The derived ROM can then be used with any ZOSCII-family protocol (UNSIGNAL, microZOSCII, TEMPURA, etc.)
 
 It is recommended to use this when necessary - depending on use case, if full ZOSCII ROMs are already exchanged, you may not need to do this again.
+
+Note: For completely information-theoretically secure communications, this bootstrap method cannot be used - it is hardened maths. If you require 100% security against eavesdroppers, use out of band key exchange as suggested in the microZOSCII paper.
 
 ---
 
@@ -149,8 +151,6 @@ No further processing. No restructuring. No windowing.
 
 When 4 DH secrets are exchanged, the combined 2048-nibble microROM enables microUNSIGNAL features (still in draft).
 
-Use with any ZOSCII-family protocol for information-theoretically secure communications.
-
 ---
 
 ## 9. REFERENCES
@@ -159,12 +159,3 @@ Use with any ZOSCII-family protocol for information-theoretically secure communi
 2. Cassin, J. (2026). "UNSIGNAL Protocol Specification"
 3. Cassin, J. (2026). "microZOSCII: Quantum-Proof Bootstrap Protocol"
 4. Cassin, J. (2026). "ZOSCII: Zero Overhead Secure Code Information Interchange"
-
----
-
-**Document Version:** 0.1 (DRAFT)
-**Last Updated:** 2026-05-08
-**Status:** Draft - Subject to change
-
-*DH-microZOSCII: DH secret(s) → hex nibbles → microROM → ITS encoding.*
-*microUNSIGNAL specifics are not yet finalised.*
