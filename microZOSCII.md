@@ -1,10 +1,10 @@
 # microZOSCII: Quantum-Proof Bootstrap Protocol
 ## A Practical Solution for Secure Key Distribution
 
-**Version 1.3** (DRAFT) 
+**Version 1.4** (DRAFT) 
 **Author:** Julian Cassin  
 **Date:** 2026-02-26
-**Last Update:** 2026-04-02
+**Last Update:** 2026-05-08
 
 ## SOFTWARE LICENSE v1.1
 
@@ -20,7 +20,7 @@ Although microZOSCII can work with a 54 character bootstrap, it is recommended t
 
 ## Abstract
 
-microZOSCII solves the fundamental key distribution problem in quantum-proof communications by providing a minimal, human-manageable bootstrap mechanism for full ZOSCII deployment. Using just 54 alphanumeric characters, microZOSCII enables information-theoretically secure transmission of a 64KB ZOSCII ROM, achieving 10^91,619 combinatorial security—10^91,542 times stronger than AES-256—without any reliance on mathematical encryption.
+microZOSCII solves the fundamental key distribution problem in quantum-proof communications by providing a minimal, human-manageable bootstrap mechanism for full ZOSCII deployment. Using just 54 alphanumeric characters, microZOSCII enables information-theoretically secure transmission of a 64KB ZOSCII ROM or 128KB UNSIGNAL Protocol ROM, achieving from 10^91,619 combinatorial security—10^91,542 times stronger than AES-256—without any reliance on mathematical encryption.
 
 ---
 
@@ -39,7 +39,7 @@ microZOSCII solves the fundamental key distribution problem in quantum-proof com
 
 ## Introduction
 
-ZOSCII (Zero Overhead Secure Code Information Interchange) provides information-theoretic security through address-based indirection rather than mathematical encryption. Full ZOSCII requires a 64KB ROM shared between communicating parties, which creates a practical deployment challenge: **how do you securely distribute a 64KB file?**
+ZOSCII (Zero Overhead Secure Code Information Interchange) provides information-theoretic security through address-based indirection rather than mathematical encryption. Full ZOSCII requires a 64KB ROM shared between communicating parties, which creates a practical deployment challenge: **how do you securely distribute a 64KB or 128KB file?**
 
 Traditional solutions fail:
 - **Encryption-based key exchange** (RSA, Diffie-Hellman, ECC) are vulnerable to "harvest now, decrypt later" attacks
@@ -132,6 +132,8 @@ For each hex character in the full ROM:
 1. Look up which 5 positions that hex value occupies in the microROM
 2. Randomly select one of those 5 positions
 3. Transmit the selected position (address)
+
+note: for 128KB ROM, it will become 256KB hex characters.
 
 **JavaScript Implementation:**
 ```javascript
