@@ -133,6 +133,7 @@ Certificates retain exactly one job: **identity verification**.
 - Compromising 1 or even 2 authorities is insufficient — you need all 3 ROMs to decode
 - Each authority operates independently — no coordination between them
 - After endpoints exchange a private ROM, all 3 session ROMs become irrelevant
+- As with ANY in-band key exchange, the receiving endpoint if all packets are monitored prior to consumption, then future communications can be compromised
 
 ---
 

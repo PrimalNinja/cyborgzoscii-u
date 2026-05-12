@@ -53,7 +53,11 @@ The Message
 
 - XOR is considered encryption, so although the encoding below isn't encrypted, BRAINLESS is for those who have checkbox OCD and require encryption.
 
-- If a transmission occurs in packets, a packet in isolation is impossible to decrypt without first having the entire message.
+- If a transmission occurs in packets, a packet in isolation is impossible to decrypt.
+
+- Forward BRAINLESS allows for streaming.
+
+- Reverse BRAINLESS prevents any decryption without having first received the entire payload.
 
 ## What Intelligence Agencies Will Find
 
