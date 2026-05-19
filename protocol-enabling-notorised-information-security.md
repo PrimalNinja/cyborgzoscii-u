@@ -4,6 +4,11 @@
 **Author:** Julian Cassin  
 **Date:** 2026-04-02
 
+
+## DEPRECATION WARNING
+
+THIS DOCUMENT IS DEPRECATED BECAUSE ZOSCII Mode 7: Agent Delegation Mode (007 Mode) IS BETTER
+
 ## SOFTWARE LICENSE v1.1
 
 UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
