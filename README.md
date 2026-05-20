@@ -14,7 +14,8 @@ CyborgZOSCII is an alternative to ASCII/PETSCII that uses direct ROM addressing 
 
 ## Developer Resources
 
-- CyborgUnicorn.UNINTELLIGENCE nuget source
+- CyborgUnicorn.UNINTELLIGENCE nuget source 
+(also visit https://www.nuget.org/profiles/cyborgunicornau)
 
 ## microZOSCII: Quantum-Proof Bootstrap Protocol
 
