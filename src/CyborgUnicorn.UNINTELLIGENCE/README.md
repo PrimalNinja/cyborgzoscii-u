@@ -71,7 +71,7 @@ string text      = ZDecode.FileToString("output.zoc", rom);
 ## ZVerify / BVerify
 
 ```csharp
-bool blnMatch1 = ZVerify.File("encoded.zos", "original.bin", rom);
+bool blnMatch1 = ZVerify.File("encoded.zoc", "original.bin", rom);
 bool blnMatch2 = ZVerify.Bytes(encodedBytes, plainBytes, rom);
 bool blnMatch4 = BVerify.File("file1.bin", "file2.bin");
 bool blnMatch5 = BVerify.Bytes(arr1, arr2);
