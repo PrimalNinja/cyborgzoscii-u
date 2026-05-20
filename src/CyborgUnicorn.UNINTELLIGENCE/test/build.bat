@@ -1,0 +1,1 @@
+dotnet publish test.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:DefineConstants="UNINTELLIGENCE" -o bin/UNINTELLIGENCE

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0-windows</TargetFrameworks>
+    <PackageId>CyborgUnicorn.UNINTELLIGENCE</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Julian Cassin</Authors>
+    <Company>Cyborg Unicorn Pty Ltd</Company>
+    <Product>UNINTELLIGENCE SDK</Product>
+    <Description>
+      ZOSCII (Zero Overhead Secure Code Information Interchange) SDK.
+      Information-theoretically secure encoding achieving I(M;A)=0.
+      Includes UNSIGNAL protocol, PENTAGONE 3-of-5 redundancy, ZOSCII MQ client,
+      ROM generation, Entropy Sugar collection, and Secure Delete.
+    </Description>
+    <Copyright>Copyright (c) 2026 Cyborg Unicorn Pty Ltd</Copyright>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://cyborgunicorn.com.au</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/PrimalNinja/cyborgzoscii-u</RepositoryUrl>
+    <PackageTags>UNINTELLIGENCE;ZOSCII;UNSIGNAL;PENTAGONE;security;information-theoretic;quantum-proof;encryption-alternative;ROM;secure-messaging;MQ</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Nullable>disable</Nullable>
+    <LangVersion>8.0</LangVersion>
+    <AssemblyName>CyborgUnicorn.UNINTELLIGENCE</AssemblyName>
+    <RootNamespace>CyborgUnicorn.UNINTELLIGENCE</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="LICENSE.txt" Pack="true" PackagePath="" />
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <Compile Remove="test\**" />
+    <EmbeddedResource Include="source.zip" Condition="Exists('source.zip')" LogicalName="source.zip" />
+  </ItemGroup>
+
+</Project>
