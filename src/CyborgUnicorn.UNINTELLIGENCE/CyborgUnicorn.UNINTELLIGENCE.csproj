@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net8.0-windows</TargetFrameworks>
     <PackageId>CyborgUnicorn.UNINTELLIGENCE</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Julian Cassin</Authors>
     <Company>Cyborg Unicorn Pty Ltd</Company>
     <Product>UNINTELLIGENCE SDK</Product>
@@ -18,7 +18,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://cyborgunicorn.com.au</PackageProjectUrl>
     <RepositoryUrl>https://github.com/PrimalNinja/cyborgzoscii-u</RepositoryUrl>
-    <PackageTags>UNINTELLIGENCE;ZOSCII;UNSIGNAL;PENTAGONE;security;information-theoretic;quantum-proof;encryption-alternative;ROM;secure-messaging;MQ</PackageTags>
+    <PackageTags>UNINTELLIGENCE;ZOSCII;UNSIGNAL;PENTAGONE;security;information-theoretic;quantum-proof;encryption-alternative;ROM;secure-messaging;MQ;DH-ROM-exchange</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Nullable>disable</Nullable>
     <LangVersion>8.0</LangVersion>
@@ -30,6 +30,8 @@
     <None Include="LICENSE.txt" Pack="true" PackagePath="" />
     <None Include="README.md" Pack="true" PackagePath="" />
     <Compile Remove="test\**" />
+	<Compile Remove="ctest\**" />
+	<Compile Remove="stest\**" />
     <EmbeddedResource Include="source.zip" Condition="Exists('source.zip')" LogicalName="source.zip" />
   </ItemGroup>
 

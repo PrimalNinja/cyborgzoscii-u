@@ -118,6 +118,8 @@ namespace CyborgUnicorn.ZOSCII
         // --- Fields ---
 
         private int m_intTimeoutSeconds;
+        private int m_intUserAgentMode;   // 0 = random GUID (default), 1 = none, 2 = fixed
+        private string m_strUserAgent;
 
         // --- Constructor ---
 
@@ -128,6 +130,41 @@ namespace CyborgUnicorn.ZOSCII
         public MQClient(int intTimeoutSeconds_a = 60)
         {
             m_intTimeoutSeconds = intTimeoutSeconds_a;
+            m_intUserAgentMode = 0;
+            m_strUserAgent = "";
+        }
+
+        // -------------------------------------------------------------------------
+        // User-Agent control
+        // -------------------------------------------------------------------------
+
+        /// <summary>
+        /// Send a random GUID as User-Agent on every request. This is the default.
+        /// Each call generates a fresh GUID — no two requests share the same agent string.
+        /// </summary>
+        public void SetUserAgentRandom()
+        {
+            m_intUserAgentMode = 0;
+            m_strUserAgent = "";
+        }
+
+        /// <summary>
+        /// Send no User-Agent header at all. The header is omitted entirely.
+        /// </summary>
+        public void SetUserAgentNone()
+        {
+            m_intUserAgentMode = 1;
+            m_strUserAgent = "";
+        }
+
+        /// <summary>
+        /// Send a fixed User-Agent string on every request.
+        /// strUserAgent_a - the value to send (e.g. "MyApp/1.0").
+        /// </summary>
+        public void SetUserAgent(string strUserAgent_a)
+        {
+            m_intUserAgentMode = 2;
+            m_strUserAgent = strUserAgent_a;
         }
 
         // -------------------------------------------------------------------------
@@ -147,6 +184,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     Dictionary<string, string> arrFields = new Dictionary<string, string>
                     {
@@ -184,6 +223,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     Dictionary<string, string> arrFields = new Dictionary<string, string>
                     {
@@ -244,6 +285,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     Dictionary<string, string> arrFields = new Dictionary<string, string>
                     {
@@ -286,6 +329,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     string strNamesJson = buildJsonStringArray(arrNames_a);
 
@@ -337,6 +382,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     Dictionary<string, string> arrFields = new Dictionary<string, string>
                     {
@@ -454,6 +501,24 @@ namespace CyborgUnicorn.ZOSCII
         // Private helpers
         // -------------------------------------------------------------------------
 
+        /// <summary>
+        /// Returns the User-Agent string for the current mode, or null if none should be sent.
+        /// </summary>
+        private string getUserAgent()
+        {
+            string strResult = null;
+
+            if (m_intUserAgentMode == 0)
+            {
+                strResult = Guid.NewGuid().ToString();
+            }
+            else if (m_intUserAgentMode == 2)
+            {
+                strResult = m_strUserAgent;
+            }
+
+            return strResult;
+        }
         private MQPublishResult postBytesToQueue(string strServerURL_a, string strQueueGUID_a, byte[] arrData_a,
             string strNonce_a, int intRetentionDays_a)
         {
@@ -464,6 +529,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     string strBoundary = "----MQBoundary" + Guid.NewGuid().ToString("N");
 
@@ -506,6 +573,8 @@ namespace CyborgUnicorn.ZOSCII
                 using (HttpClient objClient = new HttpClient())
                 {
                     objClient.Timeout = TimeSpan.FromSeconds(m_intTimeoutSeconds);
+                    string strUserAgent = getUserAgent();
+                    if (strUserAgent != null) { objClient.DefaultRequestHeaders.Add("User-Agent", strUserAgent); }
 
                     string strBoundary = "----MQBoundary" + Guid.NewGuid().ToString("N");
 

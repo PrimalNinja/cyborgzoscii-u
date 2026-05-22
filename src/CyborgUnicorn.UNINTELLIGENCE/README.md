@@ -128,6 +128,11 @@ Identify returns string[] (identified names) or null on failure
 var mq = new MQClient();              // default 60s timeout
 var mq = new MQClient(120);           // custom timeout
 
+// User-Agent control (default: random GUID per request)
+mq.SetUserAgentRandom();              // fresh GUID on every request (default)
+mq.SetUserAgentNone();                // omit User-Agent header entirely
+mq.SetUserAgent("MyApp/1.0");        // fixed string until changed
+
 string strQueueServer = "https://your-server/index.php";
 
 // Queue
@@ -151,6 +156,99 @@ if (rep.Success && rep.ServerMessage != "up-to-date") { lastPointer = strNewPoin
 
 MQPublishResult rep = mq.Replicate(remoteURL, remoteQueue, strQueueServer, "",
     lastPointer, out strNewPointer, intRetentionDays_a: 7);  // empty localQueue = store as unidentified
+```
+
+---
+
+## MicroZOSCII
+
+Bootstrap encoding for transmitting a full ROM over a direct connection.
+Derives a microROM (up to 256 nibbles) from raw bytes or from three 54-character base-62 strings,
+then encodes/decodes a full ROM as a stream of 1-byte address lookups into the microROM.
+Each nibble of the ROM hex maps to a randomly selected position — information-theoretically secure transmission.
+A 128KB ROM produces 262,144 addresses (262,144 bytes on the wire — 2x expansion).
+
+```csharp
+// Derive microROM from byte array(s) — pass null to omit bytes2/3/4
+string strMicroROM = MicroZOSCII.FromBytes(arrBytes1, null, null, null);
+string strMicroROM = MicroZOSCII.FromBytes(arrBytes1, arrBytes2, arrBytes3, arrBytes4);
+
+// Derive microROM from 3 x 54 base-62 strings (human entry, barcode, contact list)
+string strMicroROM = MicroZOSCII.FromBase62(strChunk1, strChunk2, strChunk3);
+
+// Encode a 240-nibble microROM as 3 x 54 base-62 strings for storage/display
+string[] arrChunks = MicroZOSCII.ToBase62(strMicroROM);  // returns string[3]
+
+// Check nibble distribution — int[16], index 0=count of '0' ... 15=count of 'F'
+// Average is 15 per nibble (240/16). Recommended minimum: 5 instances per nibble.
+// Discard and regenerate if any value falls below 5.
+int[] arrDist = MicroZOSCII.GetDistribution(strMicroROM);
+
+// Encode full ROM bytes → address array (1 byte per address, 2x expansion)
+byte[] arrAddresses = MicroZOSCII.Encode(strMicroROM, arrROMBytes);
+
+// Decode address array → full ROM bytes
+byte[] arrROM = MicroZOSCII.Decode(strMicroROM, arrAddresses);
+```
+
+---
+
+## ROMExchange
+
+Peer-to-peer ROM exchange over TCP.
+Establishes a direct connection, performs a Diffie-Hellman key exchange using the caller's
+ZOSCII ROM as the private key source, then transmits a full ROM via MicroZOSCII encoding.
+DH exchange and ROM transmission are separate calls — either step can be bypassed
+(e.g. seeds typed in, scanned from a 2D barcode, or loaded from a contact list).
+Connection is maintained with a random GUID ping/pong keepalive until terminated.
+No identifying information is sent at any point.
+
+ROMExchangeResult: Success, ROMBytes (ReceiveROM only), ErrorMessage
+Events: OnConnection(handle, peerIP), OnTerminated(handle), OnError(handle, message)
+
+```csharp
+var objExchange = new ROMExchange();              // default 60s timeout, 15s ping interval
+var objExchange = new ROMExchange(120, 30000);    // custom timeout and ping interval
+
+// Events
+objExchange.OnConnection  += (strHandle, strPeerIP) => { };
+objExchange.OnTerminated  += (strHandle) => { };
+objExchange.OnError       += (strHandle, strMessage) => { };
+
+// Bootstrap method registry — present to user before connecting
+string[,] arrMethods = ROMExchange.GetBootstrapMethods();
+// returns { { "DH", "Diffie-Hellman Key Exchange" }, ... }
+
+// Listener side
+string strHandle = objExchange.Listen(9000, false);          // false = manual accept, 60s timeout
+string strHandle = objExchange.Listen(9000, false, 120);     // false = manual accept, 120s timeout
+// OnConnection fires when peer connects
+objExchange.Authorise(strHandle);                     // manual accept mode
+objExchange.Reject(strHandle);                        // manual reject mode
+
+// Initiator side
+string strHandle = objExchange.Connect("192.168.1.5", 9000);
+// OnConnection fires on success
+
+// DH key exchange — both sides call independently, uses caller's ROM as private key source
+byte[] arrSecret = objExchange.DHExchange(strHandle, objROM);
+
+// Derive microROM from shared secret
+string strMicroROM = MicroZOSCII.FromBytes(arrSharedSecret, null, null, null);
+
+// Send ROM (listener side)
+ROMExchangeResult objResult = objExchange.SendROM(strHandle, strMicroROM, arrROMBytes);
+
+// Receive ROM (initiator side)
+ROMExchangeResult objResult = objExchange.ReceiveROM(strHandle, strMicroROM);
+if (objResult.Success) { byte[] arrROM = objResult.ROMBytes; }
+
+// Start keepalive — call when all exchanges are complete
+objExchange.StartKeepalive(strHandle);
+
+// Status and termination
+ROMExchangeStatus objStatus = objExchange.GetStatus(strHandle);
+objExchange.Terminate(strHandle);
 ```
 
 ---

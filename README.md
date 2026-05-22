@@ -38,3 +38,25 @@ superZOSCII Protocol (The Fourth Protocol) is a theoretical extension to the UNS
 ZOSCII already provides information-theoretic security (mathematically unbreakable, quantum-proof forever). BRAINLESS adds one thing: an Ouroboros XOR chain.
 
 **ZOSCII: Where information theory meets practical engineering, and encryption becomes obsolete.**
+
+## HTTP Noise Generator
+
+The puropse of the HTTP Noise Generator is to fetch URLs that are part of a ZOSCII MQ queue that is monitored and fetch them round robin style.  
+Your IP address is not hidden, the intent is to give the the ability to plausibly deny you consiously visited a website or URL.
+Nothing is stored, cached or logged.
+
+HTTP Noise Generator
+
+Usage: noisegen <mq-endpoint> <queue-name> <rom-file> [delay-seconds] [-ua random|clear|"agent string"]
+
+    delay-seconds minimum 30, default 30
+
+    -ua random (default), -ua clear, -ua "my user agent"
+
+Examples:
+
+ noisegen https://mq.example.com/index.php myqueue mykey.jpg
+ noisegen https://mq.example.com/index.php myqueue mykey.jpg 60
+ noisegen https://mq.example.com/index.php myqueue mykey.jpg 60 -ua clear
+ noisegen https://mq.example.com/index.php myqueue mykey.jpg -ua "Mozilla/5.0"
+ 

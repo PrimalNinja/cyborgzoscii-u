@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <AssemblyName>stest</AssemblyName>
+    <RootNamespace>CyborgUnicorn.ZOSCII</RootNamespace>
+    <Nullable>disable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\src\Binary.cs" />
+    <Compile Include="..\src\EntropySugar.cs" />
+	<Compile Include="..\src\microZOSCII.cs" />
+    <Compile Include="..\src\MQClient.cs" />
+	<Compile Include="..\src\ROMExchange.cs" />
+    <Compile Include="..\src\ROMGenerator.cs" />
+    <Compile Include="..\src\SecureDelete.cs" />
+    <Compile Include="..\src\Source.cs" />
+    <Compile Include="..\src\Unsignal.cs" />
+    <Compile Include="..\src\ZOSCII.cs" />
+  </ItemGroup>
+
+</Project>

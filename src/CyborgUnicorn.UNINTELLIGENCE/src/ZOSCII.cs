@@ -107,6 +107,23 @@ namespace CyborgUnicorn.ZOSCII
             }
         }
 
+        // --- Random seed ---
+        // ROM window hash XOR TickCount — mirrors UNSIGNAL's createRandomSeed approach.
+
+        internal static Random createRandomSeed(ref RomData objRom_a)
+        {
+            uint intWindowHash = 0;
+            long lngWindowSize = objRom_a.lngROMSize;
+            if (lngWindowSize > 65536L) { lngWindowSize = 65536L; }
+
+            for (long lngI = 0; lngI < lngWindowSize; lngI++)
+            {
+                intWindowHash = (intWindowHash * 33) + objRom_a.ptrROMData[lngI];
+            }
+
+            return new Random((int)(intWindowHash ^ (uint)Environment.TickCount));
+        }
+
         // --- Pure ZOSCII encode ---
         // Each plaintext byte -> randomly chosen 16-bit ROM address of a matching byte.
         // Output is exactly input.Length * 2 bytes. No header, no padding.
@@ -120,7 +137,7 @@ namespace CyborgUnicorn.ZOSCII
             {
                 arrResult = new byte[arrInput_a.Length * 2];
                 int intPos = 0;
-                Random ptrRand = new Random();
+                Random ptrRand = createRandomSeed(ref objRom_a);
 
                 for (intI = 0; intI < arrInput_a.Length; intI++)
                 {
@@ -157,7 +174,7 @@ namespace CyborgUnicorn.ZOSCII
 
             try
             {
-                Random ptrRand = new Random();
+                Random ptrRand = createRandomSeed(ref objRom_a);
 
                 using (FileStream ptrInput = new FileStream(strInputPath_a, FileMode.Open, FileAccess.Read))
                 using (FileStream ptrOutput = new FileStream(strOutputPath_a, FileMode.Create, FileAccess.Write))
