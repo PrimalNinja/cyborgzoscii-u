@@ -42,7 +42,7 @@ ZOSCII already provides information-theoretic security (mathematically unbreakab
 ## HTTP Noise Generator
 
 The puropse of the HTTP Noise Generator is to fetch URLs that are part of a ZOSCII MQ queue that is monitored and fetch them round robin style.  
-Your IP address is not hidden, the intent is to give the the ability to plausibly deny you consiously visited a website or URL.
+Your IP address is not hidden, the intent is to give you the ability to plausibly deny you consiously visited a website or URL.
 Nothing is stored, cached or logged.
 
 HTTP Noise Generator
