@@ -2,7 +2,7 @@
 // ZOSCII Message Queue client - queue, store, replication, and monitoring
 // Covers: index.php (publish/fetch/store/retrieve/scan/identify),
 //         replikate.php (Replicate), statissa.php (Stats)
-// (c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE License
+// (c) 2026 Cyborg Unicorn Pty Ltd - MIT License
 
 using System;
 using System.Collections.Generic;

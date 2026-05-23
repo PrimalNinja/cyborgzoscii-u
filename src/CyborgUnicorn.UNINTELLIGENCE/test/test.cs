@@ -89,6 +89,8 @@ public static class Test
 
 			if (strMQUrl.Length > 0) { runMQTests(strMQUrl); }
 
+			runZRollingHashTests();
+
 			#if UNINTELLIGENCE
 			runBSplitJoinTests();
 			runUEncodeDecodeTests();
@@ -96,6 +98,7 @@ public static class Test
 			runUFileTests();
 			runUVerifyTests();
 			runEntropySugarTests();
+			runMicroZOSCIITests();
 			#endif
 		}
 		finally
@@ -790,4 +793,175 @@ public static class Test
 	}
 
 	#endif
+
+	#if UNINTELLIGENCE
+
+	// -------------------------------------------------------------------------
+	// UNINTELLIGENCE - MicroZOSCII
+	// -------------------------------------------------------------------------
+
+	private static void runMicroZOSCIITests()
+	{
+		section("MicroZOSCII");
+
+		// FromBytes — single secret (120 bytes = 240 nibbles)
+		byte[] arrSecret = new byte[120];
+		new Random(42).NextBytes(arrSecret);
+		string strMicroROM = MicroZOSCII.FromBytes(arrSecret, null, null, null);
+		if (strMicroROM != null && strMicroROM.Length == 240) { pass("MicroZOSCII.FromBytes - 240 nibbles"); }
+		else { fail("MicroZOSCII.FromBytes", "length=" + (strMicroROM == null ? "null" : strMicroROM.Length.ToString())); }
+
+		// FromBytes — four secrets
+		byte[] arrS2 = new byte[32]; new Random(43).NextBytes(arrS2);
+		byte[] arrS3 = new byte[32]; new Random(44).NextBytes(arrS3);
+		byte[] arrS4 = new byte[32]; new Random(45).NextBytes(arrS4);
+		string strMicroROM4 = MicroZOSCII.FromBytes(arrSecret, arrS2, arrS3, arrS4);
+		if (strMicroROM4 != null && strMicroROM4.Length == 240) { pass("MicroZOSCII.FromBytes - 4 secrets, 240 nibbles"); }
+		else { fail("MicroZOSCII.FromBytes 4 secrets", "length=" + (strMicroROM4 == null ? "null" : strMicroROM4.Length.ToString())); }
+
+		// ToBase62 / FromBase62 round trip
+		if (strMicroROM != null)
+		{
+			string[] arrChunks = MicroZOSCII.ToBase62(strMicroROM);
+		if (arrChunks != null && arrChunks.Length == 3 && arrChunks[0].Length == 54) { pass("MicroZOSCII.ToBase62 - 3 chunks of 54 chars"); }
+		else { fail("MicroZOSCII.ToBase62", "unexpected output"); }
+
+		string strRecovered = MicroZOSCII.FromBase62(arrChunks[0], arrChunks[1], arrChunks[2]);
+		if (strRecovered == strMicroROM) { pass("MicroZOSCII.FromBase62 - round trip matches"); }
+		else { fail("MicroZOSCII.FromBase62", "mismatch"); }
+
+		// GetDistribution
+		int[] arrDist = MicroZOSCII.GetDistribution(strMicroROM);
+		if (arrDist != null && arrDist.Length == 16)
+		{
+			int intMin = int.MaxValue;
+			int intI   = 0;
+			for (intI = 0; intI < 16; intI++) { if (arrDist[intI] < intMin) { intMin = arrDist[intI]; } }
+			pass("MicroZOSCII.GetDistribution - min instances per nibble: " + intMin);
+		}
+		else { fail("MicroZOSCII.GetDistribution", "unexpected output"); }
+
+		// Encode / Decode round trip
+		byte[] arrROMBytes = new byte[512];
+		new Random(99).NextBytes(arrROMBytes);
+		byte[] arrAddresses = MicroZOSCII.Encode(strMicroROM, arrROMBytes);
+		if (arrAddresses != null && arrAddresses.Length == arrROMBytes.Length * 2) { pass("MicroZOSCII.Encode - 2x expansion"); }
+		else { fail("MicroZOSCII.Encode", "unexpected length"); }
+
+		byte[] arrDecoded = MicroZOSCII.Decode(strMicroROM, arrAddresses);
+		if (arraysEqual(arrROMBytes, arrDecoded)) { pass("MicroZOSCII.Decode - round trip matches"); }
+		else { fail("MicroZOSCII.Decode", "mismatch"); }
+
+		// Base62ChunkToHex / HexChunkToBase62 round trip
+		string strChunk = strMicroROM.Substring(0, 80);
+		string strBase62 = MicroZOSCII.HexChunkToBase62(strChunk);
+		if (strBase62 != null && strBase62.Length == 54) { pass("MicroZOSCII.HexChunkToBase62 - 54 chars"); }
+		else { fail("MicroZOSCII.HexChunkToBase62", "unexpected length"); }
+
+		string strHexBack = MicroZOSCII.Base62ChunkToHex(strBase62);
+		if (strHexBack == strChunk) { pass("MicroZOSCII.Base62ChunkToHex - round trip matches"); }
+		else { fail("MicroZOSCII.Base62ChunkToHex", "mismatch"); }
+		}
+	}
+
+	#endif
+
+	// -------------------------------------------------------------------------
+	// ZRollingHash
+	// -------------------------------------------------------------------------
+
+	private static void runZRollingHashTests()
+	{
+		section("ZRollingHash");
+
+		byte[] arrPayload = new byte[5000];
+		new Random(42).NextBytes(arrPayload);
+
+		// Reverse (default) — Bytes
+		byte[] arrHash = ZRollingHash.Bytes(arrPayload);
+		if (arrHash != null && arrHash.Length == 4) { pass("ZRollingHash.Bytes reverse - 4 bytes"); }
+		else { fail("ZRollingHash.Bytes reverse", "unexpected result"); }
+
+		bool blnVerify = ZRollingHash.Verify(arrPayload, arrHash);
+		if (blnVerify) { pass("ZRollingHash.Verify reverse - matches"); }
+		else { fail("ZRollingHash.Verify reverse", "mismatch"); }
+
+		// Forward — Bytes
+		byte[] arrHashFwd = ZRollingHash.Bytes(arrPayload, true);
+		if (arrHashFwd != null && arrHashFwd.Length == 4) { pass("ZRollingHash.Bytes forward - 4 bytes"); }
+		else { fail("ZRollingHash.Bytes forward", "unexpected result"); }
+
+		bool blnVerifyFwd = ZRollingHash.Verify(arrPayload, arrHashFwd, true);
+		if (blnVerifyFwd) { pass("ZRollingHash.Verify forward - matches"); }
+		else { fail("ZRollingHash.Verify forward", "mismatch"); }
+
+		// Forward and reverse differ
+		if (!arraysEqual(arrHash, arrHashFwd)) { pass("ZRollingHash - forward and reverse produce different hashes"); }
+		else { fail("ZRollingHash", "forward and reverse should differ"); }
+
+		// Tamper detection — reverse
+		byte[] arrTampered = (byte[])arrPayload.Clone();
+		arrTampered[2500] ^= 0xFF;
+		bool blnTamper = ZRollingHash.Verify(arrTampered, arrHash);
+		if (!blnTamper) { pass("ZRollingHash.Verify reverse - tamper detected"); }
+		else { fail("ZRollingHash.Verify reverse tamper", "tamper not detected"); }
+
+		// Tamper detection — forward
+		bool blnTamperFwd = ZRollingHash.Verify(arrTampered, arrHashFwd, true);
+		if (!blnTamperFwd) { pass("ZRollingHash.Verify forward - tamper detected"); }
+		else { fail("ZRollingHash.Verify forward tamper", "tamper not detected"); }
+
+		// File
+		string strTempFile = tempFile(".bin");
+		File.WriteAllBytes(strTempFile, arrPayload);
+		byte[] arrFileHash = ZRollingHash.File(strTempFile);
+		if (arraysEqual(arrFileHash, arrHash)) { pass("ZRollingHash.File - matches Bytes result"); }
+		else { fail("ZRollingHash.File", "mismatch with Bytes"); }
+
+		// ZOSCII encode hash+payload, tamper, decode, verify hash mismatch
+		using (ZOSCIIRom objRom = makeTestROM())
+		{
+			// Build hash + payload buffer
+			byte[] arrCombined = new byte[arrHash.Length + arrPayload.Length];
+			Array.Copy(arrHash,    0, arrCombined, 0,            arrHash.Length);
+			Array.Copy(arrPayload, 0, arrCombined, arrHash.Length, arrPayload.Length);
+
+			// ZOSCII encode
+			byte[] arrEncoded = ZEncode.Bytes(arrCombined, objRom);
+			if (arrEncoded != null) { pass("ZRollingHash ZOSCII encode - hash+payload encoded"); }
+			else { fail("ZRollingHash ZOSCII encode", "encode returned null"); }
+
+			if (arrEncoded != null)
+			{
+				// Tamper a byte in the encoded payload portion (after the hash)
+				int intTamperPos = arrHash.Length * 2 + 100;  // past hash addresses, into payload
+				if (intTamperPos < arrEncoded.Length)
+				{
+					arrEncoded[intTamperPos] ^= 0xFF;
+				}
+
+				// Decode — will succeed (addresses may still be valid) or fail
+				byte[] arrDecoded = ZDecode.Bytes(arrEncoded, objRom);
+
+				if (arrDecoded != null)
+				{
+					// Extract hash and payload from decoded result
+					byte[] arrDecodedHash    = new byte[arrHash.Length];
+					byte[] arrDecodedPayload = new byte[arrPayload.Length];
+					Array.Copy(arrDecoded, 0,             arrDecodedHash,    0, arrHash.Length);
+					Array.Copy(arrDecoded, arrHash.Length, arrDecodedPayload, 0, arrPayload.Length);
+
+					// Verify hash against decoded payload — should fail due to tamper
+					bool blnHashMatch = ZRollingHash.Verify(arrDecodedPayload, arrDecodedHash);
+					if (!blnHashMatch) { pass("ZRollingHash ZOSCII tamper - hash mismatch correctly detected after decode"); }
+					else { fail("ZRollingHash ZOSCII tamper", "tamper not detected via hash verify"); }
+				}
+				else
+				{
+					// Decode failed due to invalid address — tamper was caught at ZOSCII level
+					pass("ZRollingHash ZOSCII tamper - decode failed (tamper caught at ZOSCII address level)");
+				}
+			}
+		}
+	}
 }

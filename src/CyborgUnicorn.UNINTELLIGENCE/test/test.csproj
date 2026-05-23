@@ -13,11 +13,14 @@
     <Compile Include="..\src\Binary.cs" />
     <Compile Include="..\src\EntropySugar.cs" />
     <Compile Include="..\src\MQClient.cs" />
+    <Compile Include="..\src\MicroZOSCII.cs" />
+    <Compile Include="..\src\ROMExchange.cs" />
     <Compile Include="..\src\ROMGenerator.cs" />
     <Compile Include="..\src\SecureDelete.cs" />
     <Compile Include="..\src\Source.cs" />
     <Compile Include="..\src\Unsignal.cs" />
     <Compile Include="..\src\ZOSCII.cs" />
+    <Compile Include="..\src\ZRollingHash.cs" />
   </ItemGroup>
 
 </Project>

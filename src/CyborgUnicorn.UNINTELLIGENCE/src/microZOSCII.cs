@@ -462,6 +462,12 @@ namespace CyborgUnicorn.ZOSCII
                     strHex = "0" + strHex;
                 }
 
+                // BigInteger.ToString("X") can produce a leading zero making it 81 chars — trim
+                if (strHex.Length > NIBBLES_PER_CHUNK)
+                {
+                    strHex = strHex.Substring(strHex.Length - NIBBLES_PER_CHUNK);
+                }
+
                 if (strHex.Length == NIBBLES_PER_CHUNK)
                 {
                     strResult = strHex;

@@ -1,7 +1,7 @@
 // CyborgUnicorn.ZOSCII - SecureDelete
 // Two-pass secure file deletion (0xFF then 0x00 overwrite before delete)
 // Compatible with secure delete logic in usplit.c and ujoin.c
-// (c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE License
+// (c) 2026 Cyborg Unicorn Pty Ltd - MIT License
 
 using System;
 using System.IO;

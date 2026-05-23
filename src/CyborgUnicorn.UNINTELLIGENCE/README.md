@@ -163,13 +163,13 @@ MQPublishResult rep = mq.Replicate(remoteURL, remoteQueue, strQueueServer, "",
 ## MicroZOSCII
 
 Bootstrap encoding for transmitting a full ROM over a direct connection.
-Derives a microROM (up to 256 nibbles) from raw bytes or from three 54-character base-62 strings,
+Derives a 240-nibble microROM from raw bytes or from three 54-character base-62 strings,
 then encodes/decodes a full ROM as a stream of 1-byte address lookups into the microROM.
 Each nibble of the ROM hex maps to a randomly selected position — information-theoretically secure transmission.
 A 128KB ROM produces 262,144 addresses (262,144 bytes on the wire — 2x expansion).
 
 ```csharp
-// Derive microROM from byte array(s) — pass null to omit bytes2/3/4
+// Derive microROM from byte array(s) — clamped to 240 nibbles, pass null to omit bytes2/3/4
 string strMicroROM = MicroZOSCII.FromBytes(arrBytes1, null, null, null);
 string strMicroROM = MicroZOSCII.FromBytes(arrBytes1, arrBytes2, arrBytes3, arrBytes4);
 
@@ -178,6 +178,10 @@ string strMicroROM = MicroZOSCII.FromBase62(strChunk1, strChunk2, strChunk3);
 
 // Encode a 240-nibble microROM as 3 x 54 base-62 strings for storage/display
 string[] arrChunks = MicroZOSCII.ToBase62(strMicroROM);  // returns string[3]
+
+// Individual chunk conversion utilities
+string strHex    = MicroZOSCII.Base62ChunkToHex(strChunk);   // 54 base-62 chars → 80 hex nibbles
+string strBase62 = MicroZOSCII.HexChunkToBase62(strHex);     // 80 hex nibbles → 54 base-62 chars
 
 // Check nibble distribution — int[16], index 0=count of '0' ... 15=count of 'F'
 // Average is 15 per nibble (240/16). Recommended minimum: 5 instances per nibble.
@@ -234,7 +238,7 @@ string strHandle = objExchange.Connect("192.168.1.5", 9000);
 byte[] arrSecret = objExchange.DHExchange(strHandle, objROM);
 
 // Derive microROM from shared secret
-string strMicroROM = MicroZOSCII.FromBytes(arrSharedSecret, null, null, null);
+string strMicroROM = MicroZOSCII.FromBytes(arrSecret, null, null, null);
 
 // Send ROM (listener side)
 ROMExchangeResult objResult = objExchange.SendROM(strHandle, strMicroROM, arrROMBytes);
@@ -249,6 +253,33 @@ objExchange.StartKeepalive(strHandle);
 // Status and termination
 ROMExchangeStatus objStatus = objExchange.GetStatus(strHandle);
 objExchange.Terminate(strHandle);
+```
+
+---
+
+## ZRollingHash
+
+BRAINLESS rolling hash — 4-pass XOR chain, 32-bit (4-byte) output.
+Two modes: reverse (default, requires complete payload) and forward (streamable).
+Forward and reverse produce different hashes for the same input.
+No ROM required. Works on bytes or files.
+
+```csharp
+// Hash bytes — reverse (default, requires full payload)
+byte[] arrHash = ZRollingHash.Bytes(arrData);
+
+// Hash bytes — forward (streamable)
+byte[] arrHash = ZRollingHash.Bytes(arrData, true);
+
+// Hash a file
+byte[] arrHash = ZRollingHash.File("data.bin");
+byte[] arrHash = ZRollingHash.File("data.bin", true);  // forward
+
+// Verify
+bool blnOk = ZRollingHash.Verify(arrData, arrHash);
+bool blnOk = ZRollingHash.Verify(arrData, arrHash, true);  // forward
+bool blnOk = ZRollingHash.VerifyFile("data.bin", arrHash);
+bool blnOk = ZRollingHash.VerifyFile("data.bin", arrHash, true);  // forward
 ```
 
 ---

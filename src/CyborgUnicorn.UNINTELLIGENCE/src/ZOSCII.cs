@@ -1,7 +1,7 @@
 // CyborgUnicorn.ZOSCII - ZOSCII
 // ZOSCIIRom, clsZOSCII engine, ZEncode, ZDecode, ZVerify
 // Compatible with zencode.c / zdecode.c / uverify.c -z
-// (c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE License
+// (c) 2026 Cyborg Unicorn Pty Ltd - MIT License
 
 using System;
 using System.IO;
