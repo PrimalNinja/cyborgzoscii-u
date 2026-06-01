@@ -92,6 +92,12 @@ public static class Test
 			runZRollingHashTests();
 
 			#if UNINTELLIGENCE
+			runROMGeneratorTests();
+			#endif
+
+			runTangoTests();
+
+			#if UNINTELLIGENCE
 			runBSplitJoinTests();
 			runUEncodeDecodeTests();
 			runUChainTests();
@@ -145,6 +151,26 @@ public static class Test
 	{
 		// Use the test exe itself as the ROM - guaranteed 64MB+, always present
 		return ZOSCIIRom.FromFile(Process.GetCurrentProcess().MainModule.FileName);
+	}
+
+	private static ZOSCIIRom makeTestROM2()
+	{
+		// Different 128KB slice of the exe — produces a distinct ROM
+		byte[] arrExe = File.ReadAllBytes(Process.GetCurrentProcess().MainModule.FileName);
+		int intOffset = Math.Min(131072, arrExe.Length / 3);
+		byte[] arrRom = new byte[131072];
+		for (int intI = 0; intI < 131072; intI++) { arrRom[intI] = arrExe[(intOffset + intI) % arrExe.Length]; }
+		return ZOSCIIRom.FromBytes(arrRom);
+	}
+
+	private static ZOSCIIRom makeTestROM3()
+	{
+		// Another distinct 128KB slice
+		byte[] arrExe = File.ReadAllBytes(Process.GetCurrentProcess().MainModule.FileName);
+		int intOffset = Math.Min(262144, (arrExe.Length * 2) / 3);
+		byte[] arrRom = new byte[131072];
+		for (int intI = 0; intI < 131072; intI++) { arrRom[intI] = arrExe[(intOffset + intI) % arrExe.Length]; }
+		return ZOSCIIRom.FromBytes(arrRom);
 	}
 
 	private static bool arraysEqual(byte[] arr1_a, byte[] arr2_a)
@@ -526,6 +552,197 @@ public static class Test
 	#endif
 
 	// -------------------------------------------------------------------------
+	// ROMGenerator
+	// -------------------------------------------------------------------------
+
+	#if UNINTELLIGENCE
+	private static void runROMGeneratorTests()
+	{
+		section("ROMGenerator");
+
+		EntropySugar objSugar = new EntropySugar();
+
+		// Populate entropy sugar with representative values
+		objSugar.Add("SYS_TIME",       "1700000000000");
+		objSugar.Add("UPTIME_MS",      "12345678");
+		objSugar.Add("FREE_MEM",       "2048000000");
+		objSugar.Add("INTERACT_DELTA", "42");
+		objSugar.Add("MOUSE_DELTA_X",  "137");
+		objSugar.Add("MOUSE_DELTA_Y",  "88");
+		objSugar.Add("BTN_CLICKS",     "7");
+		objSugar.Add("FORM_OPENS",     "3");
+		objSugar.Add("DECODE_OPS",     "1");
+		objSugar.Add("KEY_TIMESTAMPS", "987654321");
+		objSugar.Add("PROC_HANDLES",   "512");
+		objSugar.Add("ROM_COUNT",      "10");
+		objSugar.Add("FILE_COUNT",     "150");
+
+		// Create a temp folder with synthetic MP3-named files containing random data
+		string strMp3Folder = Path.Combine(m_strTempFolder, "mp3s");
+		Directory.CreateDirectory(strMp3Folder);
+
+		Random objRand = new Random(42);
+		int intI = 0;
+
+		for (intI = 0; intI < 5; intI++)
+		{
+			byte[] arrFakeMP3 = new byte[65536 + intI * 1000];
+			objRand.NextBytes(arrFakeMP3);
+			File.WriteAllBytes(Path.Combine(strMp3Folder, "track" + intI + ".mp3"), arrFakeMP3);
+		}
+
+		// Test ROMGenerator.Bytes — should return 128KB
+		byte[] arrRaw = ROMGenerator.Bytes(new string[] { strMp3Folder }, objSugar);
+		if (arrRaw != null && arrRaw.Length == 131072) { pass("ROMGenerator.Bytes - returns 131072 bytes"); }
+		else { fail("ROMGenerator.Bytes", "returned " + (arrRaw == null ? "null" : arrRaw.Length + " bytes")); }
+
+		// Test byte distribution — no byte value should dominate (near-flat expected)
+		if (arrRaw != null)
+		{
+			int[] arrCounts = new int[256];
+			for (intI = 0; intI < arrRaw.Length; intI++) { arrCounts[arrRaw[intI]]++; }
+			int intMin = arrCounts[0];
+			int intMax = arrCounts[0];
+			for (intI = 1; intI < 256; intI++)
+			{
+				if (arrCounts[intI] < intMin) { intMin = arrCounts[intI]; }
+				if (arrCounts[intI] > intMax) { intMax = arrCounts[intI]; }
+			}
+			double dblExpected = 131072.0 / 256.0; // ~512
+			double dblVariance = (intMax - intMin) / dblExpected;
+			if (dblVariance < 0.5) { pass("ROMGenerator.Bytes - byte distribution near-flat (variance " + dblVariance.ToString("F3") + ")"); }
+			else { fail("ROMGenerator.Bytes distribution", "variance " + dblVariance.ToString("F3") + " exceeds 0.5 (min=" + intMin + " max=" + intMax + ")"); }
+		}
+
+		// Test determinism — same entropy + same files = same ROM
+		byte[] arrRaw2 = ROMGenerator.Bytes(new string[] { strMp3Folder }, objSugar);
+		if (arrRaw != null && arrRaw2 != null && arraysEqual(arrRaw, arrRaw2)) { pass("ROMGenerator.Bytes - deterministic (same entropy produces same ROM)"); }
+		else { fail("ROMGenerator.Bytes determinism", "two calls with same entropy produced different results"); }
+
+		// Test different entropy = different ROM
+		EntropySugar objSugar2 = new EntropySugar();
+		objSugar2.Add("SYS_TIME",  "9999999999999");
+		objSugar2.Add("UPTIME_MS", "99999999");
+		byte[] arrRaw3 = ROMGenerator.Bytes(new string[] { strMp3Folder }, objSugar2);
+		if (arrRaw != null && arrRaw3 != null && !arraysEqual(arrRaw, arrRaw3)) { pass("ROMGenerator.Bytes - different entropy produces different ROM"); }
+		else { fail("ROMGenerator.Bytes entropy sensitivity", "different entropy produced same ROM"); }
+
+		// Test empty folder returns null
+		string strEmptyFolder = Path.Combine(m_strTempFolder, "empty_mp3s");
+		Directory.CreateDirectory(strEmptyFolder);
+		byte[] arrEmpty = ROMGenerator.Bytes(new string[] { strEmptyFolder }, objSugar);
+		if (arrEmpty == null) { pass("ROMGenerator.Bytes - empty folder returns null"); }
+		else { fail("ROMGenerator.Bytes empty folder", "expected null, got " + arrEmpty.Length + " bytes"); }
+
+		// Test subfolder scanning — MP3s in subfolders should be found
+		string strSubFolder = Path.Combine(strMp3Folder, "sub");
+		Directory.CreateDirectory(strSubFolder);
+		byte[] arrSubFakeMP3 = new byte[32768];
+		objRand.NextBytes(arrSubFakeMP3);
+		File.WriteAllBytes(Path.Combine(strSubFolder, "subtrack.mp3"), arrSubFakeMP3);
+		byte[] arrWithSub = ROMGenerator.Bytes(new string[] { strMp3Folder }, objSugar);
+		if (arrWithSub != null && arrWithSub.Length == 131072) { pass("ROMGenerator.Bytes - subfolder MP3s scanned"); }
+		else { fail("ROMGenerator.Bytes subfolder", "returned " + (arrWithSub == null ? "null" : arrWithSub.Length + " bytes")); }
+	}
+	#endif
+
+	// -------------------------------------------------------------------------
+	// Chain Tango
+	// -------------------------------------------------------------------------
+
+	private static void runTangoTests()
+	{
+		section("Chain Tango");
+
+		byte[] arrPlain = new byte[256];
+		for (int intI = 0; intI < 256; intI++) { arrPlain[intI] = (byte)intI; }
+
+		// 1 ROM — identical behaviour to ZEncode/ZDecode
+		using (ZOSCIIRom objRom1 = makeTestROM())
+		{
+			ZOSCIIRom[] arrRoms1 = new ZOSCIIRom[] { objRom1 };
+
+			byte[] arrEncoded1 = ZEncode.Chain(arrPlain, arrRoms1, true);
+			if (arrEncoded1 != null && arrEncoded1.Length == arrPlain.Length * 2) { pass("ZEncode.Chain Tango 1 ROM - 2x expansion"); }
+			else { fail("ZTango.Encode 1 ROM", "unexpected size or null"); }
+
+			byte[] arrDecoded1 = ZDecode.Chain(arrEncoded1, arrRoms1, true);
+			if (arrDecoded1 != null && arraysEqual(arrDecoded1, arrPlain)) { pass("ZDecode.Chain Tango 1 ROM - round trip"); }
+			else { fail("ZTango.Decode 1 ROM", "round trip failed"); }
+		}
+
+		// 2 ROMs — round trip
+		using (ZOSCIIRom objRom1 = makeTestROM())
+		using (ZOSCIIRom objRom2 = makeTestROM2())
+		{
+			ZOSCIIRom[] arrRoms2 = new ZOSCIIRom[] { objRom1, objRom2 };
+
+			byte[] arrEncoded2 = ZEncode.Chain(arrPlain, arrRoms2, true);
+			if (arrEncoded2 != null && arrEncoded2.Length == arrPlain.Length * 2) { pass("ZEncode.Chain Tango 2 ROMs - 2x expansion"); }
+			else { fail("ZTango.Encode 2 ROMs", "unexpected size or null"); }
+
+			byte[] arrDecoded2 = ZDecode.Chain(arrEncoded2, arrRoms2, true);
+			if (arrDecoded2 != null && arraysEqual(arrDecoded2, arrPlain)) { pass("ZDecode.Chain Tango 2 ROMs - round trip"); }
+			else { fail("ZTango.Decode 2 ROMs", "round trip failed"); }
+
+			// Wrong ROM count fails decode
+			ZOSCIIRom[] arrRoms1Only = new ZOSCIIRom[] { objRom1 };
+			byte[] arrBadDecode = ZDecode.Chain(arrEncoded2, arrRoms1Only, true);
+			if (arrBadDecode == null || !arraysEqual(arrBadDecode, arrPlain)) { pass("ZDecode.Chain Tango 2 ROMs - wrong ROM count fails"); }
+			else { fail("ZDecode.Chain Tango wrong count", "should not have decoded correctly"); }
+		}
+
+		// 3 ROMs — round trip
+		using (ZOSCIIRom objRom1 = makeTestROM())
+		using (ZOSCIIRom objRom2 = makeTestROM2())
+		using (ZOSCIIRom objRom3 = makeTestROM3())
+		{
+			ZOSCIIRom[] arrRoms3 = new ZOSCIIRom[] { objRom1, objRom2, objRom3 };
+
+			byte[] arrEncoded3 = ZEncode.Chain(arrPlain, arrRoms3, true);
+			if (arrEncoded3 != null && arrEncoded3.Length == arrPlain.Length * 2) { pass("ZEncode.Chain Tango 3 ROMs - 2x expansion"); }
+			else { fail("ZTango.Encode 3 ROMs", "unexpected size or null"); }
+
+			byte[] arrDecoded3 = ZDecode.Chain(arrEncoded3, arrRoms3, true);
+			if (arrDecoded3 != null && arraysEqual(arrDecoded3, arrPlain)) { pass("ZDecode.Chain Tango 3 ROMs - round trip"); }
+			else { fail("ZTango.Decode 3 ROMs", "round trip failed"); }
+
+			// 1 ROM vs 2 ROM vs 3 ROM produce different output for same plaintext
+			using (ZOSCIIRom objRomA = makeTestROM())
+			using (ZOSCIIRom objRomB = makeTestROM())
+			{
+				ZOSCIIRom[] arrRoms1 = new ZOSCIIRom[] { objRomA };
+				ZOSCIIRom[] arrRoms2 = new ZOSCIIRom[] { objRomA, objRomB };
+				byte[] arrEnc1 = ZEncode.Chain(arrPlain, arrRoms1, true);
+				byte[] arrEnc2 = ZEncode.Chain(arrPlain, arrRoms2, true);
+				if (arrEnc1 != null && arrEnc2 != null && !arraysEqual(arrEnc1, arrEnc2)) { pass("ZEncode.Chain Tango - different ROM counts produce different output"); }
+				else { fail("ZEncode.Chain Tango ROM count difference", "1 and 2 ROM outputs identical"); }
+			}
+		}
+
+		// UEncode/UDecode.Chain Tango — UNSIGNAL (UNINTELLIGENCE only)
+		using (ZOSCIIRom objRom1 = makeTestROM())
+		using (ZOSCIIRom objRom2 = makeTestROM2())
+		using (ZOSCIIRom objRom3 = makeTestROM3())
+		{
+			ZOSCIIRom[] arrRoms3 = new ZOSCIIRom[] { objRom1, objRom2, objRom3 };
+			#if UNINTELLIGENCE
+			byte[] arrUEncoded = UEncode.Chain(arrPlain, arrRoms3, true);
+			if (arrUEncoded != null && arrUEncoded.Length > arrPlain.Length * 2) { pass("UEncode.Chain Tango 3 ROMs - slightly >2x expansion"); }
+			else { fail("UEncode.Chain Tango 3 ROMs", "unexpected size " + (arrUEncoded == null ? "null" : arrUEncoded.Length.ToString())); }
+
+			byte[] arrUDecoded = UDecode.Chain(arrUEncoded, arrRoms3, true);
+			if (arrUDecoded != null && arraysEqual(arrUDecoded, arrPlain)) { pass("UDecode.Chain Tango 3 ROMs - round trip"); }
+			else { fail("UDecode.Chain Tango 3 ROMs", "round trip failed"); }
+
+			// Wrong ROM fails
+			ZOSCIIRom[] arrRoms1Only = new ZOSCIIRom[] { objRom1 };
+			byte[] arrUBadDecode = UDecode.Chain(arrUEncoded, arrRoms1Only, true);
+			if (arrUBadDecode == null || !arraysEqual(arrUBadDecode, arrPlain)) { pass("UDecode.Chain Tango - wrong ROM count fails"); }
+			else { fail("UDecode.Chain Tango wrong ROM count", "should not have decoded correctly"); }
+			#endif
+		}
+	}
 	// Source
 	// -------------------------------------------------------------------------
 

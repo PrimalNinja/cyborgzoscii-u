@@ -8,22 +8,6 @@ using System.IO;
 
 namespace CyborgUnicorn.ZOSCII
 {
-    /// <summary>Result of a ROM generation operation.</summary>
-    public class ROMGenerationResult
-    {
-        /// <summary>True if generation and save succeeded.</summary>
-        public bool Success { get; set; }
-
-        /// <summary>The loaded ZOSCIIRom ready for use. Null on failure.</summary>
-        public ZOSCIIRom Rom { get; set; }
-
-        /// <summary>Raw 128KB ROM bytes before encoding. Null on failure.</summary>
-        public byte[] RawBytes { get; set; }
-
-        /// <summary>Full path to the saved .rom.sig file. Empty on failure.</summary>
-        public string SavedPath { get; set; }
-    }
-
     /// <summary>
     /// Generates ZOSCII ROMs from MP3 source files using Entropy Sugar to derive
     /// generation parameters. Same entropy + same MP3s = same ROM. Different sessions
@@ -60,54 +44,6 @@ namespace CyborgUnicorn.ZOSCII
             catch { }
 
             return arrResult;
-        }
-
-        /// <summary>
-        /// Generate a ROM, encode it with a signing ROM, and save to a .rom.sig file.
-        /// strPrefix_a is optional — omit or pass empty for numeric filename only.
-        /// intROMID_a is the numeric ID appended to the filename.
-        /// </summary>
-        public static ROMGenerationResult File(
-            string[] arrMp3Folders_a,
-            EntropySugar objSugar_a,
-            ZOSCIIRom objSigningRom_a,
-            string strOutputFolder_a,
-            string strPrefix_a,
-            int intROMID_a)
-        {
-            ROMGenerationResult objResult = new ROMGenerationResult();
-
-            try
-            {
-                byte[] arrRaw = Bytes(arrMp3Folders_a, objSugar_a);
-
-                if (arrRaw != null)
-                {
-                    objResult.RawBytes = arrRaw;
-
-                    byte[] arrEncoded = UEncode.Bytes(arrRaw, objSigningRom_a);
-
-                    if (arrEncoded != null)
-                    {
-                        if (!Directory.Exists(strOutputFolder_a))
-                        {
-                            Directory.CreateDirectory(strOutputFolder_a);
-                        }
-
-                        string strFilePart = (strPrefix_a.Length > 0 ? strPrefix_a + "_" : "") + intROMID_a.ToString();
-                        string strDestPath = Path.Combine(strOutputFolder_a, strFilePart + ".rom.sig");
-
-                        System.IO.File.WriteAllBytes(strDestPath, arrEncoded);
-
-                        objResult.Rom = ZOSCIIRom.FromBytes(arrRaw);
-                        objResult.SavedPath = strDestPath;
-                        objResult.Success = true;
-                    }
-                }
-            }
-            catch { }
-
-            return objResult;
         }
 
         // --- Private ---

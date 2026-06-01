@@ -223,7 +223,7 @@ namespace CyborgUnicorn.ZOSCII
 
         // --- UNSIGNAL encode - byte to byte ---
 
-        public static byte[] fuencodeByteToByte(ref RomData ptrRom_a, byte[] arrInput_a)
+        public static byte[] fuencodeByteToByte(ref RomData ptrRom_a, byte[] arrInput_a, RomData[] arrExtraRoms_a = null, bool blnTango_a = false)
         {
             byte[] arrResult = null;
             ByteAddresses[] arrOffsetLookup = new ByteAddresses[256];
@@ -329,16 +329,49 @@ namespace CyborgUnicorn.ZOSCII
                     Array.Copy(ptrPrefix, 0, arrResult, intPos, byPrefixLen);
                     intPos += byPrefixLen;
 
+                    bool blnTango = blnTango_a && arrExtraRoms_a != null && arrExtraRoms_a.Length > 1;
+                    int intROMCount = blnTango ? arrExtraRoms_a.Length : 1;
+                    Random[] arrTangoRands = null;
+                    ByteAddresses[][] arrTangoLookups = null;
+
+                    if (blnTango)
+                    {
+                        arrTangoRands = new Random[intROMCount];
+                        arrTangoLookups = new ByteAddresses[intROMCount][];
+                        for (intI = 0; intI < intROMCount; intI++)
+                        {
+                            arrTangoRands[intI] = createRandomSeed(ref arrExtraRoms_a[intI], 0);
+                            arrTangoLookups[intI] = arrExtraRoms_a[intI].arrLookup;
+                        }
+                    }
+
                     for (intI = 0; intI < arrInput_a.Length; intI++)
                     {
                         byte by = arrInput_a[intI];
-                        if (arrOffsetLookup[by].intCount > 0)
+                        if (blnTango)
                         {
-                            uint intRandomIdx = (uint)ptrRandEncode.Next((int)arrOffsetLookup[by].intCount);
-                            ushort intAddress = (ushort)arrOffsetLookup[by].ptrAddresses[intRandomIdx];
-                            byte[] arrAddr = BitConverter.GetBytes(intAddress);
-                            arrResult[intPos++] = arrAddr[0];
-                            arrResult[intPos++] = arrAddr[1];
+                            int intROMIdx = intI % intROMCount;
+                            ByteAddresses[] objLookup = arrTangoLookups[intROMIdx];
+                            Random ptrTangoRand = arrTangoRands[intROMIdx];
+                            if (objLookup[by].intCount > 0)
+                            {
+                                uint intRandomIdx = (uint)ptrTangoRand.Next((int)objLookup[by].intCount);
+                                ushort intAddress = (ushort)objLookup[by].ptrAddresses[intRandomIdx];
+                                byte[] arrAddr = BitConverter.GetBytes(intAddress);
+                                arrResult[intPos++] = arrAddr[0];
+                                arrResult[intPos++] = arrAddr[1];
+                            }
+                        }
+                        else
+                        {
+                            if (arrOffsetLookup[by].intCount > 0)
+                            {
+                                uint intRandomIdx = (uint)ptrRandEncode.Next((int)arrOffsetLookup[by].intCount);
+                                ushort intAddress = (ushort)arrOffsetLookup[by].ptrAddresses[intRandomIdx];
+                                byte[] arrAddr = BitConverter.GetBytes(intAddress);
+                                arrResult[intPos++] = arrAddr[0];
+                                arrResult[intPos++] = arrAddr[1];
+                            }
                         }
                     }
 
@@ -351,7 +384,7 @@ namespace CyborgUnicorn.ZOSCII
 
         // --- UNSIGNAL decode - stream to stream ---
 
-        private static bool fudecodeStreamToStream(RomData ptrRom_a, Stream ptrInput_a, Stream ptrOutput_a)
+        private static bool fudecodeStreamToStream(RomData ptrRom_a, Stream ptrInput_a, Stream ptrOutput_a, RomData[] arrExtraRoms_a = null, bool blnTango_a = false)
         {
             bool blnSuccess = false;
             long lngInputSize = ptrInput_a.Length;
@@ -377,6 +410,9 @@ namespace CyborgUnicorn.ZOSCII
                 long lngDataSize = lngInputSize - HEADER_SIZE - byPrefixLen - bySuffixLen;
                 long lngSlots = lngDataSize / 2;
 
+                bool blnTango = blnTango_a && arrExtraRoms_a != null && arrExtraRoms_a.Length > 1;
+                int intROMCount = blnTango ? arrExtraRoms_a.Length : 1;
+
                 if (lngSlots >= 0)
                 {
                     for (intI = 0; intI < byPrefixLen; intI++)
@@ -394,9 +430,21 @@ namespace CyborgUnicorn.ZOSCII
                             if (ptrInput_a.Read(arrBuf, 0, 2) != 2) { break; }
 
                             ushort intAddr = BitConverter.ToUInt16(arrBuf, 0);
-                            if (intAddr < lngEffSize)
+
+                            if (blnTango)
                             {
-                                ptrOutput_a.WriteByte(ptrRom_a.ptrROMData[intOffset + intAddr]);
+                                RomData objRomCurrent = arrExtraRoms_a[intI % intROMCount];
+                                if (intAddr < objRomCurrent.lngROMSize)
+                                {
+                                    ptrOutput_a.WriteByte(objRomCurrent.ptrROMData[intAddr]);
+                                }
+                            }
+                            else
+                            {
+                                if (intAddr < lngEffSize)
+                                {
+                                    ptrOutput_a.WriteByte(ptrRom_a.ptrROMData[intOffset + intAddr]);
+                                }
                             }
                         }
 
@@ -427,7 +475,7 @@ namespace CyborgUnicorn.ZOSCII
             return blnSuccess;
         }
 
-        public static byte[] fudecodeByteToByte(RomData ptrRom_a, byte[] arrEncodedData_a)
+        public static byte[] fudecodeByteToByte(RomData ptrRom_a, byte[] arrEncodedData_a, RomData[] arrExtraRoms_a = null, bool blnTango_a = false)
         {
             byte[] arrResult = null;
 
@@ -436,7 +484,7 @@ namespace CyborgUnicorn.ZOSCII
                 using (MemoryStream ptrInput = new MemoryStream(arrEncodedData_a))
                 using (MemoryStream ptrOutput = new MemoryStream())
                 {
-                    if (fudecodeStreamToStream(ptrRom_a, ptrInput, ptrOutput))
+                    if (fudecodeStreamToStream(ptrRom_a, ptrInput, ptrOutput, arrExtraRoms_a, blnTango_a))
                     {
                         arrResult = ptrOutput.ToArray();
                     }
@@ -490,24 +538,35 @@ namespace CyborgUnicorn.ZOSCII
         }
 
         /// <summary>Chain-encode a byte array through multiple ROMs in sequence. Returns encoded bytes or null if any stage fails.</summary>
-        public static byte[] Chain(byte[] arrInput_a, ZOSCIIRom[] arrRoms_a)
+        /// <summary>Chain-encode through multiple ROMs. If blnTango_a is true, round-robins ROMs at payload byte level — same 2x expansion, up to 3x entropy. With 1 ROM, Tango is identical to standard.</summary>
+        public static byte[] Chain(byte[] arrInput_a, ZOSCIIRom[] arrRoms_a, bool blnTango_a = false)
         {
             byte[] arrResult = null;
             try
             {
-                arrResult = arrInput_a;
-                int intI = 0;
-                while (intI < arrRoms_a.Length && arrResult != null)
+                if (blnTango_a && arrRoms_a.Length > 1)
                 {
-                    arrResult = Bytes(arrResult, arrRoms_a[intI]);
-                    intI++;
+                    RomData[] arrRomData = new RomData[arrRoms_a.Length];
+                    for (int intI = 0; intI < arrRoms_a.Length; intI++) { arrRomData[intI] = arrRoms_a[intI].GetRomData(); }
+                    RomData objFirst = arrRomData[0];
+                    arrResult = clsUnsignal.fuencodeByteToByte(ref objFirst, arrInput_a, arrRomData, true);
+                }
+                else
+                {
+                    arrResult = arrInput_a;
+                    int intI = 0;
+                    while (intI < arrRoms_a.Length && arrResult != null)
+                    {
+                        arrResult = Bytes(arrResult, arrRoms_a[intI]);
+                        intI++;
+                    }
                 }
             }
             catch { }
             return arrResult;
         }
 
-        /// <summary>Chain-encode a file through multiple ROMs in sequence using temp files — no full file load into RAM. Returns true on success.</summary>
+        /// <summary>Chain-encode a file through multiple ROMs in sequence using temp files - no full file load into RAM. Returns true on success.</summary>
 		public static bool ChainFile(string strInputPath_a, string strOutputPath_a, ZOSCIIRom[] arrRoms_a)
 		{
 			bool blnResult = false;
@@ -586,24 +645,35 @@ namespace CyborgUnicorn.ZOSCII
         }
 
         /// <summary>Chain-decode a byte array through multiple ROMs in reverse sequence. Returns decoded bytes or null if any stage fails.</summary>
-        public static byte[] Chain(byte[] arrInput_a, ZOSCIIRom[] arrRoms_a)
+        /// <summary>Chain-decode through multiple ROMs. If blnTango_a is true, round-robins ROMs at payload byte level — must match encode.</summary>
+        public static byte[] Chain(byte[] arrInput_a, ZOSCIIRom[] arrRoms_a, bool blnTango_a = false)
         {
             byte[] arrResult = null;
             try
             {
-                arrResult = arrInput_a;
-                int intI = arrRoms_a.Length - 1;
-                while (intI >= 0 && arrResult != null)
+                if (blnTango_a && arrRoms_a.Length > 1)
                 {
-                    arrResult = Bytes(arrResult, arrRoms_a[intI]);
-                    intI--;
+                    RomData[] arrRomData = new RomData[arrRoms_a.Length];
+                    for (int intI = 0; intI < arrRoms_a.Length; intI++) { arrRomData[intI] = arrRoms_a[intI].GetRomData(); }
+                    RomData objFirst = arrRomData[0];
+                    arrResult = clsUnsignal.fudecodeByteToByte(objFirst, arrInput_a, arrRomData, true);
+                }
+                else
+                {
+                    arrResult = arrInput_a;
+                    int intI = arrRoms_a.Length - 1;
+                    while (intI >= 0 && arrResult != null)
+                    {
+                        arrResult = Bytes(arrResult, arrRoms_a[intI]);
+                        intI--;
+                    }
                 }
             }
             catch { }
             return arrResult;
         }
 
-        /// <summary>Chain-decode a file through multiple ROMs in reverse sequence using temp files — no full file load into RAM. Returns true on success.</summary>
+        /// <summary>Chain-decode a file through multiple ROMs in reverse sequence using temp files - no full file load into RAM. Returns true on success.</summary>
         public static bool ChainFile(string strInputPath_a, string strOutputPath_a, ZOSCIIRom[] arrRoms_a)
         {
             bool blnResult = false;

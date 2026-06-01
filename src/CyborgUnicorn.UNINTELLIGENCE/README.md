@@ -25,6 +25,8 @@ byte[] encoded   = UEncode.Bytes(data, rom);
 byte[] decoded   = UDecode.Bytes(encoded, rom);
 byte[] chain     = UEncode.Chain(data, new[] { rom1, rom2, rom3 });
 byte[] unchained = UDecode.Chain(chain, new[] { rom1, rom2, rom3 });
+byte[] tango     = UEncode.Chain(data, new[] { rom1, rom2, rom3 }, true);   // Tango: round-robin ROMs per byte, 2x expansion, up to 3x entropy
+byte[] untango   = UDecode.Chain(tango, new[] { rom1, rom2, rom3 }, true);  // must match encode
 bool   ok        = UEncode.ChainFile("input.bin", "output.sig", new[] { rom1, rom2, rom3 });
 bool   ok        = UDecode.ChainFile("output.sig", "recovered.bin", new[] { rom1, rom2, rom3 });
 UEncode.File("input.bin", "output.sig", rom);
@@ -55,6 +57,8 @@ byte[] encoded   = ZEncode.Bytes(data, rom);
 byte[] decoded   = ZDecode.Bytes(encoded, rom);
 byte[] chain     = ZEncode.Chain(data, new[] { rom1, rom2, rom3 });
 byte[] unchained = ZDecode.Chain(chain, new[] { rom1, rom2, rom3 });
+byte[] tango     = ZEncode.Chain(data, new[] { rom1, rom2, rom3 }, true);   // Tango: round-robin ROMs per byte, 2x expansion, up to 3x entropy
+byte[] untango   = ZDecode.Chain(tango, new[] { rom1, rom2, rom3 }, true);  // must match encode
 bool   ok        = ZEncode.ChainFile("input.bin", "output.zoc", new[] { rom1, rom2, rom3 });
 bool   ok        = ZDecode.ChainFile("output.zoc", "recovered.bin", new[] { rom1, rom2, rom3 });
 ZEncode.File("input.bin", "output.zoc", rom);
@@ -306,11 +310,12 @@ string json                        = sugar.ToJson();
 
 ## ROMGenerator
 
+Generates 128KB ROMs from MP3 source files using EntropySugar to derive generation parameters.
+Same entropy + same MP3s = same ROM. Different sessions produce different ROMs from the same source files.
+Use `UEncode.Chain` with the resident ROMs to encode the raw bytes before saving to disk.
+
 ```csharp
 byte[] rawRom = ROMGenerator.Bytes(new[] { @"C:\data\mp3s" }, sugar);
-
-ROMGenerationResult result = ROMGenerator.File(
-    new[] { @"C:\data\mp3s" }, sugar, signingRom, @"C:\data\roms", "session", 1);
 ```
 
 ---
