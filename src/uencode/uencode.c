@@ -1,4 +1,4 @@
-// Cyborg UNSIGNAL Protocol v20260418
+// Cyborg UNSIGNAL Protocol v20260601
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // This software is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 // ZOSCII core logic remains under MIT License.
@@ -39,266 +39,143 @@ static void buildLookupTable(ROMData* ptrROMData_a)
     long intHeaderSize = 0;
     int intI = 0;
     long intJ = 0;
-    
-    // Initialize lookup array
-    for (intI = 0; intI < 256; intI++)
-    {
-        ptrROMData_a->arrLookup[intI].ptrAddresses = NULL;
-        ptrROMData_a->arrLookup[intI].intCount = 0;
-    }
-    
-    // Header addresses must be within the first 64KB (16-bit addresses)
-    intHeaderSize = (ptrROMData_a->lngROMSize > 65536L) ? 65536L : ptrROMData_a->lngROMSize;
-    
-    // Count occurrences
-    for (intJ = 0; intJ < intHeaderSize; intJ++)
-    {
-        arrCounts[ptrROMData_a->ptrROMData[intJ]]++;
-    }
-    
-    // Allocate memory for each byte value
-    for (intI = 0; intI < 256; intI++)
-    {
-        if (arrCounts[intI] > 0)
-        {
-            ptrROMData_a->arrLookup[intI].ptrAddresses = 
-                (uint32_t*)malloc(arrCounts[intI] * sizeof(uint32_t));
-            ptrROMData_a->arrLookup[intI].intCount = 0;
-        }
-    }
-    
-    // Fill addresses
-    for (intJ = 0; intJ < intHeaderSize; intJ++)
-    {
-        uint8_t by = ptrROMData_a->ptrROMData[intJ];
-        ptrROMData_a->arrLookup[by].ptrAddresses[ptrROMData_a->arrLookup[by].intCount++] = (uint32_t)intJ;
-    }
 
-    // Seed rand based on ROM content
-    uint32_t intROMHash = 0;
-    for (intJ = 0; intJ < ptrROMData_a->lngROMSize; intJ++)
+    for (intI = 0; intI < 256; intI++) { ptrROMData_a->arrLookup[intI].ptrAddresses = NULL; ptrROMData_a->arrLookup[intI].intCount = 0; }
+    intHeaderSize = (ptrROMData_a->lngROMSize > 65536L) ? 65536L : ptrROMData_a->lngROMSize;
+    for (intJ = 0; intJ < intHeaderSize; intJ++) { arrCounts[ptrROMData_a->ptrROMData[intJ]]++; }
+    for (intI = 0; intI < 256; intI++)
     {
-        intROMHash = (intROMHash * 33) + ptrROMData_a->ptrROMData[intJ];
+        if (arrCounts[intI] > 0) { ptrROMData_a->arrLookup[intI].ptrAddresses = (uint32_t*)malloc(arrCounts[intI] * sizeof(uint32_t)); ptrROMData_a->arrLookup[intI].intCount = 0; }
     }
-    
+    for (intJ = 0; intJ < intHeaderSize; intJ++) { uint8_t by = ptrROMData_a->ptrROMData[intJ]; ptrROMData_a->arrLookup[by].ptrAddresses[ptrROMData_a->arrLookup[by].intCount++] = (uint32_t)intJ; }
+    uint32_t intROMHash = 0;
+    for (intJ = 0; intJ < ptrROMData_a->lngROMSize; intJ++) { intROMHash = (intROMHash * 33) + ptrROMData_a->ptrROMData[intJ]; }
     intROMHash ^= (uint32_t)time(NULL);
-    
     srand(intROMHash);
 }
 
 static uint16_t findOffset(uint8_t byLow_a, uint8_t byHigh_a, long lngROMSize_a)
 {
     uint16_t intRaw = (uint16_t)byLow_a | ((uint16_t)byHigh_a << 8);
-    uint16_t intResult = 0;
-    
-    if (lngROMSize_a >= 131072L)
-    {
-        intResult = intRaw;
-    }
-    else
-    {
-        long lngMax = (lngROMSize_a * UNSIGNAL_OFFSET_LIMIT_PCT) / 100;
-        if (lngMax == 0)
-        {
-            intResult = 0;
-        }
-        else
-        {
-            intResult = (uint16_t)(intRaw % (lngMax + 1));
-        }
-    }
-    
-    return intResult;
+    if (lngROMSize_a >= 131072L) { return intRaw; }
+    long lngMax = (lngROMSize_a * UNSIGNAL_OFFSET_LIMIT_PCT) / 100;
+    if (lngMax == 0) { return 0; }
+    return (uint16_t)(intRaw % (lngMax + 1));
 }
 
 static uint32_t findROMAddress(const ByteAddresses* ptrLookup_a, uint8_t byTarget_a)
 {
-    uint32_t intResult = 0;
-    
-    if (ptrLookup_a[byTarget_a].intCount > 0)
-    {
-        uint32_t intRandomIdx = rand() % ptrLookup_a[byTarget_a].intCount;
-        intResult = ptrLookup_a[byTarget_a].ptrAddresses[intRandomIdx];
-    }
-    
-    return intResult;
+    if (ptrLookup_a[byTarget_a].intCount > 0) { return ptrLookup_a[byTarget_a].ptrAddresses[rand() % ptrLookup_a[byTarget_a].intCount]; }
+    return 0;
 }
 
 static ROMData* loadROM(const char* strFilename_a)
 {
-    ROMData* ptrROMData = NULL;
-    FILE* ptrROMFile = NULL;
-    
-    ptrROMData = (ROMData*)malloc(sizeof(ROMData));
+    ROMData* ptrROMData = (ROMData*)malloc(sizeof(ROMData));
     if (ptrROMData)
     {
-        // Initialize
         memset(ptrROMData, 0, sizeof(ROMData));
-        
-        ptrROMFile = fopen(strFilename_a, "rb");
+        FILE* ptrROMFile = fopen(strFilename_a, "rb");
         if (ptrROMFile)
         {
-            fseek(ptrROMFile, 0, SEEK_END);
-            ptrROMData->lngROMSize = ftell(ptrROMFile);
-            fseek(ptrROMFile, 0, SEEK_SET);
-            
-            if (ptrROMData->lngROMSize > UNSIGNAL_ROM_LOAD_MAX)
-            {
-                ptrROMData->lngROMSize = UNSIGNAL_ROM_LOAD_MAX;
-            }
-            
+            fseek(ptrROMFile, 0, SEEK_END); ptrROMData->lngROMSize = ftell(ptrROMFile); fseek(ptrROMFile, 0, SEEK_SET);
+            if (ptrROMData->lngROMSize > UNSIGNAL_ROM_LOAD_MAX) { ptrROMData->lngROMSize = UNSIGNAL_ROM_LOAD_MAX; }
             ptrROMData->ptrROMData = (uint8_t*)malloc(ptrROMData->lngROMSize);
-            if (ptrROMData->ptrROMData)
-            {
-                fread(ptrROMData->ptrROMData, 1, ptrROMData->lngROMSize, ptrROMFile);
-                
-                // Pre-build lookup table for reuse across multiple encodes
-                buildLookupTable(ptrROMData);
-            }
-            else
-            {
-                free(ptrROMData);
-                ptrROMData = NULL;
-            }
-            
+            if (ptrROMData->ptrROMData) { fread(ptrROMData->ptrROMData, 1, ptrROMData->lngROMSize, ptrROMFile); buildLookupTable(ptrROMData); }
+            else { free(ptrROMData); ptrROMData = NULL; }
             fclose(ptrROMFile);
         }
-        else
-        {
-            free(ptrROMData);
-            ptrROMData = NULL;
-        }
+        else { free(ptrROMData); ptrROMData = NULL; }
     }
-    
     return ptrROMData;
 }
 
 static void unloadROM(ROMData* ptrROMData_a)
 {
     int intI = 0;
-    
     if (ptrROMData_a)
     {
-        if (ptrROMData_a->ptrROMData)
-        {
-            free(ptrROMData_a->ptrROMData);
-        }
-        
-        for (intI = 0; intI < 256; intI++)
-        {
-            if (ptrROMData_a->arrLookup[intI].ptrAddresses)
-            {
-                free(ptrROMData_a->arrLookup[intI].ptrAddresses);
-            }
-        }
-        
+        if (ptrROMData_a->ptrROMData) { free(ptrROMData_a->ptrROMData); }
+        for (intI = 0; intI < 256; intI++) { if (ptrROMData_a->arrLookup[intI].ptrAddresses) { free(ptrROMData_a->arrLookup[intI].ptrAddresses); } }
         free(ptrROMData_a);
     }
 }
 
-static bool encodeFile(const ROMData* ptrROMData_a, 
-                       const char* strInputFile_a, 
-                       const char* strOutputFile_a)
+static void secureDelete(const char* strPath_a)
+{
+    FILE* ptrFile = fopen(strPath_a, "r+b");
+    long lngSize = 0; uint8_t byVal = 0; long intI = 0;
+    if (ptrFile)
+    {
+        fseek(ptrFile, 0, SEEK_END); lngSize = ftell(ptrFile); fseek(ptrFile, 0, SEEK_SET);
+        byVal = 0xFF; for (intI = 0; intI < lngSize; intI++) { fwrite(&byVal, 1, 1, ptrFile); }
+        fseek(ptrFile, 0, SEEK_SET);
+        byVal = 0x00; for (intI = 0; intI < lngSize; intI++) { fwrite(&byVal, 1, 1, ptrFile); }
+        fclose(ptrFile);
+    }
+    remove(strPath_a);
+}
+
+// Single-ROM UNSIGNAL encode pass
+static bool encodeSingle(const ROMData* ptrROMData_a, const char* strInputFile_a, const char* strOutputFile_a)
 {
     uint32_t arrOffsetCounts[256] = {0};
     ByteAddresses arrOffsetLookup[256] = {0};
     bool blnLookupValid = true;
     bool blnSuccess = false;
-    uint8_t byOffsetHigh = 0;
-    uint8_t byOffsetLow = 0;
-    uint8_t byPrefixLen = 0;
-    uint8_t bySuffixLen = 0;
-    int intCh = 0;
-    long intEffectiveSize = 0;
-    uint16_t intH1 = 0;
-    uint16_t intH2 = 0;
-    uint16_t intH3 = 0;
-    uint16_t intH4 = 0;
-    int intI = 0;
-    long intJ = 0;
-    uint16_t intROMOffset = 0;
+    uint8_t byOffsetHigh = 0, byOffsetLow = 0, byPrefixLen = 0, bySuffixLen = 0;
+    int intCh = 0, intI = 0;
+    long intEffectiveSize = 0, intJ = 0;
+    uint16_t intH1 = 0, intH2 = 0, intH3 = 0, intH4 = 0, intROMOffset = 0;
     FILE* ptrInput = NULL;
     FILE* ptrOutput = NULL;
     uint8_t* ptrPrefix = NULL;
     uint8_t* ptrSuffix = NULL;
-    
-    // Generate header values
-    byOffsetLow = (uint8_t)(rand() % 256);
+
+    byOffsetLow  = (uint8_t)(rand() % 256);
     byOffsetHigh = (uint8_t)(rand() % 256);
-    byPrefixLen = (uint8_t)((rand() % 246) + 10);
-    bySuffixLen = (uint8_t)((rand() % 246) + 10);
-    
-    // Check that ROM contains required byte values using pre-built lookup
-    if (ptrROMData_a->arrLookup[byOffsetLow].intCount > 0 && 
+    byPrefixLen  = (uint8_t)((rand() % 246) + 10);
+    bySuffixLen  = (uint8_t)((rand() % 246) + 10);
+
+    if (ptrROMData_a->arrLookup[byOffsetLow].intCount > 0 &&
         ptrROMData_a->arrLookup[byOffsetHigh].intCount > 0 &&
-        ptrROMData_a->arrLookup[byPrefixLen].intCount > 0 && 
+        ptrROMData_a->arrLookup[byPrefixLen].intCount > 0 &&
         ptrROMData_a->arrLookup[bySuffixLen].intCount > 0)
     {
         intROMOffset = findOffset(byOffsetLow, byOffsetHigh, ptrROMData_a->lngROMSize);
-        
         intH1 = (uint16_t)findROMAddress(ptrROMData_a->arrLookup, byOffsetLow);
         intH2 = (uint16_t)findROMAddress(ptrROMData_a->arrLookup, byOffsetHigh);
         intH3 = (uint16_t)findROMAddress(ptrROMData_a->arrLookup, byPrefixLen);
         intH4 = (uint16_t)findROMAddress(ptrROMData_a->arrLookup, bySuffixLen);
-        
-        // Generate random prefix and suffix
+
         ptrPrefix = (uint8_t*)malloc(byPrefixLen);
         ptrSuffix = (uint8_t*)malloc(bySuffixLen);
-        
+
         if (ptrPrefix && ptrSuffix)
         {
-            for (intI = 0; intI < byPrefixLen; intI++)
-            {
-                ptrPrefix[intI] = (uint8_t)(rand() % 256);
-            }
-            for (intI = 0; intI < bySuffixLen; intI++)
-            {
-                ptrSuffix[intI] = (uint8_t)(rand() % 256);
-            }
-            
-            // Calculate effective encoding window
+            for (intI = 0; intI < byPrefixLen; intI++) { ptrPrefix[intI] = (uint8_t)(rand() % 256); }
+            for (intI = 0; intI < bySuffixLen; intI++) { ptrSuffix[intI] = (uint8_t)(rand() % 256); }
+
             intEffectiveSize = ptrROMData_a->lngROMSize - intROMOffset;
-            if (intEffectiveSize > 65536L)
-            {
-                intEffectiveSize = 65536L;
-            }
-            
-            // Build offset lookup tables for the encoding window
-            for (intJ = 0; intJ < intEffectiveSize; intJ++)
-            {
-                arrOffsetCounts[ptrROMData_a->ptrROMData[intROMOffset + intJ]]++;
-            }
-            
-            // Initialize offset lookup array
-            for (intI = 0; intI < 256; intI++)
-            {
-                arrOffsetLookup[intI].ptrAddresses = NULL;
-                arrOffsetLookup[intI].intCount = 0;
-            }
-            
+            if (intEffectiveSize > 65536L) { intEffectiveSize = 65536L; }
+
+            for (intJ = 0; intJ < intEffectiveSize; intJ++) { arrOffsetCounts[ptrROMData_a->ptrROMData[intROMOffset + intJ]]++; }
+            for (intI = 0; intI < 256; intI++) { arrOffsetLookup[intI].ptrAddresses = NULL; arrOffsetLookup[intI].intCount = 0; }
             for (intI = 0; intI < 256 && blnLookupValid; intI++)
             {
                 if (arrOffsetCounts[intI] > 0)
                 {
-                    arrOffsetLookup[intI].ptrAddresses = 
-                        (uint32_t*)malloc(arrOffsetCounts[intI] * sizeof(uint32_t));
-                    if (arrOffsetLookup[intI].ptrAddresses)
-                    {
-                        arrOffsetLookup[intI].intCount = 0;
-                    }
-                    else
-                    {
-                        blnLookupValid = false;
-                    }
+                    arrOffsetLookup[intI].ptrAddresses = (uint32_t*)malloc(arrOffsetCounts[intI] * sizeof(uint32_t));
+                    if (arrOffsetLookup[intI].ptrAddresses) { arrOffsetLookup[intI].intCount = 0; }
+                    else { blnLookupValid = false; }
                 }
             }
-            
             for (intJ = 0; intJ < intEffectiveSize && blnLookupValid; intJ++)
             {
                 uint8_t by = ptrROMData_a->ptrROMData[intROMOffset + intJ];
                 arrOffsetLookup[by].ptrAddresses[arrOffsetLookup[by].intCount++] = (uint32_t)intJ;
             }
-            
+
             if (blnLookupValid)
             {
                 ptrInput = fopen(strInputFile_a, "rb");
@@ -307,16 +184,12 @@ static bool encodeFile(const ROMData* ptrROMData_a,
                     ptrOutput = fopen(strOutputFile_a, "wb");
                     if (ptrOutput)
                     {
-                        // Write header (4 x 16-bit addresses)
                         fwrite(&intH1, sizeof(uint16_t), 1, ptrOutput);
                         fwrite(&intH2, sizeof(uint16_t), 1, ptrOutput);
                         fwrite(&intH3, sizeof(uint16_t), 1, ptrOutput);
                         fwrite(&intH4, sizeof(uint16_t), 1, ptrOutput);
-                        
-                        // Write prefix
                         fwrite(ptrPrefix, 1, byPrefixLen, ptrOutput);
-                        
-                        // Stream-encode input
+
                         intCh = fgetc(ptrInput);
                         while (intCh != EOF)
                         {
@@ -329,80 +202,184 @@ static bool encodeFile(const ROMData* ptrROMData_a,
                             }
                             intCh = fgetc(ptrInput);
                         }
-                        
-                        // Write suffix
+
                         fwrite(ptrSuffix, 1, bySuffixLen, ptrOutput);
-                        
                         blnSuccess = true;
-                        
                         fclose(ptrOutput);
                     }
                     fclose(ptrInput);
                 }
             }
         }
-        
-        if (ptrPrefix) free(ptrPrefix);
-        if (ptrSuffix) free(ptrSuffix);
-        
-        // Cleanup offset lookup
-        for (intI = 0; intI < 256; intI++)
+
+        if (ptrPrefix) { free(ptrPrefix); }
+        if (ptrSuffix) { free(ptrSuffix); }
+        for (intI = 0; intI < 256; intI++) { if (arrOffsetLookup[intI].ptrAddresses) { free(arrOffsetLookup[intI].ptrAddresses); } }
+    }
+    else { fprintf(stderr, "Error: ROM does not contain required byte values for UNSIGNAL header\n"); }
+
+    return blnSuccess;
+}
+
+// Tango UNSIGNAL encode — header from ROM[0], payload round-robin
+static bool encodeTango(ROMData** arrROMs_a, int intROMCount_a, const char* strInputFile_a, const char* strOutputFile_a)
+{
+    bool blnSuccess = false;
+    uint8_t byOffsetHigh = 0, byOffsetLow = 0, byPrefixLen = 0, bySuffixLen = 0;
+    int intCh = 0, intI = 0;
+    long intByteIndex = 0;
+    uint16_t intH1 = 0, intH2 = 0, intH3 = 0, intH4 = 0;
+    FILE* ptrInput = NULL;
+    FILE* ptrOutput = NULL;
+    uint8_t* ptrPrefix = NULL;
+    uint8_t* ptrSuffix = NULL;
+    ROMData* ptrROM0 = arrROMs_a[0];
+
+    byOffsetLow  = (uint8_t)(rand() % 256);
+    byOffsetHigh = (uint8_t)(rand() % 256);
+    byPrefixLen  = (uint8_t)((rand() % 246) + 10);
+    bySuffixLen  = (uint8_t)((rand() % 246) + 10);
+
+    if (ptrROM0->arrLookup[byOffsetLow].intCount > 0 &&
+        ptrROM0->arrLookup[byOffsetHigh].intCount > 0 &&
+        ptrROM0->arrLookup[byPrefixLen].intCount > 0 &&
+        ptrROM0->arrLookup[bySuffixLen].intCount > 0)
+    {
+        intH1 = (uint16_t)findROMAddress(ptrROM0->arrLookup, byOffsetLow);
+        intH2 = (uint16_t)findROMAddress(ptrROM0->arrLookup, byOffsetHigh);
+        intH3 = (uint16_t)findROMAddress(ptrROM0->arrLookup, byPrefixLen);
+        intH4 = (uint16_t)findROMAddress(ptrROM0->arrLookup, bySuffixLen);
+
+        ptrPrefix = (uint8_t*)malloc(byPrefixLen);
+        ptrSuffix = (uint8_t*)malloc(bySuffixLen);
+
+        if (ptrPrefix && ptrSuffix)
         {
-            if (arrOffsetLookup[intI].ptrAddresses)
+            for (intI = 0; intI < byPrefixLen; intI++) { ptrPrefix[intI] = (uint8_t)(rand() % 256); }
+            for (intI = 0; intI < bySuffixLen; intI++) { ptrSuffix[intI] = (uint8_t)(rand() % 256); }
+
+            ptrInput = fopen(strInputFile_a, "rb");
+            if (ptrInput)
             {
-                free(arrOffsetLookup[intI].ptrAddresses);
+                ptrOutput = fopen(strOutputFile_a, "wb");
+                if (ptrOutput)
+                {
+                    fwrite(&intH1, sizeof(uint16_t), 1, ptrOutput);
+                    fwrite(&intH2, sizeof(uint16_t), 1, ptrOutput);
+                    fwrite(&intH3, sizeof(uint16_t), 1, ptrOutput);
+                    fwrite(&intH4, sizeof(uint16_t), 1, ptrOutput);
+                    fwrite(ptrPrefix, 1, byPrefixLen, ptrOutput);
+
+                    intByteIndex = 0;
+                    intCh = fgetc(ptrInput);
+                    while (intCh != EOF)
+                    {
+                        uint8_t by = (uint8_t)intCh;
+                        ROMData* ptrROM = arrROMs_a[intByteIndex % intROMCount_a];
+                        if (ptrROM->arrLookup[by].intCount > 0)
+                        {
+                            uint32_t intRandomIdx = rand() % ptrROM->arrLookup[by].intCount;
+                            uint16_t intAddress = (uint16_t)ptrROM->arrLookup[by].ptrAddresses[intRandomIdx];
+                            fwrite(&intAddress, sizeof(uint16_t), 1, ptrOutput);
+                        }
+                        intByteIndex++;
+                        intCh = fgetc(ptrInput);
+                    }
+
+                    fwrite(ptrSuffix, 1, bySuffixLen, ptrOutput);
+                    blnSuccess = true;
+                    fclose(ptrOutput);
+                }
+                fclose(ptrInput);
             }
         }
+
+        if (ptrPrefix) { free(ptrPrefix); }
+        if (ptrSuffix) { free(ptrSuffix); }
     }
-    else
-    {
-        fprintf(stderr, "Error: ROM does not contain required byte values for UNSIGNAL header\n");
-    }
-    
+    else { fprintf(stderr, "Error: ROM[0] does not contain required byte values for UNSIGNAL header\n"); }
+
     return blnSuccess;
 }
 
 int main(int intArgC_a, char* strArgv_a[])
 {
     bool blnEncodeOk = false;
+    bool blnTango = false;
     int intResult = 1;
-    ROMData* ptrROMData = NULL;
-    
+    int intROMCount = 0;
+    int intI = 0;
+    ROMData* arrROMs[3] = {NULL, NULL, NULL};
+    const char* strInputFile = NULL;
+    const char* strOutputFile = NULL;
+    char strTempPath1[4096] = {0};
+    char strTempPath2[4096] = {0};
+
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    printf("UNSIGNAL Protocol Encoder v20260418\n");
+    printf("UNSIGNAL Protocol Encoder v20260601\n");
     printf("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1\n\n");
 
-    if (intArgC_a == 4)
+    if (intArgC_a >= 4 && intArgC_a <= 7)
     {
-        ptrROMData = loadROM(strArgv_a[1]);
-        if (ptrROMData)
+        if (strcmp(strArgv_a[intArgC_a - 1], "-t") == 0) { blnTango = true; intArgC_a--; }
+
+        strOutputFile = strArgv_a[intArgC_a - 1];
+        strInputFile  = strArgv_a[intArgC_a - 2];
+        intROMCount   = intArgC_a - 3;
+
+        if (intROMCount < 1 || intROMCount > 3) { fprintf(stderr, "Usage: %s <rom1> [rom2] [rom3] <input> <output> [-t]\n", strArgv_a[0]); return 1; }
+        if (blnTango && intROMCount < 2) { fprintf(stderr, "Error: Tango mode requires at least 2 ROMs\n"); return 1; }
+
+        for (intI = 0; intI < intROMCount; intI++)
         {
-            blnEncodeOk = encodeFile(ptrROMData, strArgv_a[2], strArgv_a[3]);
-            
-            if (blnEncodeOk)
+            arrROMs[intI] = loadROM(strArgv_a[1 + intI]);
+            if (!arrROMs[intI])
             {
-                intResult = 0;
+                fprintf(stderr, "Failed to load ROM: %s\n", strArgv_a[1 + intI]);
+                for (intI = 0; intI < intROMCount; intI++) { if (arrROMs[intI]) { unloadROM(arrROMs[intI]); } }
+                return 1;
             }
-            else
-            {
-                fprintf(stderr, "Encode failed\n");
-            }
-            
-            unloadROM(ptrROMData);
         }
-        else
+
+        if (blnTango)
         {
-            perror("Failed to load ROM");
+            blnEncodeOk = encodeTango(arrROMs, intROMCount, strInputFile, strOutputFile);
         }
+        else if (intROMCount == 1)
+        {
+            blnEncodeOk = encodeSingle(arrROMs[0], strInputFile, strOutputFile);
+        }
+        else if (intROMCount == 2)
+        {
+            snprintf(strTempPath1, sizeof(strTempPath1), "%s.tmp", strOutputFile);
+            blnEncodeOk = encodeSingle(arrROMs[0], strInputFile, strTempPath1);
+            if (blnEncodeOk) { blnEncodeOk = encodeSingle(arrROMs[1], strTempPath1, strOutputFile); }
+            secureDelete(strTempPath1);
+        }
+        else if (intROMCount == 3)
+        {
+            snprintf(strTempPath1, sizeof(strTempPath1), "%s.tmp",  strOutputFile);
+            snprintf(strTempPath2, sizeof(strTempPath2), "%s.tmp2", strOutputFile);
+            blnEncodeOk = encodeSingle(arrROMs[0], strInputFile, strTempPath1);
+            if (blnEncodeOk) { blnEncodeOk = encodeSingle(arrROMs[1], strTempPath1, strTempPath2); }
+            if (blnEncodeOk) { blnEncodeOk = encodeSingle(arrROMs[2], strTempPath2, strOutputFile); }
+            secureDelete(strTempPath1);
+            secureDelete(strTempPath2);
+        }
+
+        for (intI = 0; intI < intROMCount; intI++) { unloadROM(arrROMs[intI]); }
+
+        if (blnEncodeOk) { intResult = 0; }
+        else { fprintf(stderr, "Encode failed\n"); }
     }
     else
     {
-        fprintf(stderr, "Usage: %s <romfile> <inputdatafile> <encodedoutput>\n", strArgv_a[0]);
+        fprintf(stderr, "Usage: %s <rom1> [rom2] [rom3] <input> <output> [-t]\n", strArgv_a[0]);
     }
-    
+
     return intResult;
 }
