@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Diagnostics;
 using CyborgUnicorn.ZOSCII;
@@ -35,12 +36,16 @@ public static class Test
 		Console.WriteLine("(c) 2026 Cyborg Unicorn Pty Ltd - UNINTELLIGENCE SOFTWARE LICENSE v1.1");
 		Console.WriteLine();
 
-		bool blnRun = false;
+		bool blnRun  = false;
+		bool blnKeep = false;
+		bool blnPerf = false;
 		string strMQUrl = "";
 
 		for (int intI = 0; intI < arrArgs_a.Length; intI++)
 		{
-			if (arrArgs_a[intI] == "-run") { blnRun = true; }
+			if (arrArgs_a[intI] == "-run")  { blnRun  = true; }
+			if (arrArgs_a[intI] == "-keep") { blnKeep = true; }
+			if (arrArgs_a[intI] == "-perf") { blnRun  = true; blnPerf = true; }
 			if (arrArgs_a[intI] == "-mq" && intI + 1 < arrArgs_a.Length) { strMQUrl = arrArgs_a[intI + 1]; blnRun = true; }
 		}
 
@@ -49,21 +54,24 @@ public static class Test
 			#if UNINTELLIGENCE
 			Console.WriteLine("Tests: ZOSCII + UNINTELLIGENCE (UNSIGNAL, PENTAGONE, EntropySugar)");
 			#else
-			Console.WriteLine("Tests: ZOSCII (ZEncode, ZDecode, ZVerify, BVerify, BSplit, BJoin, SecureDelete, Source)");
+			Console.WriteLine("Tests: ZOSCII (ZEncode, ZDecode, ZVerify, BVerify, BSplit, BJoin, SecureDelete, Source, ZTB)");
 			#endif
 			Console.WriteLine();
-			Console.WriteLine("Usage: test.exe -run [-mq <url>]");
+			Console.WriteLine("Usage: test.exe -run [-keep] [-perf] [-mq <url>]");
 			Console.WriteLine();
 			Console.WriteLine("  -run        Run all tests");
+			Console.WriteLine("  -keep       Keep test output folder after run");
+			Console.WriteLine("  -perf       Also run ZTB performance/speed tests");
 			Console.WriteLine("  -mq <url>   Also run MQClient tests against the given server URL");
 			Console.WriteLine();
 			Console.WriteLine("Examples:");
 			Console.WriteLine("  test.exe -run");
+			Console.WriteLine("  test.exe -run -perf");
 			Console.WriteLine("  test.exe -run -mq https://your-server/index.php");
 			return;
 		}
 
-		m_strTempFolder = Path.Combine(Path.GetTempPath(), "zoscii_test_" + Guid.NewGuid().ToString("N"));
+		m_strTempFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zoscii_test_" + Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(m_strTempFolder);
 
 		Console.WriteLine("=================================================");
@@ -97,6 +105,9 @@ public static class Test
 
 			runTangoTests();
 
+			runZTBTests(blnPerf);
+			// runZTBMemoryTests(); // TODO: rewrite for new API
+
 			#if UNINTELLIGENCE
 			runBSplitJoinTests();
 			runUEncodeDecodeTests();
@@ -109,7 +120,14 @@ public static class Test
 		}
 		finally
 		{
-			try { Directory.Delete(m_strTempFolder, true); } catch { }
+			if (!blnKeep)
+			{
+				try { Directory.Delete(m_strTempFolder, true); } catch { }
+			}
+			else
+			{
+				Console.WriteLine("Test folder kept: " + m_strTempFolder);
+			}
 		}
 
 		Console.WriteLine();
@@ -1082,6 +1100,660 @@ public static class Test
 	}
 
 	#endif
+
+	// -------------------------------------------------------------------------
+	// ZTB (ZOSCII Tamperproof Blockchain)
+	// -------------------------------------------------------------------------
+
+	private static int m_intZTBDirCounter = 0;
+
+	// Make a work dir with a genesis block
+	private static string makeZTBWorkDir(string strChainID_a)
+	{
+		m_intZTBDirCounter++;
+		string strDir = Path.Combine(m_strTempFolder, "ztb_" + m_intZTBDirCounter.ToString());
+		Directory.CreateDirectory(strDir);
+		string strExePath = Process.GetCurrentProcess().MainModule.FileName;
+		string strGenID   = Guid.NewGuid().ToString().ToUpperInvariant();
+		ZTBChain.Create(strGenID, new string[] { strExePath }, strDir, strChainID_a);
+		return strDir;
+	}
+
+	// Generate a GUID
+	private static string guid()
+	{
+		return Guid.NewGuid().ToString().ToUpperInvariant();
+	}
+
+	private static void runZTBTests(bool blnPerf_a = false)
+	{
+		// ---------------------------------------------------------
+		section("ZTB - Create");
+
+		string strCDir  = Path.Combine(m_strTempFolder, "ztb_create_test");
+		Directory.CreateDirectory(strCDir);
+		string strExe   = Process.GetCurrentProcess().MainModule.FileName;
+		string strGenID = guid();
+
+		bool blnCreate = ZTBChain.Create(strGenID, new string[] { strExe }, strCDir, "TestGenesis");
+		if (blnCreate)                                        { pass("ZTBChain.Create - Success"); }
+		else                                                  { fail("ZTBChain.Create", "returned false"); }
+
+		string[] arrGenFiles = Directory.GetFiles(strCDir, "*.ztb",
+			SearchOption.AllDirectories).Where(f => new FileInfo(f).Length == ZTBChain.GENESIS_SIZE_PUBLIC).ToArray();
+		if (arrGenFiles.Length == 1)                          { pass("ZTBChain.Create - genesis block written"); }
+		else                                                  { fail("ZTBChain.Create file", "not found"); }
+
+		if (arrGenFiles.Length == 1 && new FileInfo(arrGenFiles[0]).Length == ZTBChain.GENESIS_SIZE_PUBLIC)
+		                                                      { pass("ZTBChain.Create - genesis size correct (" + ZTBChain.GENESIS_SIZE_PUBLIC + " bytes)"); }
+		else                                                  { fail("ZTBChain.Create size", "wrong size"); }
+
+		// Refuses duplicate - same block ID
+		bool blnDup = ZTBChain.Create(strGenID, new string[] { strExe }, strCDir, "TestGenesis");
+		if (!blnDup)                                          { pass("ZTBChain.Create - refuses duplicate genesis"); }
+		else                                                  { fail("ZTBChain.Create dup", "should have failed"); }
+
+		// ---------------------------------------------------------
+		section("ZTB - Open");
+
+		string strWorkDir = makeZTBWorkDir("TestChain");
+		ZTBChain objChain = ZTBChain.Open(strWorkDir, "TestChain");
+		if (objChain != null && objChain.ChainID == "TestChain")
+		                                                      { pass("ZTBChain.Open - opened, ID=" + objChain.ChainID); }
+		else                                                  { fail("ZTBChain.Open", "null or wrong ID"); }
+
+		if (objChain == null) { return; }
+
+		// ---------------------------------------------------------
+		section("ZTB - AddBlock");
+
+		byte[] arrP1   = Encoding.UTF8.GetBytes("Block 1 payload");
+		string strID1  = guid();
+		ZTBBlockResult objB1 = objChain.AddBlock(strID1, null, arrP1);
+		if (objB1.Success && objB1.BlockID == strID1)         { pass("ZTBChain.AddBlock - Success, BlockID matches"); }
+		else                                                  { fail("ZTBChain.AddBlock 1", "Success=" + objB1.Success + " BlockID=" + objB1.BlockID); }
+
+		if (objB1.PrevBlockID == ZTBChain.NULL_GUID)          { pass("ZTBChain.AddBlock - PrevBlockID is NULL_GUID for block 1"); }
+		else                                                  { fail("ZTBChain.AddBlock PrevBlockID", "expected NULL_GUID, got " + objB1.PrevBlockID); }
+
+		if (!objB1.IsBranch)                                  { pass("ZTBChain.AddBlock - IsBranch=false for trunk"); }
+		else                                                  { fail("ZTBChain.AddBlock IsBranch", "expected false"); }
+
+		if (objB1.Hash != 0)                                  { pass("ZTBChain.AddBlock - Hash non-zero"); }
+		else                                                  { fail("ZTBChain.AddBlock Hash", "zero"); }
+
+		if (objB1.PrevHash == 0)                              { pass("ZTBChain.AddBlock - PrevHash=0 for block 1"); }
+		else                                                  { fail("ZTBChain.AddBlock PrevHash", "expected 0, got " + objB1.PrevHash); }
+
+		if (objB1.BlockType == ZTBBlockType.Normal)           { pass("ZTBChain.AddBlock - BlockType=Normal"); }
+		else                                                  { fail("ZTBChain.AddBlock BlockType", "got " + objB1.BlockType); }
+
+		if (objB1.HashType == ZTBHashType.RollingFull)        { pass("ZTBChain.AddBlock - HashType=RollingFull (default)"); }
+		else                                                  { fail("ZTBChain.AddBlock HashType", "got " + objB1.HashType); }
+
+		if (objB1.Filename != null && objB1.Filename.EndsWith(".ztb"))
+		                                                      { pass("ZTBChain.AddBlock - Filename is .ztb (" + objB1.Filename + ")"); }
+		else                                                  { fail("ZTBChain.AddBlock Filename", "null or wrong extension"); }
+
+		if (File.Exists(Path.Combine(strWorkDir, objB1.Filename)))
+		                                                      { pass("ZTBChain.AddBlock - file exists on disk"); }
+		else                                                  { fail("ZTBChain.AddBlock file", "not on disk"); }
+
+		if (objB1.Payload == null)                            { pass("ZTBChain.AddBlock - Payload null on write result"); }
+		else                                                  { fail("ZTBChain.AddBlock Payload", "expected null"); }
+
+		byte[] arrP2   = Encoding.UTF8.GetBytes("Block 2 payload");
+		string strID2  = guid();
+		ZTBBlockResult objB2 = objChain.AddBlock(strID2, strID1, arrP2);
+		if (objB2.Success && objB2.BlockID == strID2)         { pass("ZTBChain.AddBlock - block 2 Success"); }
+		else                                                  { fail("ZTBChain.AddBlock 2", "Success=" + objB2.Success); }
+
+		if (objB2.PrevBlockID == strID1)                      { pass("ZTBChain.AddBlock - block 2 PrevBlockID links to block 1"); }
+		else                                                  { fail("ZTBChain.AddBlock 2 PrevBlockID", "mismatch"); }
+
+		if (objB2.PrevHash != 0)                              { pass("ZTBChain.AddBlock - block 2 PrevHash non-zero (predecessor binding)"); }
+		else                                                  { fail("ZTBChain.AddBlock 2 PrevHash", "expected non-zero"); }
+
+		// ---------------------------------------------------------
+		section("ZTB - AddBlockText / AddBlockFile / AddBlock with ID");
+
+		string strID3 = guid();
+		ZTBBlockResult objBText = objChain.AddBlockText(strID3, strID2, "Text block");
+		if (objBText.Success)                                 { pass("ZTBChain.AddBlockText - Success"); }
+		else                                                  { fail("ZTBChain.AddBlockText", "failed"); }
+
+		string strTmpFile = Path.Combine(m_strTempFolder, "ztb_file_payload.bin");
+		File.WriteAllBytes(strTmpFile, Encoding.UTF8.GetBytes("File payload content"));
+		string strID4 = guid();
+		ZTBBlockResult objBFile = objChain.AddBlockFile(strID4, strID3, strTmpFile);
+		if (objBFile.Success)                                 { pass("ZTBChain.AddBlockFile - Success"); }
+		else                                                  { fail("ZTBChain.AddBlockFile", "failed"); }
+
+		// ---------------------------------------------------------
+		section("ZTB - FetchBlock");
+
+		ZTBBlockResult objF1 = objChain.FetchBlock(strID1);
+		if (objF1.Success)                                    { pass("ZTBChain.FetchBlock(1) - Success"); }
+		else                                                  { fail("ZTBChain.FetchBlock(1)", "failed"); }
+
+		if (objF1.Success && arraysEqual(objF1.Payload, arrP1))
+		                                                      { pass("ZTBChain.FetchBlock(1) - Payload matches original"); }
+		else                                                  { fail("ZTBChain.FetchBlock(1) Payload", "mismatch"); }
+
+		if (objF1.BlockID == strID1)                          { pass("ZTBChain.FetchBlock(1) - BlockID matches"); }
+		else                                                  { fail("ZTBChain.FetchBlock(1) BlockID", "mismatch"); }
+
+		if (objF1.BlockType == ZTBBlockType.Normal)           { pass("ZTBChain.FetchBlock(1) - BlockType=Normal"); }
+		else                                                  { fail("ZTBChain.FetchBlock(1) BlockType", "got " + objF1.BlockType); }
+
+		if (objF1.HashType == ZTBHashType.RollingFull)        { pass("ZTBChain.FetchBlock(1) - HashType=RollingFull round trip"); }
+		else                                                  { fail("ZTBChain.FetchBlock(1) HashType", "got " + objF1.HashType); }
+
+		ZTBBlockResult objF2 = objChain.FetchBlock(strID2);
+		if (objF2.Success && arraysEqual(objF2.Payload, arrP2))
+		                                                      { pass("ZTBChain.FetchBlock(2) - round trip matches"); }
+		else                                                  { fail("ZTBChain.FetchBlock(2)", "mismatch"); }
+
+		ZTBBlockResult objFText = objChain.FetchBlock(strID3);
+		if (objFText.Success && Encoding.UTF8.GetString(objFText.Payload) == "Text block")
+		                                                      { pass("ZTBChain.FetchBlock(3) - text payload round trip"); }
+		else                                                  { fail("ZTBChain.FetchBlock(3)", "mismatch"); }
+
+		ZTBBlockResult objFMiss = objChain.FetchBlock(guid());
+		if (!objFMiss.Success)                                { pass("ZTBChain.FetchBlock(missing) - correctly fails"); }
+		else                                                  { fail("ZTBChain.FetchBlock(missing)", "should have failed"); }
+
+		// ---------------------------------------------------------
+		section("ZTB - Verify");
+
+		ZTBVerifyResult objV = objChain.Verify(strID4, true);
+		if (objV.Success)                                     { pass("ZTBChain.Verify - 4-block chain passes"); }
+		else                                                  { fail("ZTBChain.Verify", "FailedBlocks=" + objV.FailedBlocks); }
+
+		if (objV.VerifiedBlocks == 4)                         { pass("ZTBChain.Verify - VerifiedBlocks=4"); }
+		else                                                  { fail("ZTBChain.Verify VerifiedBlocks", "expected 4, got " + objV.VerifiedBlocks); }
+
+		if (objV.FailedBlocks == 0)                           { pass("ZTBChain.Verify - FailedBlocks=0"); }
+		else                                                  { fail("ZTBChain.Verify FailedBlocks", "expected 0, got " + objV.FailedBlocks); }
+
+		// Single block verify
+		ZTBVerifyResult objVSingle = objChain.Verify(strID1, false);
+		if (objVSingle.Success && objVSingle.VerifiedBlocks == 1)
+		                                                      { pass("ZTBChain.Verify single block - passes"); }
+		else                                                  { fail("ZTBChain.Verify single", "failed"); }
+
+		// Tamper detection - middle of file
+		string strTamperFile = Path.Combine(strWorkDir, objB2.Filename);
+		byte[] arrOriginal   = File.ReadAllBytes(strTamperFile);
+		byte[] arrTampered   = (byte[])arrOriginal.Clone();
+		arrTampered[arrTampered.Length / 2] ^= 0xFF;
+		File.WriteAllBytes(strTamperFile, arrTampered);
+		ZTBVerifyResult objVTamper = objChain.Verify(strID4, true);
+		if (!objVTamper.Success && objVTamper.FailedBlocks > 0)
+		                                                      { pass("ZTBChain.Verify - tampered block detected"); }
+		else                                                  { fail("ZTBChain.Verify tamper", "tamper not detected"); }
+		File.WriteAllBytes(strTamperFile, arrOriginal);
+
+		objChain.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - Tamper Detection (1KB boundary)");
+
+		// Write a block with >2KB payload so we can tamper inside and outside 1KB
+		string strTamperDir = makeZTBWorkDir("TamperChain");
+		byte[] arrLargePayload = new byte[4096];
+		new Random(42).NextBytes(arrLargePayload);
+
+		// Test RollingFull — should detect tamper anywhere
+		ZTBChain objTFull = ZTBChain.Open(strTamperDir, "TamperChain", ZTBHashType.RollingFull);
+		if (objTFull != null)
+		{
+			string strTF1 = guid();
+			string strTF2 = guid();
+			objTFull.AddBlock(strTF1, null, Encoding.UTF8.GetBytes("anchor"));
+			ZTBBlockResult objTFBlock = objTFull.AddBlock(strTF2, strTF1, arrLargePayload);
+
+			if (objTFBlock.Success)
+			{
+				string strTFFile = Path.Combine(strTamperDir, objTFBlock.Filename);
+				byte[] arrTFOrig = File.ReadAllBytes(strTFFile);
+
+				// Tamper within first 1KB of encoded section
+				byte[] arrTFTamper1 = (byte[])arrTFOrig.Clone();
+				arrTFTamper1[clsZTB.HEADER_RAW_SIZE + 100] ^= 0xFF;
+				File.WriteAllBytes(strTFFile, arrTFTamper1);
+				ZTBVerifyResult objTFV1 = objTFull.Verify(strTF2, false);
+				if (!objTFV1.Success)                         { pass("ZTBChain RollingFull - tamper within 1KB detected"); }
+				else                                          { fail("ZTBChain RollingFull tamper within 1KB", "not detected"); }
+				File.WriteAllBytes(strTFFile, arrTFOrig);
+
+				// Tamper outside first 1KB of encoded section
+				byte[] arrTFTamper2 = (byte[])arrTFOrig.Clone();
+				arrTFTamper2[clsZTB.HEADER_RAW_SIZE + 2000] ^= 0xFF;
+				File.WriteAllBytes(strTFFile, arrTFTamper2);
+				ZTBVerifyResult objTFV2 = objTFull.Verify(strTF2, false);
+				if (!objTFV2.Success)                         { pass("ZTBChain RollingFull - tamper outside 1KB detected"); }
+				else                                          { fail("ZTBChain RollingFull tamper outside 1KB", "not detected"); }
+				File.WriteAllBytes(strTFFile, arrTFOrig);
+			}
+			objTFull.Dispose();
+		}
+
+		// Test Rolling1KB — detects tamper within its hashed 1KB window
+		string strTamperDir2 = makeZTBWorkDir("TamperChain1KB");
+		ZTBChain objT1KB = ZTBChain.Open(strTamperDir2, "TamperChain1KB", ZTBHashType.Rolling1KB);
+		if (objT1KB != null)
+		{
+			string strT1KB1 = guid();
+			string strT1KB2 = guid();
+			objT1KB.AddBlock(strT1KB1, null, Encoding.UTF8.GetBytes("anchor"));
+			ZTBBlockResult objT1KBBlock = objT1KB.AddBlock(strT1KB2, strT1KB1, arrLargePayload);
+
+			if (objT1KBBlock.Success)
+			{
+				string strT1KBFile = Path.Combine(strTamperDir2, objT1KBBlock.Filename);
+				byte[] arrT1KBOrig = File.ReadAllBytes(strT1KBFile);
+
+				// Tamper within first 1KB — should be detected
+				byte[] arrT1KBTamper1 = (byte[])arrT1KBOrig.Clone();
+				arrT1KBTamper1[clsZTB.HEADER_RAW_SIZE + 100] ^= 0xFF;
+				File.WriteAllBytes(strT1KBFile, arrT1KBTamper1);
+				ZTBVerifyResult objT1KBV1 = objT1KB.Verify(strT1KB2, false);
+				if (!objT1KBV1.Success)                       { pass("ZTBChain Rolling1KB - tamper within 1KB detected"); }
+				else                                          { fail("ZTBChain Rolling1KB tamper within 1KB", "not detected"); }
+				File.WriteAllBytes(strT1KBFile, arrT1KBOrig);
+
+				// Note: Rolling1KB/CRC321KB deliberately do not hash payload bytes beyond the
+				// first 1024 -- that is the documented, intentional cost/coverage trade-off of
+				// the windowed hash types (see Whitepaper, Section 2F-2H). Whether a tamper in
+				// that region is independently caught depends on the rolling ROM and on
+				// whichever later block's prevHash window happens to reach it, neither of
+				// which is a property of THIS block in isolation -- so there is no meaningful
+				// single-block assertion to make about that region here.
+			}
+			objT1KB.Dispose();
+		}
+
+		// ---------------------------------------------------------
+		section("ZTB - AddBranch");
+
+		string strTrunkDir = makeZTBWorkDir("Trunk");
+		ZTBChain objTrunk  = ZTBChain.Open(strTrunkDir, "Trunk");
+		if (objTrunk == null) { fail("ZTBChain.AddBranch setup", "trunk open failed"); return; }
+
+		string strT1 = guid();
+		string strT2 = guid();
+		string strT3 = guid();
+		objTrunk.AddBlock(strT1, null, Encoding.UTF8.GetBytes("Trunk 1"));
+		objTrunk.AddBlock(strT2, strT1, Encoding.UTF8.GetBytes("Trunk 2"));
+		objTrunk.AddBlock(strT3, strT2, Encoding.UTF8.GetBytes("Trunk 3"));
+		pass("ZTBChain.AddBranch setup - 3-block trunk created");
+
+		string strBranchChainID = "Branch1";
+		ZTBChain objBranchChain = ZTBChain.Open(strTrunkDir, strBranchChainID);
+		if (objBranchChain == null) { fail("ZTBChain.AddBranch", "branch chain open failed"); return; }
+
+		string strBranchID1 = guid();
+		ZTBBlockResult objBr1 = objBranchChain.AddBranch(strBranchID1, strT3,
+		                                                   Encoding.UTF8.GetBytes("Branch block 1"),
+		                                                   "Trunk");
+		if (objBr1.Success)                                   { pass("ZTBChain.AddBranch - Success"); }
+		else                                                  { fail("ZTBChain.AddBranch", "failed"); }
+
+		if (objBr1.IsBranch)                                  { pass("ZTBChain.AddBranch - IsBranch=true"); }
+		else                                                  { fail("ZTBChain.AddBranch IsBranch", "expected true"); }
+
+		if (objBr1.TrunkID == "Trunk")                        { pass("ZTBChain.AddBranch - TrunkID links to trunk"); }
+		else                                                  { fail("ZTBChain.AddBranch TrunkID", "got " + objBr1.TrunkID); }
+
+		string strBranchID2 = guid();
+		ZTBBlockResult objBr2 = objBranchChain.AddBlock(strBranchID2, strBranchID1,
+		                                                  Encoding.UTF8.GetBytes("Branch block 2"));
+		if (objBr2.Success && objBr2.IsBranch)                { pass("ZTBChain branch AddBlock - block 2, IsBranch=true"); }
+		else                                                  { fail("ZTBChain branch AddBlock", "Success=" + objBr2.Success); }
+
+		ZTBBlockResult objBrFetch = objBranchChain.FetchBlock(strBranchID1);
+		if (objBrFetch.Success && Encoding.UTF8.GetString(objBrFetch.Payload) == "Branch block 1")
+		                                                      { pass("ZTBChain branch FetchBlock(1) - round trip"); }
+		else                                                  { fail("ZTBChain branch FetchBlock(1)", "mismatch"); }
+
+		ZTBVerifyResult objBrV = objBranchChain.Verify(strBranchID2, true);
+		if (objBrV.Success)                                   { pass("ZTBChain.VerifyBranch - passes"); }
+		else                                                  { fail("ZTBChain.VerifyBranch", "FailedBlocks=" + objBrV.FailedBlocks); }
+
+		objBranchChain.Dispose();
+
+		ZTBBlockResult objTrunkFetch = objTrunk.FetchBlock(strT3);
+		if (objTrunkFetch.Success && Encoding.UTF8.GetString(objTrunkFetch.Payload) == "Trunk 3")
+		                                                      { pass("ZTBChain trunk FetchBlock after branching - round trip"); }
+		else                                                  { fail("ZTBChain trunk FetchBlock after branch", "mismatch"); }
+
+		objTrunk.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - 20-Block Trunk with 2 Branches");
+
+		string strWorkDir20 = makeZTBWorkDir("Trunk20");
+		ZTBChain objT20     = ZTBChain.Open(strWorkDir20, "Trunk20");
+		if (objT20 == null) { fail("20-block setup", "open failed"); return; }
+
+		string strPrev20 = null;
+		string[] arrBlockIDs20 = new string[20];
+		int intI20 = 0;
+		while (intI20 < 20)
+		{
+			arrBlockIDs20[intI20] = guid();
+			objT20.AddBlock(arrBlockIDs20[intI20], strPrev20,
+			                Encoding.UTF8.GetBytes("Trunk block " + (intI20 + 1)));
+			strPrev20 = arrBlockIDs20[intI20];
+			intI20++;
+		}
+		pass("ZTBChain 20-block trunk - all 20 blocks written");
+
+		ZTBBlockResult objFT1   = objT20.FetchBlock(arrBlockIDs20[0]);
+		ZTBBlockResult objFT10  = objT20.FetchBlock(arrBlockIDs20[9]);
+		ZTBBlockResult objFT20  = objT20.FetchBlock(arrBlockIDs20[19]);
+
+		if (objFT1.Success && Encoding.UTF8.GetString(objFT1.Payload) == "Trunk block 1")
+		                                                      { pass("ZTBChain 20-block trunk - FetchBlock(1) round trip"); }
+		else                                                  { fail("ZTBChain 20-block FetchBlock(1)", "mismatch"); }
+
+		if (objFT10.Success && Encoding.UTF8.GetString(objFT10.Payload) == "Trunk block 10")
+		                                                      { pass("ZTBChain 20-block trunk - FetchBlock(10) round trip"); }
+		else                                                  { fail("ZTBChain 20-block FetchBlock(10)", "mismatch"); }
+
+		if (objFT20.Success && Encoding.UTF8.GetString(objFT20.Payload) == "Trunk block 20")
+		                                                      { pass("ZTBChain 20-block trunk - FetchBlock(20) round trip"); }
+		else                                                  { fail("ZTBChain 20-block FetchBlock(20)", "mismatch"); }
+
+		ZTBVerifyResult objVT20 = objT20.Verify(arrBlockIDs20[19], true);
+		if (objVT20.Success && objVT20.VerifiedBlocks == 20)  { pass("ZTBChain 20-block trunk - Verify all 20 pass"); }
+		else                                                  { fail("ZTBChain 20-block Verify", "Success=" + objVT20.Success + " Blocks=" + objVT20.VerifiedBlocks); }
+
+		// Branch A
+		string strBrAChainID = "BranchA";
+		ZTBChain objBrAChain = ZTBChain.Open(strWorkDir20, strBrAChainID);
+		string strBrA1 = guid();
+		ZTBBlockResult objBrA = objBrAChain != null
+		    ? objBrAChain.AddBranch(strBrA1, arrBlockIDs20[19],
+		                             Encoding.UTF8.GetBytes("Branch A block 1"), "Trunk20")
+		    : new ZTBBlockResult();
+		if (objBrA.Success)                                   { pass("ZTBChain BranchA - created"); }
+		else                                                  { fail("ZTBChain BranchA", "failed"); }
+
+		if (objBrAChain != null)
+		{
+			string strBrA2 = guid();
+			objBrAChain.AddBlock(strBrA2, strBrA1, Encoding.UTF8.GetBytes("Branch A block 2"));
+			ZTBVerifyResult objBrAV = objBrAChain.Verify(strBrA2, true);
+			if (objBrAV.Success && objBrAV.VerifiedBlocks == 22)
+			                                                  { pass("ZTBChain BranchA - VerifyBranch passes (2 branch + 20 trunk blocks)"); }
+			else                                              { fail("ZTBChain BranchA Verify", "Blocks=" + objBrAV.VerifiedBlocks); }
+			objBrAChain.Dispose();
+		}
+
+		objT20.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - AddCheckpoint");
+
+		string strCPDir = makeZTBWorkDir("CPChain");
+		ZTBChain objCP  = ZTBChain.Open(strCPDir, "CPChain");
+		if (objCP == null) { fail("Checkpoint setup", "open failed"); return; }
+
+		string strCP1 = guid();
+		string strCP2 = guid();
+		string strCPID = guid();
+		objCP.AddBlock(strCP1, null,  Encoding.UTF8.GetBytes("Before checkpoint 1"));
+		objCP.AddBlock(strCP2, strCP1, Encoding.UTF8.GetBytes("Before checkpoint 2"));
+		ZTBBlockResult objCPBlock = objCP.AddCheckpoint(strCPID, strCP2, "Checkpoint label");
+
+		if (objCPBlock.Success && objCPBlock.BlockType == ZTBBlockType.Checkpoint)
+		                                                      { pass("ZTBChain.AddCheckpoint - Success, BlockType=Checkpoint"); }
+		else                                                  { fail("ZTBChain.AddCheckpoint", "Success=" + objCPBlock.Success); }
+
+		ZTBBlockResult objCPFetch = objCP.FetchBlock(strCPID);
+		if (objCPFetch.Success && Encoding.UTF8.GetString(objCPFetch.Payload) == "Checkpoint label")
+		                                                      { pass("ZTBChain.AddCheckpoint - label payload round trip"); }
+		else                                                  { fail("ZTBChain.AddCheckpoint label", "mismatch"); }
+
+		if (objCPFetch.Success && objCPFetch.BlockType == ZTBBlockType.Checkpoint)
+		                                                      { pass("ZTBChain.AddCheckpoint - FetchBlock BlockType=Checkpoint"); }
+		else                                                  { fail("ZTBChain.AddCheckpoint FetchBlock type", "wrong type"); }
+
+		// Continue adding after checkpoint
+		string strPostCP = guid();
+		ZTBBlockResult objPostCP = objCP.AddBlock(strPostCP, strCPID, Encoding.UTF8.GetBytes("After checkpoint"));
+		if (objPostCP.Success)                                { pass("ZTBChain.AddCheckpoint - blocks continue after checkpoint"); }
+		else                                                  { fail("ZTBChain.AddCheckpoint post-block", "failed"); }
+
+		ZTBVerifyResult objCPV = objCP.Verify(strPostCP, true);
+		if (objCPV.Success && objCPV.VerifiedBlocks == 4)    { pass("ZTBChain.AddCheckpoint - Verify passes through checkpoint"); }
+		else                                                  { fail("ZTBChain.AddCheckpoint Verify", "Success=" + objCPV.Success + " Blocks=" + objCPV.VerifiedBlocks); }
+
+		objCP.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - Truncate");
+
+		string strTRDir = makeZTBWorkDir("TRChain");
+		ZTBChain objTR  = ZTBChain.Open(strTRDir, "TRChain");
+		if (objTR == null) { fail("Truncate setup", "open failed"); return; }
+
+		string strTR1 = guid();
+		string strTR2 = guid();
+		string strTRCP = guid();
+		string strTRTrunc = guid();
+		objTR.AddBlock(strTR1,   null,   Encoding.UTF8.GetBytes("TR 1"));
+		objTR.AddBlock(strTR2,   strTR1, Encoding.UTF8.GetBytes("TR 2"));
+		objTR.AddCheckpoint(strTRCP, strTR2, "Truncation checkpoint");
+
+		ZTBBlockResult objTrunc = objTR.Truncate(guid(), strTRCP);
+		if (objTrunc.Success && objTrunc.BlockType == ZTBBlockType.Truncation)
+		                                                      { pass("ZTBChain.Truncate - Success, BlockType=Truncation"); }
+		else                                                  { fail("ZTBChain.Truncate", "Success=" + objTrunc.Success); }
+
+		// Delete old blocks below the truncation block — strTR2 IS the truncation block, keep it
+		SecureDelete.File(Path.Combine(strTRDir, strTR1 + ".ztb"));
+
+		// Add a new block above the checkpoint
+		string strTRPost = guid();
+		ZTBBlockResult objTRPostBlock = objTR.AddBlock(strTRPost, strTRCP,
+		                                                Encoding.UTF8.GetBytes("Post-truncation block"));
+		if (objTRPostBlock.Success)                           { pass("ZTBChain.Truncate - new block added above checkpoint after deleting old history"); }
+		else                                                  { fail("ZTBChain.Truncate post-block", "failed"); }
+
+		ZTBBlockResult objTRPostFetch = objTR.FetchBlock(strTRPost);
+		if (objTRPostFetch.Success &&
+		    Encoding.UTF8.GetString(objTRPostFetch.Payload) == "Post-truncation block")
+		                                                      { pass("ZTBChain.Truncate - post-truncation FetchBlock round trip"); }
+		else                                                  { fail("ZTBChain.Truncate post-block fetch", "mismatch"); }
+
+		ZTBVerifyResult objTRPostV = objTR.Verify(strTRPost, true);
+		if (objTRPostV.Success)                               { pass("ZTBChain.Truncate - Verify passes after old history deleted"); }
+		else                                                  { fail("ZTBChain.Truncate post-verify", "FailedBlocks=" + objTRPostV.FailedBlocks + " post=" + objTR.FetchBlock(strTRPost).Success + " cp=" + objTR.FetchBlock(strTRCP).Success + " trunc=" + objTR.FetchBlock(strTR2).Success); }
+
+		objTR.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - Finalise");
+
+		string strFNDir = makeZTBWorkDir("FNChain");
+		ZTBChain objFN  = ZTBChain.Open(strFNDir, "FNChain");
+		if (objFN == null) { fail("Finalise setup", "open failed"); return; }
+
+		string strFN1  = guid();
+		string strFN2  = guid();
+		string strFNID = guid();
+		objFN.AddBlock(strFN1, null,   Encoding.UTF8.GetBytes("FN 1"));
+		objFN.AddBlock(strFN2, strFN1, Encoding.UTF8.GetBytes("FN 2"));
+		ZTBBlockResult objFinalise = objFN.Finalise(strFNID, strFN2, "Final label");
+
+		if (objFinalise.Success && objFinalise.BlockType == ZTBBlockType.Finalise)
+		                                                      { pass("ZTBChain.Finalise - Success, BlockType=Finalise"); }
+		else                                                  { fail("ZTBChain.Finalise", "Success=" + objFinalise.Success); }
+
+		ZTBBlockResult objFNFetch = objFN.FetchBlock(strFNID);
+		if (objFNFetch.Success && Encoding.UTF8.GetString(objFNFetch.Payload) == "Final label")
+		                                                      { pass("ZTBChain.Finalise - label payload round trip"); }
+		else                                                  { fail("ZTBChain.Finalise label", "mismatch"); }
+
+		ZTBVerifyResult objFNV = objFN.Verify(strFNID, true);
+		if (objFNV.Success)                                   { pass("ZTBChain.Finalise - Verify passes through finalise block"); }
+		else                                                  { fail("ZTBChain.Finalise Verify", "failed"); }
+
+		objFN.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - HashType");
+
+		string strHTDir = makeZTBWorkDir("HTChain");
+		ZTBChain objHT  = ZTBChain.Open(strHTDir, "HTChain");
+		if (objHT == null) { fail("HashType setup", "open failed"); return; }
+
+		string strHT1 = guid();
+		ZTBBlockResult objHT1 = objHT.AddBlock(strHT1, null, Encoding.UTF8.GetBytes("HT block"));
+		if (objHT1.HashType == ZTBHashType.RollingFull)       { pass("ZTBChain HashType - RollingFull is default"); }
+		else                                                  { fail("ZTBChain HashType default", "got " + objHT1.HashType); }
+
+		if (objHT1.Hash != 0)                                 { pass("ZTBChain Hash - non-zero RollingFull"); }
+		else                                                  { fail("ZTBChain Hash", "zero"); }
+
+		ZTBBlockResult objHTFetch = objHT.FetchBlock(strHT1);
+		if (objHTFetch.Success && objHTFetch.HashType == ZTBHashType.RollingFull)
+		                                                      { pass("ZTBChain FetchBlock - HashType round trip"); }
+		else                                                  { fail("ZTBChain FetchBlock HashType", "mismatch"); }
+
+		ZTBVerifyResult objHTVerify = objHT.Verify(strHT1, true);
+		if (objHTVerify.Success)                              { pass("ZTBChain HashType - Verify passes"); }
+		else                                                  { fail("ZTBChain HashType Verify", "failed"); }
+
+		objHT.Dispose();
+
+		// ---------------------------------------------------------
+		section("ZTB - Dispose");
+
+		string strDDir  = makeZTBWorkDir("DChain");
+		ZTBChain objD   = ZTBChain.Open(strDDir, "DChain");
+		if (objD != null) { objD.Dispose(); }
+		string strAfter = objD != null ? objD.ChainID : null;
+		if (strAfter == null)                                 { pass("ZTBChain.Dispose - no exception accessing ChainID after dispose (result: null)"); }
+		else                                                  { fail("ZTBChain.Dispose", "ChainID still set after dispose"); }
+
+		if (!blnPerf_a) { return; }
+
+		// ---------------------------------------------------------
+		section("ZTB - Performance (disk, 10 seconds)");
+
+		string strPerfDir = makeZTBWorkDir("PerfChain");
+		ZTBChain objPerf  = ZTBChain.Open(strPerfDir, "PerfChain");
+		if (objPerf != null)
+		{
+			byte[] arrPerfPayload = Encoding.UTF8.GetBytes("Performance test block payload");
+			long lngPerfEnd       = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 10000;
+			string strPerfPrev    = null;
+			int intPerfCount      = 0;
+
+			while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < lngPerfEnd)
+			{
+				string strPerfID = guid();
+				ZTBBlockResult objPerfBlock = objPerf.AddBlock(strPerfID, strPerfPrev, arrPerfPayload);
+				if (objPerfBlock.Success)
+				{
+					strPerfPrev = strPerfID;
+					intPerfCount++;
+				}
+				else { break; }
+			}
+
+			pass("ZTB disk perf - " + intPerfCount + " blocks written in 10 seconds (" +
+			     (intPerfCount / 10) + " blocks/sec)");
+			objPerf.Dispose();
+		}
+
+		// ---------------------------------------------------------
+		section("ZTB - Performance (memory, 10 seconds)");
+
+		Dictionary<string, byte[]> objMemStore = new Dictionary<string, byte[]>();
+		object objMemLock = new object();
+
+		// Seed genesis
+		string strMemGenesisID = guid();
+		string strMemChainID   = "MemPerfChain";
+		byte[] arrMemGenesis   = new byte[ZTBChain.GENESIS_SIZE_PUBLIC];
+		arrMemGenesis[0]       = (byte)ZTBBlockType.Genesis;
+		byte[] arrExeBytes2    = File.ReadAllBytes(Process.GetCurrentProcess().MainModule.FileName);
+		double dblMemStep      = (double)arrExeBytes2.Length / (ZTBChain.GENESIS_SIZE_PUBLIC - 1);
+		double dblMemPos       = 0.0;
+		int intMemRomI         = 1;
+		while (intMemRomI < ZTBChain.GENESIS_SIZE_PUBLIC)
+		{
+			long lngP = (long)dblMemPos;
+			if (lngP >= arrExeBytes2.Length) { lngP = arrExeBytes2.Length - 1; }
+			arrMemGenesis[intMemRomI] = arrExeBytes2[lngP];
+			dblMemPos += dblMemStep;
+			intMemRomI++;
+		}
+		lock (objMemLock) { objMemStore[strMemGenesisID + ".ztb"] = arrMemGenesis; }
+
+		ZTBChain objMemPerf = ZTBChain.Open(null, strMemChainID);
+		if (objMemPerf != null)
+		{
+			objMemPerf.OnSaveBlock = delegate(ZTBBlockResult objMeta_a, byte[] arrBytes_a, string strPath_a)
+			{
+				lock (objMemLock) { objMemStore[objMeta_a.Filename] = arrBytes_a; }
+				return true;
+			};
+			objMemPerf.OnLoadBlock = delegate(string strFilename_a)
+			{
+				byte[] arrResult = null;
+				lock (objMemLock)
+				{
+					string strKey = Path.GetFileName(strFilename_a);
+					if (objMemStore.ContainsKey(strKey)) { arrResult = objMemStore[strKey]; }
+				}
+				return arrResult;
+			};
+			objMemPerf.OnFindGenesis = delegate(string strChainID_a)
+			{
+				byte[] arrResult = null;
+				lock (objMemLock)
+				{
+					foreach (string strK in objMemStore.Keys)
+					{
+						if (objMemStore[strK].Length == ZTBChain.GENESIS_SIZE_PUBLIC)
+						{
+							arrResult = objMemStore[strK];
+							break;
+						}
+					}
+				}
+				return arrResult;
+			};
+
+			byte[] arrMemPayload = Encoding.UTF8.GetBytes("Memory performance test block");
+			long lngMemEnd       = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 10000;
+			string strMemPrev    = null;
+			int intMemCount      = 0;
+
+			while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < lngMemEnd)
+			{
+				string strMemID = guid();
+				ZTBBlockResult objMemBlock = objMemPerf.AddBlock(strMemID, strMemPrev, arrMemPayload);
+				if (objMemBlock.Success)
+				{
+					strMemPrev = strMemID;
+					intMemCount++;
+				}
+				else { break; }
+			}
+
+			pass("ZTB memory perf - " + intMemCount + " blocks written in 10 seconds (" +
+			     (intMemCount / 10) + " blocks/sec)");
+			objMemPerf.Dispose();
+		}
+	}
+
 
 	// -------------------------------------------------------------------------
 	// ZRollingHash
