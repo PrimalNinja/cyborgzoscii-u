@@ -27,7 +27,7 @@ This is not a theoretical exercise. These are the attack classes taught to signa
 
 **Causal assumption:** If the attacker knows some portion of the original data and the corresponding encoded output, they can deduce the transformation and apply it to the unknown portions.
 
-**Why it fails:** The same plaintext encoded with the same ROM produces different output every time, because the encoder randomly selects among all valid addresses for each byte. A known plaintext–ciphertext pair reveals one of many possible address choices, not the ROM itself. No causal chain can be constructed from pairs to key.
+**Why it fails:** The same plaintext encoded with the same ROM produces different output every time, because the encoder randomly selects among all valid addresses for each byte. A known plaintext-ciphertext pair reveals one of many possible address choices, not the ROM itself. No causal chain can be constructed from pairs to key.
 
 ## 4. Chosen-Plaintext Attack
 

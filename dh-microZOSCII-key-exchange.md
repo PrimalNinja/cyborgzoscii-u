@@ -28,7 +28,7 @@ Note: For completely information-theoretically secure communications, this boots
 
 | Parameter | Size | Description |
 |-----------|------|-------------|
-| `s1, s2, s3, s4` | 4 × 256 bytes | Up to 4 DH shared secrets `g^(ab) mod p` |
+| `s1, s2, s3, s4` | 4 x 256 bytes | Up to 4 DH shared secrets `g^(ab) mod p` |
 
 *Note: 1 DH secret is sufficient. 2-4 provide additional entropy and enable microUNSIGNAL features.*
 
@@ -36,7 +36,7 @@ Note: For completely information-theoretically secure communications, this boots
 
 | Output | Size | Format |
 |--------|------|--------|
-| microROM | 512 × N nibbles (where N = number of DH secrets, 1-4) | Hex characters (0-F), where N = number of DH secrets |
+| microROM | 512 x N nibbles (where N = number of DH secrets, 1-4) | Hex characters (0-F), where N = number of DH secrets |
 
 ### 2.3 Algorithm
 
@@ -48,7 +48,7 @@ Where `hex()` converts each byte to two hex characters (0-F).
 
 **JavaScript:**
 ```javascript
-const microROM = [s1, s2, s3, s4].map(s => 
+const microROM = [s1, s2, s3, s4].map(s =>
     Array.from(s).map(b => b.toString(16).padStart(2, '0')).join('')
 ).join('');
 ```
@@ -94,7 +94,7 @@ When up to 4 DH keys are exchanged, the combined microROM can be used with a mic
 
 ## 5. USAGE
 
-The microROM (512 × N nibbles) is used directly as the ROM for any ZOSCII-family encoding:
+The microROM (512 x N nibbles) is used directly as the ROM for any ZOSCII-family encoding:
 
 - **microZOSCII:** Encode a 64KB or 128KB session ROM
 - **microUNSIGNAL:** Use with header mechanism (see draft note above)
@@ -132,12 +132,12 @@ a3f28c1d4e5b7a9c ...
 ```
 
 **Address space positions (1 secret, 0-511):**
-- Position 0 → 'a'
-- Position 1 → '3'
-- Position 2 → 'f'
-- Position 3 → '2'
+- Position 0 -> 'a'
+- Position 1 -> '3'
+- Position 2 -> 'f'
+- Position 3 -> '2'
 - ...
-- Position 511 → last hex digit
+- Position 511 -> last hex digit
 
 ---
 

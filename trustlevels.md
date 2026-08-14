@@ -1,6 +1,6 @@
 # ZOSCII Trust Levels Framework
 
-**ZOSCII = Zero Overhead Secure Code Information Interchange**  
+**ZOSCII = Zero Overhead Secure Code Information Interchange**
 Information-theoretic security, not encryption!
 
 ---
@@ -129,7 +129,7 @@ See the [ZOSCII "Why" document](https://zoscii.com/why-en.html) section "The Sol
 
 **Examples:**
 - **B2B message interchange via ZOSCII MQ**
-- Automotive supply chain (OEM ↔ Tier 1 ↔ Tier 2 suppliers)
+- Automotive supply chain (OEM <-> Tier 1 <-> Tier 2 suppliers)
 - Defense contractor collaboration across organizations
 - Healthcare information exchange (hospital networks)
 - Financial institution interbank transactions
@@ -195,27 +195,27 @@ See the [ZOSCII "Why" document](https://zoscii.com/why-en.html) section "The Sol
 **Examples:**
 
 ### Whistleblower Workflow
-Anonymous submission (L0) + public timestamp (L4) → optional journalist disclosure (L1) → news organization verification (L2)
+Anonymous submission (L0) + public timestamp (L4) -> optional journalist disclosure (L1) -> news organization verification (L2)
 
 ### Automotive OEM Scenario
-Individual engineer (L0) → design team (L2) → supplier collaboration (L3) → regulatory filing (L4)
+Individual engineer (L0) -> design team (L2) -> supplier collaboration (L3) -> regulatory filing (L4)
 
 ### Medical Research
-Patient data (L0) → physician access (L1) → hospital system (L2) → multi-site trial (L3) → publication proof (L4)
+Patient data (L0) -> physician access (L1) -> hospital system (L2) -> multi-site trial (L3) -> publication proof (L4)
 
 ### Defense Project
-Classified component (L0) → project team (L2) → contractor integration (L3) → audit compliance (L4)
+Classified component (L0) -> project team (L2) -> contractor integration (L3) -> audit compliance (L4)
 
-**Submarine example**: Individual sailor's station data (L0) → submarine internal systems (L2) → fleet coordination (L3) → mission verification (L4). Critical: submarine operates autonomously underwater at L0/L2 without server dependencies.
+**Submarine example**: Individual sailor's station data (L0) -> submarine internal systems (L2) -> fleet coordination (L3) -> mission verification (L4). Critical: submarine operates autonomously underwater at L0/L2 without server dependencies.
 
 ### Corporate M&A
-Executive documents (L0) → deal team (L2) → legal review (L1) → regulatory disclosure (L4)
+Executive documents (L0) -> deal team (L2) -> legal review (L1) -> regulatory disclosure (L4)
 
 ### Software Release
-Developer workstation (L0) → team repository (L2) → customer delivery (L3) → public hash verification (L4)
+Developer workstation (L0) -> team repository (L2) -> customer delivery (L3) -> public hash verification (L4)
 
 ### Freight Management
-Individual shipment data (L0) → company operations (L2) → carrier network (L3) → customer tracking (L4)
+Individual shipment data (L0) -> company operations (L2) -> carrier network (L3) -> customer tracking (L4)
 
 ---
 
@@ -242,11 +242,11 @@ Individual shipment data (L0) → company operations (L2) → carrier network (L
 | **Public Key Security** | Achieve 100% ITS using publicly available images as ROMs. Security from knowing which ROM and when, not from ROM secrecy. | Levels 0, 1, 6 |
 | **Zero Server-Side Data Exposure** | Server stores only addresses (noise). Total server breach reveals nothing. | All levels (0-6) |
 | **No ROM Capture Policy** | Level 0: Software ROM never posted anywhere. Level 1: ROM capture only to peer, never to server. Level 2+: Only within defined trust boundaries. | All levels (0-6) |
-| **microZOSCII Bootstrapping** | Lightweight session management using 2×54 character (160 chars base16) microROMs. Enables secure communication over HTTP, HTTPS, RF, any transmission medium. Removes need for HTTPS entirely - secure over plain HTTP. Perfect for: submarines (autonomous underwater operation), peer-to-peer messaging, local cookie session management, website security without TLS certificates. | Levels 0, 1, 6 |
+| **microZOSCII Bootstrapping** | Lightweight session management using 2x54 character (160 chars base16) microROMs. Enables secure communication over HTTP, HTTPS, RF, any transmission medium. Removes need for HTTPS entirely - secure over plain HTTP. Perfect for: submarines (autonomous underwater operation), peer-to-peer messaging, local cookie session management, website security without TLS certificates. | Levels 0, 1, 6 |
 | **ZOSCII MQ** | Message queue for peer-to-peer (Level 1), internal system-to-system (Level 2), and B2B federated trust (Level 3). Pub/sub architecture, regional replication. | Levels 1, 2, 3, 6 |
 | **ZOSCII Tamperproof Blockchain** | Public verification without data disclosure. Quantum-proof by combinatorial impossibility (10^152900 valid permutations). Transparent structure, secure payloads. | Level 4, 6 |
 
-**Note:** Real-world use cases for microZOSCII typically employ 2×54 characters (160 characters base 16) microROMs for session bootstrapping and lightweight secure communications.
+**Note:** Real-world use cases for microZOSCII typically employ 2x54 characters (160 characters base 16) microROMs for session bootstrapping and lightweight secure communications.
 
 ---
 

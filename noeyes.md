@@ -1,6 +1,6 @@
 # ZOSCII NoEyes Handshake Protocol
 
-**Author:** Julian Cassin  
+**Author:** Julian Cassin
 **Date:** 2026-02-28
 
 ## SOFTWARE LICENSE v1.1
@@ -21,22 +21,22 @@ A trust establishment mechanism that uses existing Certificate Authorities (CAs)
 
 ### Phase 1: Link to Certificate Provider
 
-You get a link from the certificate providers out of band, a generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism — not a fragment, not a partial key.
+You get a link from the certificate providers out of band, a generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism - not a fragment, not a partial key.
 
 ### Phase 2: Bootstrap
 
-Each of the 3 middlemen holds a complete, independently generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism — not a fragment, not a partial key. This 240 byte microZOSCII microROM is delivered encoded in your out-of-band microROM for that provider.
+Each of the 3 middlemen holds a complete, independently generated 240-byte microZOSCII microROM. Each is a fully functional encoding mechanism - not a fragment, not a partial key. This 240 byte microZOSCII microROM is delivered encoded in your out-of-band microROM for that provider.
 
 ### Phase 3: microROM Distribution
 
 Each middleman dynamically generates a fresh 240-byte microZOSCII microROM for this session and provides it to both endpoints.
 
-- Middleman A generates microROM A — knows only its own microROM
-- Middleman B generates microROM B — knows only its own microROM
-- Middleman C generates microROM C — knows only its own microROM
+- Middleman A generates microROM A - knows only its own microROM
+- Middleman B generates microROM B - knows only its own microROM
+- Middleman C generates microROM C - knows only its own microROM
 - Both endpoints receive all 3 microROMs
 
-No middleman sees the other two microROMs. No middleman holds or generates the final 64KB ROM — that is created by the endpoints themselves after the secure channel is established.
+No middleman sees the other two microROMs. No middleman holds or generates the final 64KB ROM - that is created by the endpoints themselves after the secure channel is established.
 
 Server must prove certificate identity to receive the 3 microROMs. If certificate is validated, client is just sent the 3 microROMs.
 
@@ -54,16 +54,16 @@ Endpoints communicate using the privately exchanged ROM. All three middlemen are
 |-------|-------------------|----------------|
 | Bootstrap | Level 3 (Federated) | Middlemen each hold their own microROM only |
 | Triple Encoding | Level 1 (Peer-to-Peer) | Endpoints hold all 3 microROMs, middlemen excluded from each other |
-| ROM Exchange | Level 1 → Level 0 | Fresh 64KB ROM exchanged directly, no third parties |
+| ROM Exchange | Level 1 -> Level 0 | Fresh 64KB ROM exchanged directly, no third parties |
 | Operation | Level 0 (Self-Sovereign) | Only endpoints hold the operating ROM |
 
 ## Security Properties
 
 ### No Single Point of Compromise
 
-- **Middlemen compromised**: Each only knows its own microROM — all 3 must collude to decode the session, and even then they never see the private operating ROM
-- **One endpoint compromised**: Attacker gets current ROM but learns nothing about the bootstrap mechanism — cannot replay, intercept, or impersonate
-- **Single middleman compromised**: Attacker gains one microROM out of three — useless without the other two
+- **Middlemen compromised**: Each only knows its own microROM - all 3 must collude to decode the session, and even then they never see the private operating ROM
+- **One endpoint compromised**: Attacker gets current ROM but learns nothing about the bootstrap mechanism - cannot replay, intercept, or impersonate
+- **Single middleman compromised**: Attacker gains one microROM out of three - useless without the other two
 
 ### Zero Knowledge at Every Layer
 
@@ -79,7 +79,7 @@ Endpoints communicate using the privately exchanged ROM. All three middlemen are
 
 ### Collusion Requirement
 
-Unless all 3 trust authorities collude, the session is information-theoretically secure from the very first message. Even with full collusion, the authorities only compromise the session microROMs — the private 64KB ROM exchanged afterwards is one they never saw.
+Unless all 3 trust authorities collude, the session is information-theoretically secure from the very first message. Even with full collusion, the authorities only compromise the session microROMs - the private 64KB ROM exchanged afterwards is one they never saw.
 
 ## What Certificate Authorities Become
 
@@ -96,12 +96,12 @@ Certificates prove identity. ZOSCII provides security. These are separate concer
 - **No encryption**: Avoids ITAR, EAR and export restrictions entirely
 - **No certificates required for security**: Only for identity verification
 - **No ongoing third-party dependency**: CAs are used once and discarded
-- **Quantum-proof**: I(M;A)=0 — information-theoretic security, not computational assumption
+- **Quantum-proof**: I(M;A)=0 - information-theoretic security, not computational assumption
 - **Lightweight**: microZOSCII microROM is 240 bytes, deployable anywhere
 
 ## Triple Encoding: How It Works
 
-Each of the 3 middlemen dynamically generates a fresh 240-byte microZOSCII ROM per session. These are not static — they are created on the fly for each connection request.
+Each of the 3 middlemen dynamically generates a fresh 240-byte microZOSCII ROM per session. These are not static - they are created on the fly for each connection request.
 
 ### Process
 
@@ -120,23 +120,23 @@ Each of the 3 middlemen dynamically generates a fresh 240-byte microZOSCII ROM p
 
 Certificates retain exactly one job: **identity verification**.
 
-- Endpoint A initiates — no certificate needed, they're asking
+- Endpoint A initiates - no certificate needed, they're asking
 - Endpoint B receives the ROMs because the authorities validated (via certificate) that B is the correct destination for A's request
-- Certificates prove "you are who you say you are" — nothing more
+- Certificates prove "you are who you say you are" - nothing more
 - Security is provided entirely by ZOSCII, not by the certificate
 
 ### Security Properties
 
-- Each authority generates a complete microZOSCII ROM — not a fragment
-- ROMs are dynamic — generated fresh per session, never reused
+- Each authority generates a complete microZOSCII ROM - not a fragment
+- ROMs are dynamic - generated fresh per session, never reused
 - Any single authority sees only its own ROM, not the other two
-- Compromising 1 or even 2 authorities is insufficient — you need all 3 ROMs to decode
-- Each authority operates independently — no coordination between them
+- Compromising 1 or even 2 authorities is insufficient - you need all 3 ROMs to decode
+- Each authority operates independently - no coordination between them
 - After endpoints exchange a private ROM, all 3 session ROMs become irrelevant
 - As with ANY in-band key exchange, the receiving endpoint if all packets are monitored prior to consumption, then future communications can be compromised
 
 ---
 
-*ZOSCII Foundation — Quantum Proof Information Theoretic Security est. 2025*
+*ZOSCII Foundation - Quantum Proof Information Theoretic Security est. 2025*
 
 *zoscii.com*

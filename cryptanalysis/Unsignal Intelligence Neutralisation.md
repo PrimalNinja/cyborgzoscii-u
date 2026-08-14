@@ -28,7 +28,7 @@ To manage data volume, agencies use **selectors** (triggers) to decide what to p
 
 | Selector Type | Description |
 |---------------|-------------|
-| **Specific Selectors** | Email addresses, phone numbers, IP addresses — if a communication contains a "tasked selector," it's harvested |
+| **Specific Selectors** | Email addresses, phone numbers, IP addresses - if a communication contains a "tasked selector," it's harvested |
 | **"About" Collection** | Messages not to/from a target, but mentioning a target's selector |
 | **Activity Triggers** | Searching for privacy-enhancing tools (Tor) or reading technical journals can trigger tracking |
 
@@ -59,7 +59,7 @@ Once a target is established, agencies use **downstream collection** (formerly P
 |------------------|------------------------|
 | Tap fibre-optic cables to buffer and search massive traffic flows | **Noise-Inertia:** Data is mathematically indistinguishable from random noise |
 | Automated filters find "interesting" data (encrypted packets, keywords) | **Pattern Immunity:** Lacks digital "signal" or headers that trigger collection |
-| Buffers data to be cracked later if target identified | **Retrospective Immunity:** No mathematical path to "crack" — even with quantum computers |
+| Buffers data to be cracked later if target identified | **Retrospective Immunity:** No mathematical path to "crack" - even with quantum computers |
 | Metadata mapping (who talks to whom) | **Metadata Elimination:** Removes identifiable cryptographic "handshakes" |
 
 ### PRISM (Server-Side Collection)
@@ -78,7 +78,7 @@ Once a target is established, agencies use **downstream collection** (formerly P
 | System Tactic | UNSIGNAL Countermeasure |
 |---------------|------------------------|
 | Searches and analyses global internet traffic in real-time using "soft selectors" (keywords, file types) | Removes all "magic bytes," headers, and identifiable structures |
-| Automated filters flag traffic for keyword matches | Filters see data as "unstructured noise" — cannot trigger keyword or file-type detection |
+| Automated filters flag traffic for keyword matches | Filters see data as "unstructured noise" - cannot trigger keyword or file-type detection |
 
 ### ECHELON (Global SIGINT Network)
 
@@ -99,37 +99,37 @@ Once a target is established, agencies use **downstream collection** (formerly P
 
 | System Tactic | UNSIGNAL Countermeasure |
 |---------------|------------------------|
-| National firewalls identify and block encrypted traffic (VPNs, Tor) based on handshake "signatures" | Mimics true random entropy — lacks standard "handshake" signature used by firewalls |
+| National firewalls identify and block encrypted traffic (VPNs, Tor) based on handshake "signatures" | Mimics true random entropy - lacks standard "handshake" signature used by firewalls |
 | Uses "entropy-based" blocking rules to target encrypted data | Bypasses entropy-based blocking rules |
 
 ### Biometric & Behavioral Analytics
 
 | System Tactic | UNSIGNAL Countermeasure |
 |---------------|------------------------|
-| Intelligence platforms track metadata over time to identify users without names | **PrivacyKey™:** Generates unique, ephemeral keys for every single event or transaction |
+| Intelligence platforms track metadata over time to identify users without names | **PrivacyKey(TM):** Generates unique, ephemeral keys for every single event or transaction |
 | Tracks biometric events and transaction patterns | No persistent "attack surface" exists for these analytics systems to track a user over time |
 
-### SORM / SORM-3 — Russia (FSB Direct Tap)
+### SORM / SORM-3 - Russia (FSB Direct Tap)
 
 | System Tactic | UNSIGNAL Countermeasure |
 |---------------|------------------------|
-| FSB-controlled hardware installed directly at ISPs gives real-time tap access to all traffic — no warrant, no company intermediary | **Noise-Inertia:** Tapped traffic is mathematically indistinguishable from random noise — nothing to analyse in real time |
+| FSB-controlled hardware installed directly at ISPs gives real-time tap access to all traffic - no warrant, no company intermediary | **Noise-Inertia:** Tapped traffic is mathematically indistinguishable from random noise - nothing to analyse in real time |
 | SORM-3 (Yarovaya Law) mandates full content retention for 6 months, metadata for 3 years | **Retrospective Immunity:** Retained data contains no mathematical path to the original message, even with unlimited future compute |
 | No requirement to notify the target or the ISP of what is being collected | **Pattern Immunity:** Absence of headers, handshakes, or selectors means automated collection triggers cannot fire |
 
-### Golden Shield — China (Great Firewall DPI)
+### Golden Shield - China (Great Firewall DPI)
 
 | System Tactic | UNSIGNAL Countermeasure |
 |---------------|------------------------|
-| National DPI system actively blocks traffic by entropy signature, handshake pattern, and protocol fingerprint at scale | Mimics true random entropy — no protocol fingerprint or handshake signature present to match against blocking rules |
-| Maintains whitelist/blacklist of known encrypted traffic signatures (VPN, Tor, TLS variants) | UNSIGNAL output has no known signature — cannot be classified as encrypted traffic or added to a blacklist |
-| Deep inspection of packet payloads for keyword and content triggers | Signal-Free encoding removes all identifiable payload structure — keyword matching returns no results |
+| National DPI system actively blocks traffic by entropy signature, handshake pattern, and protocol fingerprint at scale | Mimics true random entropy - no protocol fingerprint or handshake signature present to match against blocking rules |
+| Maintains whitelist/blacklist of known encrypted traffic signatures (VPN, Tor, TLS variants) | UNSIGNAL output has no known signature - cannot be classified as encrypted traffic or added to a blacklist |
+| Deep inspection of packet payloads for keyword and content triggers | Signal-Free encoding removes all identifiable payload structure - keyword matching returns no results |
 
-### GhostNet / MSS SIGINT Network — China
+### GhostNet / MSS SIGINT Network - China
 
 | System Tactic | UNSIGNAL Countermeasure |
 |---------------|------------------------|
-| Operates dozens of ground-based SIGINT stations monitoring satellite and international communications traffic across Asia-Pacific | **Noise-Inertia:** Intercepted traffic is indistinguishable from random noise — automated analysis yields nothing |
+| Operates dozens of ground-based SIGINT stations monitoring satellite and international communications traffic across Asia-Pacific | **Noise-Inertia:** Intercepted traffic is indistinguishable from random noise - automated analysis yields nothing |
 | Monitors international communications satellites from dedicated intercept facilities | **Pattern Immunity:** No frequency, timing, or structural patterns present for correlation across intercept points |
 | Builds target social graphs by correlating metadata across multiple intercept points | **Metadata Elimination:** Absence of PKE handshakes removes the identifiable markers used to map communication relationships |
 
@@ -145,7 +145,7 @@ Once a target is established, agencies use **downstream collection** (formerly P
 | **ECHELON** | Global SIGINT monitoring for pattern-of-life analysis | Uses variable noise to mask transmission timing and packet sizes | Weaponized Ambiguity |
 | **Deep Packet Inspection** | Blocking traffic based on "signatures" of encryption handshakes | Mimics true random entropy; lacks standard "handshake" signature | NoEyes Handshake |
 | **Cognitive Electronic Warfare** | AI-driven sensors that identify and jam signals based on electronic signatures | Prevents AI models from identifying distinct signal "fingerprint" | Direct Memory Addressing (randomized ROM offsets) |
-| **Behavioral Analytics** | Tracking metadata over time to build identity profiles | Generates unique, ephemeral keys for every single event or transaction | PrivacyKey™ |
-| **SORM / SORM-3 (Russia)** | FSB direct tap at ISP level; full content retained 6 months, metadata 3 years | Retained traffic is mathematically inert — no path to original message regardless of retention period | Information-Theoretic Security (I(M;A)=0) |
-| **Golden Shield / Great Firewall (China)** | National DPI blocking by entropy signature, protocol fingerprint, and keyword payload inspection | No fingerprint, no handshake, no keywords — cannot be classified, blocked, or matched | Signal-Free Encoding; NoEyes Handshake |
+| **Behavioral Analytics** | Tracking metadata over time to build identity profiles | Generates unique, ephemeral keys for every single event or transaction | PrivacyKey(TM) |
+| **SORM / SORM-3 (Russia)** | FSB direct tap at ISP level; full content retained 6 months, metadata 3 years | Retained traffic is mathematically inert - no path to original message regardless of retention period | Information-Theoretic Security (I(M;A)=0) |
+| **Golden Shield / Great Firewall (China)** | National DPI blocking by entropy signature, protocol fingerprint, and keyword payload inspection | No fingerprint, no handshake, no keywords - cannot be classified, blocked, or matched | Signal-Free Encoding; NoEyes Handshake |
 | **GhostNet / MSS SIGINT Network (China)** | Distributed ground stations intercept satellite and international traffic; correlates metadata to build social graphs | Intercepted traffic is noise; no PKE handshakes means no metadata markers to correlate | Noise-Inertia; Metadata Elimination |

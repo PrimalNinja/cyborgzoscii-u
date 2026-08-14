@@ -1,6 +1,6 @@
 # PENTAGONE Protocol Specification
 **Pentagonal Encoding Network Through A Guaranteed Override of N Exposures**
-**Author:** Julian Cassin  
+**Author:** Julian Cassin
 **Date:** 2026-05-06
 
 ## SOFTWARE LICENSE v1.1
@@ -10,11 +10,11 @@ PENTAGONE Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 
 ### 1. OVERVIEW
 
-PENTAGONE is the combinatorial threshold splitting mechanism underlying the TEMPURA Protocol. It distributes an encoded payload across **5 shares** such that any **3 shares** are sufficient to reconstruct the original — with no polynomial arithmetic, no cryptographic primitives, and no mathematical complexity beyond a static lookup table.
+PENTAGONE is the combinatorial threshold splitting mechanism underlying the TEMPURA Protocol. It distributes an encoded payload across **5 shares** such that any **3 shares** are sufficient to reconstruct the original - with no polynomial arithmetic, no cryptographic primitives, and no mathematical complexity beyond a static lookup table.
 
-PENTAGONE is derived from the combinatorial properties of C(5,3)=10 — all possible combinations of 5 servers taken 3 at a time. Every byte of the payload is written to exactly 3 of 5 shares according to a rotating pattern. By the pigeonhole principle, any 3 available shares will satisfy at least one complete pattern row, enabling full reconstruction.
+PENTAGONE is derived from the combinatorial properties of C(5,3)=10 - all possible combinations of 5 servers taken 3 at a time. Every byte of the payload is written to exactly 3 of 5 shares according to a rotating pattern. By the pigeonhole principle, any 3 available shares will satisfy at least one complete pattern row, enabling full reconstruction.
 
-PENTAGONE does not provide security on its own. It is designed to operate on UNSIGNAL-encoded payloads, where the security guarantee I(M;A)=0 is provided by the encoding layer. PENTAGONE provides **fault tolerance, redundancy and secret sharing of already secured payloads** — the encoded payload remains available and reconstructable even when up to 2 of 5 shares are lost, offline, or corrupted.
+PENTAGONE does not provide security on its own. It is designed to operate on UNSIGNAL-encoded payloads, where the security guarantee I(M;A)=0 is provided by the encoding layer. PENTAGONE provides **fault tolerance, redundancy and secret sharing of already secured payloads** - the encoded payload remains available and reconstructable even when up to 2 of 5 shares are lost, offline, or corrupted.
 
 ---
 
@@ -22,11 +22,11 @@ PENTAGONE does not provide security on its own. It is designed to operate on UNS
 
 | Protocol | Role |
 |----------|------|
-| ZOSCII | Core encoding — ROM-based address indirection |
-| UNSIGNAL | Obfuscation layer — randomised offsets, prefix/suffix noise, I(M;A)=0 |
-| PENTAGONE | Distribution layer — 3-of-5 threshold split and reconstruction |
-| TEMPURA | Delivery layer — fault-tolerant web application delivery using UNSIGNAL + PENTAGONE |
-| SSS (Shamir's Secret Sharing) | Analogous information-theoretic threshold scheme using polynomial interpolation — PENTAGONE achieves equivalent resilience properties through combinatorial means |
+| ZOSCII | Core encoding - ROM-based address indirection |
+| UNSIGNAL | Obfuscation layer - randomised offsets, prefix/suffix noise, I(M;A)=0 |
+| PENTAGONE | Distribution layer - 3-of-5 threshold split and reconstruction |
+| TEMPURA | Delivery layer - fault-tolerant web application delivery using UNSIGNAL + PENTAGONE |
+| SSS (Shamir's Secret Sharing) | Analogous information-theoretic threshold scheme using polynomial interpolation - PENTAGONE achieves equivalent resilience properties through combinatorial means |
 
 PENTAGONE sits between UNSIGNAL encoding and delivery. It receives an UNSIGNAL-encoded byte stream and distributes it. It does not inspect, modify, or have knowledge of the content.
 
@@ -34,20 +34,20 @@ PENTAGONE sits between UNSIGNAL encoding and delivery. It receives an UNSIGNAL-e
 
 ### 3. THE COMBINATORIAL PATTERN TABLE
 
-PENTAGONE uses a static 10-row pattern table. Each row defines which 3 of the 5 shares receive the byte at that position. The table cycles — position 0 uses row 0, position 10 uses row 0 again, and so on.
+PENTAGONE uses a static 10-row pattern table. Each row defines which 3 of the 5 shares receive the byte at that position. The table cycles - position 0 uses row 0, position 10 uses row 0 again, and so on.
 
 | Row | Share 1 | Share 2 | Share 3 | Share 4 | Share 5 |
 |-----|---------|---------|---------|---------|---------|
-| 0 | ✓ | ✓ | ✓ | | |
-| 1 | ✓ | ✓ | | ✓ | |
-| 2 | ✓ | ✓ | | | ✓ |
-| 3 | ✓ | | ✓ | ✓ | |
-| 4 | ✓ | | ✓ | | ✓ |
-| 5 | ✓ | | | ✓ | ✓ |
-| 6 | | ✓ | ✓ | ✓ | |
-| 7 | | ✓ | ✓ | | ✓ |
-| 8 | | ✓ | | ✓ | ✓ |
-| 9 | | | ✓ | ✓ | ✓ |
+| 0 | [x] | [x] | [x] | | |
+| 1 | [x] | [x] | | [x] | |
+| 2 | [x] | [x] | | | [x] |
+| 3 | [x] | | [x] | [x] | |
+| 4 | [x] | | [x] | | [x] |
+| 5 | [x] | | | [x] | [x] |
+| 6 | | [x] | [x] | [x] | |
+| 7 | | [x] | [x] | | [x] |
+| 8 | | [x] | | [x] | [x] |
+| 9 | | | [x] | [x] | [x] |
 
 Each share appears in exactly 6 of the 10 rows, receiving approximately **60% of all payload bytes**.
 
@@ -63,14 +63,14 @@ The guarantee that any 3 shares reconstruct the full payload follows directly fr
 - Every possible combination of 3 shares covers all 10 rows across the full payload
 - Therefore any 3 shares contain every byte of the payload at least once
 
-No polynomial arithmetic. No Lagrange interpolation. No finite field mathematics. The reconstruction is a sequential read with a static lookup table — identical in complexity to the split.
+No polynomial arithmetic. No Lagrange interpolation. No finite field mathematics. The reconstruction is a sequential read with a static lookup table - identical in complexity to the split.
 
 ---
 
 ### 5. SPLIT ALGORITHM
 
 #### 5.1 Inputs
-- `payload` — UNSIGNAL-encoded byte stream
+- `payload` - UNSIGNAL-encoded byte stream
 - Output files: `payload.s1`, `payload.s2`, `payload.s3`, `payload.s4`, `payload.s5`
 
 #### 5.2 Steps
@@ -89,7 +89,7 @@ Each share file contains:
 
 #### 5.3 Share File Format
 
-Each share file (`.s1` through `.s5`) contains only the payload bytes assigned to that share, written sequentially in the order they were encountered. No position metadata is stored — the join algorithm reconstructs byte order by cycling through the same static pattern table used during the split.
+Each share file (`.s1` through `.s5`) contains only the payload bytes assigned to that share, written sequentially in the order they were encountered. No position metadata is stored - the join algorithm reconstructs byte order by cycling through the same static pattern table used during the split.
 
 ---
 
@@ -143,8 +143,8 @@ This ensures no partial share or partial reconstruction remains recoverable on d
 | Bytes per share | ~60% of payload (6 of every 10 bytes) |
 | Minimum shares to reconstruct | 3 |
 | Maximum shares offline/lost | 2 |
-| Maximum shares corrupted (detectable) | Outside PENTAGONE scope — handled at delivery layer |
-| Share knowledge of payload | Zero — share is a subset of UNSIGNAL noise |
+| Maximum shares corrupted (detectable) | Outside PENTAGONE scope - handled at delivery layer |
+| Share knowledge of payload | Zero - share is a subset of UNSIGNAL noise |
 | Share knowledge of other shares | Zero |
 | Share knowledge of total share count | Zero |
 
@@ -158,14 +158,14 @@ PENTAGONE shares fundamental information-theoretic properties with Shamir's Secr
 |----------|------------------------|-----------|
 | Threshold scheme | K of N | 3 of 5 |
 | Mathematical basis | Polynomial interpolation (Lagrange) | Combinatorial pattern table (pigeonhole) |
-| Arithmetic required | Finite field operations | None — sequential read/write only |
+| Arithmetic required | Finite field operations | None - sequential read/write only |
 | Share size | Equal to secret | ~60% of payload |
 | Information-theoretic | Yes (perfect secrecy of shares) | Yes (shares are UNSIGNAL noise) |
-| Implementation complexity | Non-trivial | Minimal — static table lookup |
-| Auditability | Requires mathematical verification | Visually auditable — table is human-readable |
+| Implementation complexity | Non-trivial | Minimal - static table lookup |
+| Auditability | Requires mathematical verification | Visually auditable - table is human-readable |
 | 8-bit hardware compatible | No | Yes |
 
-The key distinction: SSS achieves information-theoretic security through polynomial mathematics applied to the secret itself. PENTAGONE achieves fault tolerance through combinatorial distribution applied to an already information-theoretically secure UNSIGNAL payload. The security guarantee originates in UNSIGNAL — PENTAGONE adds resilience without adding mathematical complexity.
+The key distinction: SSS achieves information-theoretic security through polynomial mathematics applied to the secret itself. PENTAGONE achieves fault tolerance through combinatorial distribution applied to an already information-theoretically secure UNSIGNAL payload. The security guarantee originates in UNSIGNAL - PENTAGONE adds resilience without adding mathematical complexity.
 
 ---
 
@@ -177,7 +177,7 @@ The key distinction: SSS achieves information-theoretic security through polynom
 | `ujoin` | Windows / Linux (console) | Reconstruct payload from 3+ shares |
 | `uverify` | Windows / Linux (console) | Verify reconstruction via comparison against the original, UNSIGNAL decode, or ZOSCII decode (`-z` flag) |
 
-`usplit` and `ujoin` take two parameters — input filename and output filename — with `.s1` through `.s5` appended automatically by `usplit`. No ROM is required by PENTAGONE tooling — ROM handling is the responsibility of the UNSIGNAL layer.
+`usplit` and `ujoin` take two parameters - input filename and output filename - with `.s1` through `.s5` appended automatically by `usplit`. No ROM is required by PENTAGONE tooling - ROM handling is the responsibility of the UNSIGNAL layer.
 
 ---
 
@@ -186,7 +186,7 @@ The key distinction: SSS achieves information-theoretic security through polynom
 The complete split pattern in C:
 
 ```c
-// C(5,3) = 10 combinations — static pattern table
+// C(5,3) = 10 combinations - static pattern table
 static const uint8_t arrPattern[10][3] =
 {
     {0, 1, 2},  // Row 0: s1 s2 s3
@@ -215,28 +215,28 @@ for (intJ = 0; intJ < 3; intJ++)
 
 ### 12. CONCLUSION
 
-PENTAGONE is the simplest possible threshold distribution mechanism that satisfies the 3-of-5 resilience requirement — no mathematics beyond a lookup table, no cryptographic dependencies, no configuration. Combined with UNSIGNAL encoding, it delivers fault-tolerant, information-theoretically secure payload distribution suitable for deployment on any hardware from enterprise servers to 8-bit embedded systems.
+PENTAGONE is the simplest possible threshold distribution mechanism that satisfies the 3-of-5 resilience requirement - no mathematics beyond a lookup table, no cryptographic dependencies, no configuration. Combined with UNSIGNAL encoding, it delivers fault-tolerant, information-theoretically secure payload distribution suitable for deployment on any hardware from enterprise servers to 8-bit embedded systems.
 
 | Property | Traditional Redundancy (RAID/Replication) | PENTAGONE |
 |----------|------------------------------------------|-----------|
 | Fault tolerance | Yes | Yes |
-| Security of individual shares | None — share is readable | Zero — share is UNSIGNAL noise |
+| Security of individual shares | None - share is readable | Zero - share is UNSIGNAL noise |
 | Mathematical complexity | None | None |
 | Minimum shares to reconstruct | Varies | 3 of 5 (fixed) |
 | Share server requires crypto capability | N/A | No |
-| Auditability | Simple | Simple — static table |
+| Auditability | Simple | Simple - static table |
 
 #### 12.1 Why 3 of 5?
 
 The 3-of-5 threshold is a practical sweet spot:
 
-- **Odd total** — no tie scenarios in majority logic
-- **Threshold above 50%** — 3/5 = 60%, the reconstructing group always represents a genuine majority of shares
-- **Meaningful fault tolerance** — tolerating loss of 2 of 5 servers (40%) covers realistic failure and compromise scenarios
-- **Operationally manageable** — 5 servers stays within the span of control of a single organisation without becoming a coordination problem
+- **Odd total** - no tie scenarios in majority logic
+- **Threshold above 50%** - 3/5 = 60%, the reconstructing group always represents a genuine majority of shares
+- **Meaningful fault tolerance** - tolerating loss of 2 of 5 servers (40%) covers realistic failure and compromise scenarios
+- **Operationally manageable** - 5 servers stays within the span of control of a single organisation without becoming a coordination problem
 
-The next valid candidate, 4 of 7, works mathematically (C(7,4)=35 pattern rows) and tolerates one additional failure. However, 7 parties means 7 ROM distribution relationships, 7 trust boundaries to maintain, and a pattern table 3.5x larger to audit — operational overhead that grows faster than the marginal security gain for most deployments.
+The next valid candidate, 4 of 7, works mathematically (C(7,4)=35 pattern rows) and tolerates one additional failure. However, 7 parties means 7 ROM distribution relationships, 7 trust boundaries to maintain, and a pattern table 3.5x larger to audit - operational overhead that grows faster than the marginal security gain for most deployments.
 
 ---
 
-**Implementation Note:** Any threshold variant — C(7,4), C(9,5), or any other C(x,y) — can be achieved simply by replacing the pattern table with the corresponding combinatorial combinations and updating the share filename checks accordingly. The core split and join logic remains unchanged.
+**Implementation Note:** Any threshold variant - C(7,4), C(9,5), or any other C(x,y) - can be achieved simply by replacing the pattern table with the corresponding combinatorial combinations and updating the share filename checks accordingly. The core split and join logic remains unchanged.

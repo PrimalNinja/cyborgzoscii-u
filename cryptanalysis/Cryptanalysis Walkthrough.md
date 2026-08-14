@@ -1,12 +1,12 @@
 # UNSIGNAL Protocol: Intelligence Analysis Walkthrough
 
-**Author:** Julian Cassin  
+**Author:** Julian Cassin
 **Date:** 2026-03-11
 
 1. The Intercept
    - Raw file obtained: no headers, no magic bytes, no structure
    - File size: variable (due to random prefix/suffix)
-   - Metadata: timing, source, destination — leads nowhere, cannot be correlated to content or intent
+   - Metadata: timing, source, destination - leads nowhere, cannot be correlated to content or intent
 
 2. Statistical Analysis (ent)
    - Entropy: 7.99+ bits/byte (maximum)
@@ -40,7 +40,7 @@
    - Knowing how it works provides no advantage
 
 6. Known-Plaintext Attempts
-   - Same plaintext encoded twice → different outputs
+   - Same plaintext encoded twice -> different outputs
    - Multiple address options per character (random selection)
    - No repeatable patterns to exploit
 
@@ -51,7 +51,7 @@
 
 8. The Verification Problem
    - Any ROM decodes to something
-   - Wrong ROM → garbage (but garbage that looks real)
+   - Wrong ROM -> garbage (but garbage that looks real)
    - No checksums, no MACs, no success indicator
    - Cannot verify which decoding is "correct"
 
@@ -75,7 +75,7 @@
 12. Authentication & Tamper Dection Is Internal
     - MAC if required: place it INSIDE the encoded payload
     - Checksums, signatures, verification data: all go IN the message
-    - Same encoding rules apply — they become indistinguishable from random noise
+    - Same encoding rules apply - they become indistinguishable from random noise
     - Attacker cannot distinguish authentication data from message content
     - No external validation markers exist
 
@@ -87,4 +87,3 @@
     - Authentication hidden within payload, indistinguishable from message
     - Compression only possible before encoding, not after
     - System achieves epistemic closure: attacker cannot know if they have won
-	

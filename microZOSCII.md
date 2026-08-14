@@ -1,8 +1,8 @@
 # microZOSCII: Quantum-Proof Bootstrap Protocol
 ## A Practical Solution for Secure Key Distribution
 
-**Version 1.4** (DRAFT) 
-**Author:** Julian Cassin  
+**Version 1.4** (DRAFT)
+**Author:** Julian Cassin
 **Date:** 2026-02-26
 **Last Update:** 2026-05-08
 
@@ -20,7 +20,7 @@ Although microZOSCII can work with a 54 character bootstrap, it is recommended t
 
 ## Abstract
 
-microZOSCII solves the fundamental key distribution problem in quantum-proof communications by providing a minimal, human-manageable bootstrap mechanism for full ZOSCII deployment. Using just 54 alphanumeric characters, microZOSCII enables information-theoretically secure transmission of a 64KB ZOSCII ROM or 128KB UNSIGNAL Protocol ROM, achieving from 10^91,619 combinatorial security—10^91,542 times stronger than AES-256—without any reliance on mathematical encryption.
+microZOSCII solves the fundamental key distribution problem in quantum-proof communications by providing a minimal, human-manageable bootstrap mechanism for full ZOSCII deployment. Using just 54 alphanumeric characters, microZOSCII enables information-theoretically secure transmission of a 64KB ZOSCII ROM or 128KB UNSIGNAL Protocol ROM, achieving from 10^91,619 combinatorial security-10^91,542 times stronger than AES-256-without any reliance on mathematical encryption.
 
 ---
 
@@ -106,7 +106,7 @@ K9mP2vQx7nR4wL8jY3hT6fN1sB5gM0cV9zX2aD4eW7qU3iO8pJ
 
 The 54 base-62 characters unpack locally to 80 hex characters (0-F), where:
 - Each hex value (0-F) appears exactly 5 times
-- Total: 16 values × 5 instances = 80 characters
+- Total: 16 values x 5 instances = 80 characters
 
 **Example unpacked ROM:**
 ```
@@ -138,8 +138,8 @@ note: for 128KB ROM, it will become 256KB hex characters.
 **JavaScript Implementation:**
 ```javascript
 // microZOSCII encode
-encode_micro = (microROM, fullROM_hex) => 
-  [...fullROM_hex].map(hexChar => 
+encode_micro = (microROM, fullROM_hex) =>
+  [...fullROM_hex].map(hexChar =>
     [...microROM]
       .map((byte, index) => byte === hexChar ? index : [])
       .flat()
@@ -147,7 +147,7 @@ encode_micro = (microROM, fullROM_hex) =>
   );
 
 // microZOSCII decode
-decode_micro = (microROM, addresses) => 
+decode_micro = (microROM, addresses) =>
   addresses.map(addr => microROM[addr]).join('');
 ```
 
@@ -172,9 +172,9 @@ When encoding 131,072 hex characters using the microROM:
 
 Converting to base-10:
 ```
-5^131,072 = 10^(131,072 × log₁₀(5))
-         = 10^(131,072 × 0.699)
-         ≈ 10^91,619
+5^131,072 = 10^(131,072 x log10(5))
+         = 10^(131,072 x 0.699)
+         ~= 10^91,619
 ```
 
 #### Comparison with AES-256
@@ -183,7 +183,7 @@ Converting to base-10:
 |--------|---------|-------------|
 | Key Size | 256 bits | 54 characters |
 | Security Level | ~10^77 | ~10^91,619 |
-| Relative Strength | 1× | 10^91,542× stronger |
+| Relative Strength | 1x | 10^91,542x stronger |
 | Vulnerability | Mathematical (quantum-vulnerable) | Information-theoretic (quantum-proof) |
 
 **microZOSCII provides 10^91,542 times more combinatorial possibilities than military-grade AES-256 encryption for sending the full ZOSCII ROM.**
@@ -210,7 +210,7 @@ microZOSCII inherits ZOSCII's fundamental security properties:
 
 **Why brute force fails:**
 Even knowing the protocol, the attacker must try:
-- 80! / (5!)^16 ≈ 10^89 possible microROM configurations
+- 80! / (5!)^16 ~= 10^89 possible microROM configurations
 - For each configuration, decode 131,072 addresses
 - No way to verify correctness without the real full ROM
 - **Computationally infeasible, even with quantum computers**
@@ -230,42 +230,42 @@ Even knowing the protocol, the attacker must try:
 | Session ROM (temporary) | 64 KB | Byte array |
 
 **Example for 100 contacts:**
-- Traditional PKI certificates: ~640 KB (100 × 6.4 KB average)
-- 100 × 64KB ROMs: 6.4 MB
-- **100 × microZOSCII seeds: 5.4 KB** (100 × 54 bytes)
+- Traditional PKI certificates: ~640 KB (100 x 6.4 KB average)
+- 100 x 64KB ROMs: 6.4 MB
+- **100 x microZOSCII seeds: 5.4 KB** (100 x 54 bytes)
 
 ### Bootstrap Flow
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Initial Setup (One-Time)                                    │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Exchange 54 base-62 characters                          │
-│    - In person, QR code, phone call, secure channel        │
-│    - Store in: localStorage, database, device memory       │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Session Initiation (Each Connection)                        │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Unpack 54 chars → 80-byte microROM                      │
-│ 2. Generate 64KB session ROM (pseudo-random)               │
-│ 3. Encode session ROM using microZOSCII                    │
-│ 4. Transmit 131,072 addresses                              │
-│ 5. Peer decodes using identical microROM                   │
-│ 6. Both parties now have identical 64KB ROM                │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Secure Communications (Full ZOSCII)                         │
-├─────────────────────────────────────────────────────────────┤
-│ - Use 64KB ROM for all messages                            │
-│ - Security: 10^millions+ combinations                     │
-│ - Delete session ROM after use (optional)                  │
-│ - Generate new session ROM for next session                │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+| Initial Setup (One-Time)                                    |
++-------------------------------------------------------------+
+| 1. Exchange 54 base-62 characters                          |
+|    - In person, QR code, phone call, secure channel        |
+|    - Store in: localStorage, database, device memory       |
++-------------------------------------------------------------+
+                           |
+                           v
++-------------------------------------------------------------+
+| Session Initiation (Each Connection)                        |
++-------------------------------------------------------------+
+| 1. Unpack 54 chars -> 80-byte microROM                      |
+| 2. Generate 64KB session ROM (pseudo-random)               |
+| 3. Encode session ROM using microZOSCII                    |
+| 4. Transmit 131,072 addresses                              |
+| 5. Peer decodes using identical microROM                   |
+| 6. Both parties now have identical 64KB ROM                |
++-------------------------------------------------------------+
+                           |
+                           v
++-------------------------------------------------------------+
+| Secure Communications (Full ZOSCII)                         |
++-------------------------------------------------------------+
+| - Use 64KB ROM for all messages                            |
+| - Security: 10^millions+ combinations                     |
+| - Delete session ROM after use (optional)                  |
+| - Generate new session ROM for next session                |
++-------------------------------------------------------------+
 ```
 
 ### Performance Characteristics
@@ -274,14 +274,14 @@ On standard hardware (2024-era laptop):
 
 | Operation | Time |
 |-----------|------|
-| Unpack 54 chars → 80-byte microROM | <1 ms |
+| Unpack 54 chars -> 80-byte microROM | <1 ms |
 | Generate 64KB session ROM | 10-50 ms |
 | Encode 64KB ROM via microZOSCII | 50-200 ms |
 | Decode received ROM | 20-100 ms |
 | **Total bootstrap time** | **<300 ms** |
 
 **Network transmission:**
-- 131,072 addresses at 1 byte each ≈ 128 KB payload
+- 131,072 addresses at 1 byte each ~= 128 KB payload
 - Over 100 Mbps connection: ~10 ms
 - Over 10 Mbps connection: ~100 ms
 
@@ -303,7 +303,7 @@ const contacts = {
 };
 
 // Total storage: 5.4 KB for 100 contacts
-// vs 6.4 MB for 100 × 64KB ROMs
+// vs 6.4 MB for 100 x 64KB ROMs
 ```
 
 ### 2. IoT Device Provisioning
@@ -313,17 +313,17 @@ const contacts = {
 
 ```c
 // Embedded device (C code)
-const char microZOSCII_seed[55] = 
+const char microZOSCII_seed[55] =
     "K9mP2vQx7nR4wL8jY3hT6fN1sB5gM0cV9zX2aD4eW7qU3iO8pJ";
 
 void device_bootstrap() {
     uint8_t microROM[80];
     unpack_base62(microZOSCII_seed, microROM);
-    
+
     // Generate session ROM
     uint8_t sessionROM[65536];
     generate_random(sessionROM, 65536);
-    
+
     // Encode and transmit
     transmit_via_microZOSCII(microROM, sessionROM);
 }
@@ -342,25 +342,25 @@ void device_bootstrap() {
 
 ```javascript
 // Browser-side
-localStorage.setItem('zoscii_seed_example.com', 
+localStorage.setItem('zoscii_seed_example.com',
   'K9mP2vQx7nR4wL8jY3hT6fN1sB5gM0cV9zX2aD4eW7qU3iO8pJ');
 
 // On login
 async function establishSecureSession() {
   const seed = localStorage.getItem('zoscii_seed_example.com');
   const microROM = unpackBase62(seed);
-  
+
   // Generate session ROM
   const sessionROM = new Uint8Array(65536);
   crypto.getRandomValues(sessionROM);
-  
+
   // Bootstrap with server
   const encoded = encodeMicroZOSCII(microROM, sessionROM);
-  await fetch('/api/bootstrap', { 
-    method: 'POST', 
-    body: encoded 
+  await fetch('/api/bootstrap', {
+    method: 'POST',
+    body: encoded
   });
-  
+
   // Now use full ZOSCII for all API calls
 }
 ```
@@ -390,9 +390,9 @@ CREATE TABLE users (
 **Scenario:**
 1. Before deployment: Captain receives sealed envelope with 54-character code
 2. At sea: Command transmits 128KB bootstrap payload
-3. Submarine decodes using microZOSCII → receives 64KB operational ROM
+3. Submarine decodes using microZOSCII -> receives 64KB operational ROM
 4. All mission communications use full ZOSCII (10^millions+ security)
-5. Enemy intercepts everything → has nothing without the microROM
+5. Enemy intercepts everything -> has nothing without the microROM
 
 **Advantages:**
 - No dependency on satellite key distribution
@@ -479,7 +479,7 @@ Later communications:
 
 **Scenario:**
 1. Device generates 64KB ROM using simple Math.random()
-2. Device encodes ROM using microZOSCII → transmits addresses
+2. Device encodes ROM using microZOSCII -> transmits addresses
 3. Adversary intercepts the 131,072 addresses
 
 **Adversary's problem:**
@@ -501,15 +501,15 @@ Mathematical reasoning:
 - Need to encode 16 different values (0-F hex)
 - Each value must appear multiple times (for ZOSCII encoding)
 - Minimum repetitions for security: 5 instances per value
-- 16 values × 5 instances = 80 bytes
+- 16 values x 5 instances = 80 bytes
 
 **Could we use fewer?**
-- 16 values × 3 instances = 48 bytes (too few combinations)
-- 16 values × 4 instances = 64 bytes (borderline, not enough security)
-- 16 values × 5 instances = 80 bytes ✓ (provides 10^91,619 security)
+- 16 values x 3 instances = 48 bytes (too few combinations)
+- 16 values x 4 instances = 64 bytes (borderline, not enough security)
+- 16 values x 5 instances = 80 bytes [x] (provides 10^91,619 security)
 
 **Could we use more?**
-- 16 values × 10 instances = 160 bytes (more security, but harder to type)
+- 16 values x 10 instances = 160 bytes (more security, but harder to type)
 - 80 bytes packs into 54 base-62 characters (human-manageable)
 - Diminishing returns beyond 80 bytes
 
@@ -528,7 +528,7 @@ Comparison of encoding efficiency:
 | Base-64 | 0-9, A-Z, a-z, +, / | 53 characters |
 
 **Why not base-64?**
-- Only saves 1 character (54 → 53)
+- Only saves 1 character (54 -> 53)
 - Requires special characters (+, /)
 - Harder to type/read/communicate verbally
 - Base-62 is the sweet spot: alphanumeric only, minimal length
@@ -541,7 +541,7 @@ Comparison of encoding efficiency:
 ```
 Position: 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 ...
 Value:    A  3  F  2  D  8  E  1  B  7  C  4  A  9  F  5  ...
-          ↑     ↑                             ↑     ↑
+          ^     ^                             ^     ^
           A appears at positions: 0, 12, 24, 36, 48
           3 appears at positions: 1, 13, 25, 37, 49
           F appears at positions: 2, 14, 26, 38, 50
@@ -569,15 +569,15 @@ For 'F':
 **Step 3: Receiver decodes**
 
 Receiver has identical microROM:
-- Address 24 → 'A'
-- Address 37 → '3'
-- Address 14 → 'F'
+- Address 24 -> 'A'
+- Address 37 -> '3'
+- Address 14 -> 'F'
 
-**Decoded:** "A3F" ✓
+**Decoded:** "A3F" [x]
 
 **Security:**
 - For just 3 characters: 5^3 = 125 possible encodings
-- For 131,072 characters: 5^131,072 ≈ 10^91,619 possible encodings
+- For 131,072 characters: 5^131,072 ~= 10^91,619 possible encodings
 
 ---
 
@@ -599,9 +599,9 @@ function unpackBase62(seed54) {
   // Implementation depends on specific base-62 encoding scheme
   // This is a placeholder - actual implementation would convert
   // base-62 to hex representation ensuring each 0-F appears 5 times
-  
+
   // ... conversion logic ...
-  
+
   return hex80; // Returns 80 hex characters
 }
 
@@ -627,7 +627,7 @@ function createMicroROM(hex80) {
 function encodeMicroZOSCII(microROM, hexData) {
   return [...hexData].map(hexChar => {
     const value = parseInt(hexChar, 16);
-    
+
     // Find all positions where this hex value appears
     const positions = [];
     for (let i = 0; i < 80; i++) {
@@ -635,7 +635,7 @@ function encodeMicroZOSCII(microROM, hexData) {
         positions.push(i);
       }
     }
-    
+
     // Randomly select one position
     const randomIndex = Math.floor(Math.random() * positions.length);
     return positions[randomIndex];
@@ -662,25 +662,25 @@ function decodeMicroZOSCII(microROM, addresses) {
 function bootstrap(seed54) {
   // 1. Unpack seed to 80 hex characters
   const hex80 = unpackBase62(seed54);
-  
+
   // 2. Create microROM
   const microROM = createMicroROM(hex80);
-  
+
   // 3. Generate 64KB session ROM
   const sessionROM = new Uint8Array(65536);
   crypto.getRandomValues(sessionROM); // or Math.random() is fine
-  
+
   // 4. Convert session ROM to hex string
   const hexROM = Array.from(sessionROM)
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('');
-  
+
   // 5. Encode using microZOSCII
   const encoded = encodeMicroZOSCII(microROM, hexROM);
-  
+
   // 6. Transmit 'encoded' to peer
   // (In real implementation, send over network)
-  
+
   return sessionROM;
 }
 
@@ -693,20 +693,20 @@ function bootstrap(seed54) {
 function receiveBootstrap(seed54, receivedAddresses) {
   // 1. Unpack seed to 80 hex characters
   const hex80 = unpackBase62(seed54);
-  
+
   // 2. Create microROM
   const microROM = createMicroROM(hex80);
-  
+
   // 3. Decode addresses
   const hexROM = decodeMicroZOSCII(microROM, receivedAddresses);
-  
+
   // 4. Convert hex string back to bytes
   const sessionROM = new Uint8Array(65536);
   for (let i = 0; i < 65536; i++) {
     const hexByte = hexROM.substr(i * 2, 2);
     sessionROM[i] = parseInt(hexByte, 16);
   }
-  
+
   return sessionROM;
 }
 
@@ -737,10 +737,10 @@ import secrets
 def unpack_base62(seed54: str) -> str:
     """
     Unpack 54 base-62 characters to 80 hex characters.
-    
+
     Args:
         seed54: 54 character base-62 string
-        
+
     Returns:
         80 character hex string (0-F)
     """
@@ -751,10 +751,10 @@ def unpack_base62(seed54: str) -> str:
 def create_micro_rom(hex80: str) -> bytearray:
     """
     Create 80-byte microROM from 80 hex characters.
-    
+
     Args:
         hex80: 80 character hex string
-        
+
     Returns:
         80-byte microROM
     """
@@ -763,34 +763,34 @@ def create_micro_rom(hex80: str) -> bytearray:
 def encode_micro_zoscii(micro_rom: bytearray, hex_data: str) -> list[int]:
     """
     Encode data using microZOSCII.
-    
+
     Args:
         micro_rom: 80-byte microROM
         hex_data: Hex string to encode
-        
+
     Returns:
         List of addresses
     """
     addresses = []
     for hex_char in hex_data:
         value = int(hex_char, 16)
-        
+
         # Find all positions where this hex value appears
         positions = [i for i, byte in enumerate(micro_rom) if byte == value]
-        
+
         # Randomly select one position
         addresses.append(random.choice(positions))
-    
+
     return addresses
 
 def decode_micro_zoscii(micro_rom: bytearray, addresses: list[int]) -> str:
     """
     Decode addresses using microZOSCII.
-    
+
     Args:
         micro_rom: 80-byte microROM
         addresses: List of addresses to decode
-        
+
     Returns:
         Decoded hex string
     """
@@ -799,31 +799,31 @@ def decode_micro_zoscii(micro_rom: bytearray, addresses: list[int]) -> str:
 def bootstrap(seed54: str) -> bytearray:
     """
     Complete bootstrap process.
-    
+
     Args:
         seed54: 54 character base-62 seed
-        
+
     Returns:
         64KB session ROM
     """
     # 1. Unpack seed
     hex80 = unpack_base62(seed54)
-    
+
     # 2. Create microROM
     micro_rom = create_micro_rom(hex80)
-    
+
     # 3. Generate 64KB session ROM
     session_rom = bytearray(secrets.token_bytes(65536))
-    
+
     # 4. Convert to hex
     hex_rom = ''.join(f'{byte:02X}' for byte in session_rom)
-    
+
     # 5. Encode
     encoded = encode_micro_zoscii(micro_rom, hex_rom)
-    
+
     # 6. Transmit 'encoded' to peer
     # (In real implementation, send over network)
-    
+
     return session_rom
 
 # Usage
@@ -868,11 +868,11 @@ To achieve perfect forward secrecy:
 function achieveForwardSecrecy(microROM, sessionROM) {
   // Clear microROM from memory
   microROM.fill(0);
-  
+
   // Session ROM is now the only key
   // When session ends:
   sessionROM.fill(0);
-  
+
   // All past communications now permanently undecipherable
 }
 ```
@@ -901,11 +901,11 @@ Malicious actors could send invalid addresses. Validation:
 function validateAddresses(addresses) {
   // Check all addresses are within microROM bounds
   const valid = addresses.every(addr => addr >= 0 && addr < 80);
-  
+
   if (!valid) {
     throw new Error('Invalid addresses received');
   }
-  
+
   return true;
 }
 ```
@@ -916,9 +916,9 @@ function validateAddresses(addresses) {
 
 ### 1. Standardized Base-62 Encoding
 
-Define canonical base-62 ↔ hex conversion ensuring:
+Define canonical base-62 <-> hex conversion ensuring:
 - Each 0-F appears exactly 5 times in unpacked form
-- Deterministic unpacking (same seed54 always → same hex80)
+- Deterministic unpacking (same seed54 always -> same hex80)
 - Collision-free encoding
 
 ### 2. Error Detection
@@ -961,7 +961,7 @@ microZOSCII solves the fundamental key distribution problem for quantum-proof co
 - Military/submarine communications
 - Journalist source protection
 
-microZOSCII transforms ZOSCII from a theoretical construct into a deployable solution by making the bootstrap process as simple as typing a password—but with security that will outlast any conceivable computational advancement.
+microZOSCII transforms ZOSCII from a theoretical construct into a deployable solution by making the bootstrap process as simple as typing a password-but with security that will outlast any conceivable computational advancement.
 
 **The future of secure communications doesn't require quantum computers, complex mathematics, or expensive infrastructure.**
 
@@ -994,10 +994,10 @@ microZOSCII transforms ZOSCII from a theoretical construct into a deployable sol
 
 Converting to base-10:
 ```
-5^131,072 = 10^(131,072 × log₁₀(5))
-          = 10^(131,072 × 0.69897)
+5^131,072 = 10^(131,072 x log10(5))
+          = 10^(131,072 x 0.69897)
           = 10^91,618.86
-          ≈ 10^91,619
+          ~= 10^91,619
 ```
 
 **Q.E.D.**
@@ -1008,10 +1008,10 @@ Converting to base-10:
 
 **Proof:**
 
-For any received address `a` (0 ≤ a < 80):
+For any received address `a` (0 <= a < 80):
 - Could represent any hex value 0-F
 - Each hex value appears at 5 positions in unknown microROM
-- Without microROM, P(a → value v) = 1/16 for all v ∈ {0,1,...,F}
+- Without microROM, P(a -> value v) = 1/16 for all v  in  {0,1,...,F}
 
 For a sequence of N addresses:
 - Each address provides no information about which hex value it represents
@@ -1020,7 +1020,7 @@ For a sequence of N addresses:
 
 Number of valid microROMs:
 ```
-80! / (5!)^16 ≈ 10^89 possible configurations
+80! / (5!)^16 ~= 10^89 possible configurations
 ```
 
 Even with infinite computing power, attacker must:
@@ -1040,14 +1040,14 @@ Even with infinite computing power, attacker must:
 
 | System | Key Size | Security Level | Quantum Resistant | Harvest-Proof |
 |--------|----------|----------------|-------------------|---------------|
-| DES | 56 bits | 10^16 | ❌ | ❌ |
-| 3DES | 168 bits | 10^50 | ❌ | ❌ |
-| AES-128 | 128 bits | 10^38 | ❌ | ❌ |
-| AES-256 | 256 bits | 10^77 | ❌ | ❌ |
-| RSA-2048 | 2048 bits | 10^77 | ❌ | ❌ |
-| ECC-256 | 256 bits | 10^77 | ❌ | ❌ |
-| **microZOSCII** | **54 chars** | **10^91,619** | **✅** | **✅** |
-| **Full ZOSCII** | **64 KB** | **10^millions** | **✅** | **✅** |
+| DES | 56 bits | 10^16 | [ ] | [ ] |
+| 3DES | 168 bits | 10^50 | [ ] | [ ] |
+| AES-128 | 128 bits | 10^38 | [ ] | [ ] |
+| AES-256 | 256 bits | 10^77 | [ ] | [ ] |
+| RSA-2048 | 2048 bits | 10^77 | [ ] | [ ] |
+| ECC-256 | 256 bits | 10^77 | [ ] | [ ] |
+| **microZOSCII** | **54 chars** | **10^91,619** | **[x]** | **[x]** |
+| **Full ZOSCII** | **64 KB** | **10^millions** | **[x]** | **[x]** |
 
 ### Performance Comparison
 
@@ -1073,15 +1073,15 @@ Even with infinite computing power, attacker must:
 
 **Q: Why not just use AES-256?**
 
-A: AES-256 is vulnerable to quantum computers (Grover's algorithm) and "harvest now, decrypt later" attacks. microZOSCII is information-theoretically secure—no amount of computing power helps without the microROM.
+A: AES-256 is vulnerable to quantum computers (Grover's algorithm) and "harvest now, decrypt later" attacks. microZOSCII is information-theoretically secure-no amount of computing power helps without the microROM.
 
 **Q: Is 54 characters really enough security?**
 
-A: Yes. Those 54 characters provide 10^91,619 combinations—10^91,542 times more than AES-256 for sending the full ZOSCII ROM. The security comes from combinatorial explosion, not character length.
+A: Yes. Those 54 characters provide 10^91,619 combinations-10^91,542 times more than AES-256 for sending the full ZOSCII ROM. The security comes from combinatorial explosion, not character length.
 
 **Q: What if someone steals my 54-character seed?**
 
-A: Same as if someone steals your password or private key. The difference: microZOSCII gives you perfect forward secrecy—delete the seed after bootstrap, and past communications remain secure forever.
+A: Same as if someone steals your password or private key. The difference: microZOSCII gives you perfect forward secrecy-delete the seed after bootstrap, and past communications remain secure forever.
 
 **Q: Can I use the same seed with multiple people?**
 
@@ -1101,7 +1101,7 @@ A: No. It's pure mathematics with open-source code. The security is based on inf
 
 **Q: Is this really quantum-proof?**
 
-A: Yes. Quantum computers excel at factoring and discrete logarithms (breaking RSA, ECC). They provide zero advantage for ZOSCII—the security is combinatorial, not computational.
+A: Yes. Quantum computers excel at factoring and discrete logarithms (breaking RSA, ECC). They provide zero advantage for ZOSCII-the security is combinatorial, not computational.
 
 **Q: Why not just use quantum key distribution (QKD)?**
 
@@ -1115,16 +1115,16 @@ A: Yes. microZOSCII is pure software, requires no special hardware, and works on
 
 ## Contact
 
-**Cyborg Unicorn Pty Ltd**  
-Julian Cassin, Principal Engineer  
+**Cyborg Unicorn Pty Ltd**
+Julian Cassin, Principal Engineer
 
-**GitHub:** https://github.com/PrimalNinja/cyborgzoscii-u  
-**LinkedIn:** https://www.linkedin.com/in/julian-cassin  
+**GitHub:** https://github.com/PrimalNinja/cyborgzoscii-u
+**LinkedIn:** https://www.linkedin.com/in/julian-cassin
 
 ---
 
-**Document Version:** 1.0 (DRAFT)  
-**Last Updated:** January 2026  
+**Document Version:** 1.0 (DRAFT)
+**Last Updated:** January 2026
 **Status:** Published
 
 ---

@@ -1,17 +1,17 @@
 # ZOSCII Lego Mindstorms Light Communication Demo
 
-**Version:** 2.1  
-**Author:** Julian Cassin  
-**Date:** April 2026  
+**Version:** 2.1
+**Author:** Julian Cassin
+**Date:** April 2026
 **License:** UNINTELLIGENCE Licence 1.1
-**Hardware:** LEGO SPIKE Prime / Robot Inventor  
+**Hardware:** LEGO SPIKE Prime / Robot Inventor
 **Tested Firmware:** SPIKE Prime v3.2.0 and above
 
 ---
 
 ## Overview
 
-This demo turns two LEGO SPIKE Prime hubs into a quantum-proof, light-based communication system using ZOSCII encoding. One hub transmits messages as light pulses; the other receives and decodes them. No radio, no Wi-Fi, no encryption—just physics and mathematics.
+This demo turns two LEGO SPIKE Prime hubs into a quantum-proof, light-based communication system using ZOSCII encoding. One hub transmits messages as light pulses; the other receives and decodes them. No radio, no Wi-Fi, no encryption-just physics and mathematics.
 
 The security is information-theoretic: the light pulses carry only addresses. Without the shared ROM, the pulses reveal nothing about the message.
 
@@ -28,7 +28,7 @@ Two ROM sizes are provided, selectable via a flag in the main program.
 | ROM size | 4,096 bytes |
 | Instances per byte | 16 (average) |
 | Security | 16^N combinations for N-byte message |
-| Address range | 0–4095 (12 bits) |
+| Address range | 0-4095 (12 bits) |
 | Transmission | Send 12-bit addresses as light pulses |
 
 **Best for:** Full byte encoding, no nibble splitting. Good balance of security and transmission speed.
@@ -39,8 +39,8 @@ Two ROM sizes are provided, selectable via a flag in the main program.
 |-----------|-------|
 | ROM size | 256 bytes |
 | Instances per nibble | 16 |
-| Security | 16^N combinations for N nibbles (N = 2 × message length) |
-| Address range | 0–255 (8 bits) |
+| Security | 16^N combinations for N nibbles (N = 2 x message length) |
+| Address range | 0-255 (8 bits) |
 | Transmission | Send 8-bit addresses as light pulses, two per message byte |
 
 **Best for:** Minimal memory footprint. Each message byte becomes two nibble addresses (high + low).
@@ -55,7 +55,7 @@ Two ROM sizes are provided, selectable via a flag in the main program.
 | Color Sensor (45605) | 1 | Receives light pulses |
 | USB cable | 1 | For programming |
 
-**Note:** The transmitter uses the hub's built-in 5×6 LED matrix (output). The receiver uses the color sensor (input). The two hubs should face each other with a clear line of sight, approximately 5-10 cm apart.
+**Note:** The transmitter uses the hub's built-in 5x6 LED matrix (output). The receiver uses the color sensor (input). The two hubs should face each other with a clear line of sight, approximately 5-10 cm apart.
 
 ---
 
@@ -74,7 +74,7 @@ import array
 # Option 1: 4KB ZOSCII ROM (Byte Addressing)
 # ============================================
 # Each byte value (0-255) appears 16 times
-# Total size: 256 × 16 = 4096 bytes
+# Total size: 256 x 16 = 4096 bytes
 # Security: 16^N combinations for N-byte message
 
 ROM_4KB = bytearray(4096)
@@ -86,7 +86,7 @@ for i in range(4096):
 # Option 2: 256-Byte microZOSCII ROM (Nibble Addressing)
 # ============================================
 # Each nibble value (0-15) appears 16 times
-# Total size: 16 × 16 = 256 bytes
+# Total size: 16 x 16 = 256 bytes
 # Security: 16^(2N) combinations for N-byte message
 
 ROM_256 = bytearray(256)
@@ -100,7 +100,7 @@ for nibble in range(16):
 # ============================================
 
 def build_lookup_byte(rom):
-    """Build lookup table for byte ROM: value → list of positions"""
+    """Build lookup table for byte ROM: value -> list of positions"""
     lookup = [[] for _ in range(256)]
     for idx, val in enumerate(rom):
         if val < 256:
@@ -109,7 +109,7 @@ def build_lookup_byte(rom):
 
 
 def build_lookup_nibble(rom):
-    """Build lookup table for nibble ROM: nibble → list of positions"""
+    """Build lookup table for nibble ROM: nibble -> list of positions"""
     lookup = [[] for _ in range(16)]
     for idx, val in enumerate(rom):
         if val < 16:
@@ -141,7 +141,7 @@ def encode_nibble_rom(rom, message, lookup):
         byte_val = ord(char)
         high_nibble = (byte_val >> 4) & 0x0F
         low_nibble = byte_val & 0x0F
-        
+
         if lookup[high_nibble] and lookup[low_nibble]:
             high_addr = random.choice(lookup[high_nibble])
             low_addr = random.choice(lookup[low_nibble])
@@ -188,7 +188,7 @@ from rom import encode_byte_rom, encode_nibble_rom
 USE_4KB_ROM = True
 
 # Base pulse duration in milliseconds per address unit
-# Address 0 = 1 × base, Address 255 = 256 × base, etc.
+# Address 0 = 1 x base, Address 255 = 256 x base, etc.
 BASE_DURATION_MS = 1
 
 # Pulse duration for end marker (short pulse)
@@ -218,7 +218,7 @@ else:
     print("Using 256-byte nibble ROM (8-bit addresses)")
 
 print(f"Base duration: {BASE_DURATION_MS}ms per unit")
-print(f"Address range: 0-{MAX_ADDR} (pulse = (addr+1)×{BASE_DURATION_MS}ms)")
+print(f"Address range: 0-{MAX_ADDR} (pulse = (addr+1)x{BASE_DURATION_MS}ms)")
 
 # ============================================
 # LIGHT PULSE TRANSMISSION
@@ -231,7 +231,7 @@ def send_pulse(duration_ms):
 
 
 def send_address(addr):
-    """Send a single address as a pulse. Address 0 sends 1 × base (detectable)."""
+    """Send a single address as a pulse. Address 0 sends 1 x base (detectable)."""
     # Offset by +1 so address 0 produces a detectable pulse
     duration = (addr + 1) * BASE_DURATION_MS
     send_pulse(duration)
@@ -255,16 +255,16 @@ def send_end_marker():
 def send_message(message):
     """Encode and send a full message"""
     addresses = encode_func(ROM, message, LOOKUP)
-    
+
     print("Sending message:", message)
     print("Addresses:", addresses[:20], "..." if len(addresses) > 20 else "")
     print("Total pulses:", len(addresses))
-    
+
     send_start_marker()
-    
+
     for addr in addresses:
         send_address(addr)
-    
+
     send_end_marker()
     print("Message sent")
 
@@ -283,11 +283,11 @@ while True:
     if hub.button.left.is_pressed():
         send_message(DEFAULT_MESSAGE)
         time.sleep(2)
-    
+
     if hub.button.right.is_pressed():
         send_message("ZOSCII ON LEGO")
         time.sleep(2)
-    
+
     time.sleep_ms(100)
 ```
 
@@ -354,7 +354,7 @@ print(f"End marker: three pulses < {END_MARKER_THRESHOLD_MS}ms")
 def measure_pulse_duration(sensor, timeout_ms=5000):
     """Measure the duration of a light pulse"""
     start_time = time.ticks_ms()
-    
+
     # Wait for light to turn on
     while time.ticks_diff(time.ticks_ms(), start_time) < timeout_ms:
         if sensor.get_reflected_light() > 20:  # Threshold for "light on"
@@ -372,26 +372,26 @@ def receive_message():
     """Receive a full message. Returns list of addresses."""
     addresses = []
     pulse_history = []  # Store last 3 pulse types (True = short)
-    
+
     while True:
         duration = measure_pulse_duration(sensor)
         if duration is None:
             # No pulse within timeout - end of transmission
             break
-        
+
         # Classify pulse: short (< threshold) or long (>= threshold)
         is_short = duration < END_MARKER_THRESHOLD_MS
         pulse_history.append(is_short)
-        
+
         # Keep only last 3 pulses
         if len(pulse_history) > 3:
             pulse_history.pop(0)
-        
+
         # Check for end marker: three shorts in a row
         if len(pulse_history) == 3 and all(pulse_history):
             print("End marker detected")
             break
-        
+
         # Only long pulses are data addresses
         if not is_short:
             # Reverse the offset: addr = (duration / base) - 1
@@ -401,7 +401,7 @@ def receive_message():
                 print(f"Address: {addr}")
             else:
                 print(f"Warning: Address {addr} out of range, skipping")
-    
+
     return addresses
 
 
@@ -423,19 +423,19 @@ while True:
     if duration and duration > 300:
         print("Start marker detected")
         addresses = receive_message()
-        
+
         if addresses:
             message = decode_func(ROM, addresses)
             print(f"Decoded: {message}")
             print(f"Received {len(addresses)} addresses")
-            
+
             # Display on hub screen
             hub.display.show(hub.Image("YES"))
             time.sleep(2)
             hub.display.show(hub.Image("ARROW_L"))
         else:
             print("No addresses received")
-    
+
     time.sleep_ms(100)
 ```
 
@@ -481,7 +481,7 @@ Set `USE_4KB_ROM` to the same value on both hubs:
 | Element | Encoding |
 |---------|----------|
 | **Start marker** | 500ms pulse |
-| **Address** | Pulse duration = (address + 1) × BASE_DURATION_MS (min 1 × base) |
+| **Address** | Pulse duration = (address + 1) x BASE_DURATION_MS (min 1 x base) |
 | **Address gap** | 50ms between address pulses |
 | **End marker** | Three rapid pulses of 50ms each, 20ms gaps (unambiguous) |
 
@@ -500,7 +500,7 @@ Set `USE_4KB_ROM` to the same value on both hubs:
 
 | Issue | Solution |
 |-------|----------|
-| **Address 0 invisible** | Offset by +1: pulse = (addr + 1) × base |
+| **Address 0 invisible** | Offset by +1: pulse = (addr + 1) x base |
 | **End marker collision** | Three rapid pulses (unambiguous; cannot occur in valid data) |
 | **Sensor API compatibility** | Try/except fallback for different firmware versions |
 | **Noise rejection** | Pulse length classification with thresholds |
@@ -526,7 +526,7 @@ Set `USE_4KB_ROM` to the same value on both hubs:
 | **ROM size** | 4,096 bytes | 256 bytes |
 | **Instances per byte/nibble** | 16 per byte | 16 per nibble |
 | **Message bytes per address** | 1 byte per address | 2 addresses per byte |
-| **Address bits** | 12 bits (0–4095) | 8 bits (0–255) |
+| **Address bits** | 12 bits (0-4095) | 8 bits (0-255) |
 | **Transmission bits per byte** | 12 bits | 16 bits |
 | **Max pulse per address** | 4.096 seconds (@1ms/unit) | 0.256 seconds (@1ms/unit) |
 | **Security (per byte)** | 16 possibilities | 256 possibilities |
@@ -559,7 +559,7 @@ Set `USE_4KB_ROM` to the same value on both hubs:
 
 ## Conclusion
 
-This demo proves that ZOSCII can run on literally anything—even a children's toy. The same mathematics that provides quantum-proof security on a GPU cluster also works on a LEGO hub communicating via light pulses.
+This demo proves that ZOSCII can run on literally anything-even a children's toy. The same mathematics that provides quantum-proof security on a GPU cluster also works on a LEGO hub communicating via light pulses.
 
 With two ROM options provided:
 - **4KB byte ROM**: Simpler logic, 12-bit addresses, 16 instances per byte

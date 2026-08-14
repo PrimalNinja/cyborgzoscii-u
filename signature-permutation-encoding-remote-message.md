@@ -2,8 +2,8 @@
 
 **A Zero-Knowledge, Quantum-Proof Digital Signature Protocol Using Self-Encoding ROMs**
 
-**Version 1.0** (DRAFT) 
-**Author:** Julian Cassin  
+**Version 1.0** (DRAFT)
+**Author:** Julian Cassin
 **Date:** 2026-04-07
 
 ## SOFTWARE LICENSE v1.1
@@ -95,7 +95,7 @@ UNSIGNAL encoding works by address indirection:
 
 The output `S` is a sequence of random-looking addresses. Without the ROM, these addresses are meaningless. With the ROM, you can decode `S` back to the original bytes.
 
-When the message is the ROM itself, this creates a fixed point: the ROM encodes to `S`, and `S` decodes back to the ROM — but only when using the correct ROM as the decoding key.
+When the message is the ROM itself, this creates a fixed point: the ROM encodes to `S`, and `S` decodes back to the ROM - but only when using the correct ROM as the decoding key.
 
 ### 2.3 Combinatorial Infeasibility
 
@@ -104,16 +104,16 @@ For a 128KB ROM (a random sliding window of 64KB is used) with 256 possible byte
 For a ROM of size `N`, the total number of possible self-signatures is:
 
 ```
-Total signatures = ∏_{i=1}^{N} (count[E[i]] in E)
+Total signatures = PROD_{i=1}^{N} (count[E[i]] in E)
 ```
 
 For a random ROM, this is approximately:
 
 ```
-Total signatures ≈ (N/256)^N = (256)^N = 256^65536 ≈ 10^(65536 * log10(256)) ≈ 10^(65536 * 2.408) ≈ 10^157,800
+Total signatures ~= (N/256)^N = (256)^N = 256^65536 ~= 10^(65536 * log10(256)) ~= 10^(65536 * 2.408) ~= 10^157,800
 ```
 
-This is astronomically larger than the number of atoms in the observable universe (≈ 10^80).
+This is astronomically larger than the number of atoms in the observable universe (~= 10^80).
 
 Smaller ROMs are also usable, 2KB, 4KB, 8KB, 16KB, 32KB etc, but 8KB to 128KB form a sweet spot. If you can afford the storage and bandwidth, go to 128KB.  Note: a 2KB ROM gives 10^1849 strength - which is astronomical.
 
@@ -128,7 +128,7 @@ Smaller ROMs are also usable, 2KB, 4KB, 8KB, 16KB, 32KB etc, but 8KB to 128KB fo
 | Step | Action |
 |------|--------|
 | 1 | Customer generates ROM `E` |
-| 2 | Customer encodes `E` using `E` as ROM → `S` |
+| 2 | Customer encodes `E` using `E` as ROM -> `S` |
 | 3 | Customer sends `S` to software vendor (not `E`) |
 | 4 | Vendor stores `S` (cannot decode it without `E`) |
 | 5 | Customer uses `E` as their license key |
@@ -143,7 +143,7 @@ Smaller ROMs are also usable, 2KB, 4KB, 8KB, 16KB, 32KB etc, but 8KB to 128KB fo
 | Step | Action |
 |------|--------|
 | 1 | Developer generates ROM `E` |
-| 2 | Developer encodes `E` using `E` as ROM → `S` |
+| 2 | Developer encodes `E` using `E` as ROM -> `S` |
 | 3 | Developer embeds `S` in the software binary |
 | 4 | At runtime, software decodes `S` using `E` (embedded or external) |
 | 5 | If `E_decoded != E`, the software has been tampered with |
@@ -163,7 +163,7 @@ Signature Permutation Encoding Remote Message is the first practical digital sig
 - **Zero-knowledge** (signature reveals nothing about the key)
 - **Tamper detection** (any change to the key breaks verification)
 
-Signature Permutation Encoding Remote Message is not a replacement for all signature schemes — it has different trade-offs (larger key size, slower signing). But for applications where security is paramount and ROM storage is feasible, Signature Permutation Encoding Remote Message offers unprecedented guarantees.
+Signature Permutation Encoding Remote Message is not a replacement for all signature schemes - it has different trade-offs (larger key size, slower signing). But for applications where security is paramount and ROM storage is feasible, Signature Permutation Encoding Remote Message offers unprecedented guarantees.
 
 The mathematics are proven. The implementation is open source. The protocol is ready.
 

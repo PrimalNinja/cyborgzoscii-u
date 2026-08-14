@@ -1,13 +1,13 @@
 # Introducing BRAINLESS Protocol: When Simple Defeats Sophisticated
 
-**Author:** Julian Cassin  
+**Author:** Julian Cassin
 **Date:** 2026-01-29
 
 ## SOFTWARE LICENSE v1.1
 
 UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 
-## BRAINLESS = ZOSCII + Ouroboros Encryption🐍
+## BRAINLESS = ZOSCII + Ouroboros Encryption
 
 You don't need complex algorithms when you start with I(M;A)=0.
 

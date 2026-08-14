@@ -1,6 +1,6 @@
 # TEMPURA Protocol Specification
 **Threshold Endpoint Mesh Protocol Using Randomised Addressing**
-**Author:** Julian Cassin  
+**Author:** Julian Cassin
 **Date:** 2026-05-06
 
 ## SOFTWARE LICENSE v1.1
@@ -10,11 +10,11 @@ TEMPURA Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
 
 ### 1. OVERVIEW
 
-TEMPURA is a fault-tolerant, information-theoretically secure web application delivery protocol built on the UNSIGNAL Protocol and the PENTAGONE split mechanism. It enables rich web applications to be delivered 100% securely over standard HTTP — no HTTPS required — within an organisational trust model.
+TEMPURA is a fault-tolerant, information-theoretically secure web application delivery protocol built on the UNSIGNAL Protocol and the PENTAGONE split mechanism. It enables rich web applications to be delivered 100% securely over standard HTTP - no HTTPS required - within an organisational trust model.
 
 TEMPURA achieves security not through encryption or ciphers, but through UNSIGNAL's randomised addressing and the mathematical properties of combinatorial threshold distribution. The payload delivered to any single server is provably meaningless without the client-held ROM. I(M;A)=0.
 
-**Note:** "100% Secure" refers to the encoding layer. Human factors — coercion, dishonesty, physical compromise — are outside the mathematical security model and must be addressed operationally.
+**Note:** "100% Secure" refers to the encoding layer. Human factors - coercion, dishonesty, physical compromise - are outside the mathematical security model and must be addressed operationally.
 
 ---
 
@@ -35,7 +35,7 @@ TEMPURA distributes an UNSIGNAL-encoded application payload across **5 servers**
 - If any **3 of 5** servers are online, the application serves correctly.
 - If any **3 of 5** servers are uncompromised, the application serves securely.
 - A server holding its share has zero knowledge of the payload content.
-- No server operator can read their share — the ROM never leaves the client.
+- No server operator can read their share - the ROM never leaves the client.
 
 #### 2.2 Server Roles
 
@@ -51,7 +51,7 @@ Any server type is valid: web servers, application servers, ZOSCII MQ queues, or
 
 TEMPURA optionally integrates with **ZOSCII MQ** as a webservice layer. In this mode:
 
-- Responses are fetched from a **different queue** to the request — every time.
+- Responses are fetched from a **different queue** to the request - every time.
 - No persistent request/response mapping exists for an adversary to correlate.
 - The queue used for each response is non-deterministic from an external observer's perspective.
 
@@ -93,19 +93,19 @@ TEMPURA payload delivery follows this pipeline:
 
 ```
 [Application Source]
-        ↓
-[UNSIGNAL Encoding] — randomised ROM offsets, prefix/suffix noise
-        ↓
-[PENTAGONE Split] — C(5,3) combinatorial distribution into 5 shares
-        ↓
-[Share Distribution] — one share per server
-        ↓
-[Client Request] — fetches from available servers (minimum 3) - try 3, if fails try another up to 5
-        ↓
-[Reconstruction] — combines shares, CRC validates, retries with new combination as required
-        ↓
-[UNSIGNAL Decode] — ROM held by client, never transmitted
-        ↓
+        v
+[UNSIGNAL Encoding] - randomised ROM offsets, prefix/suffix noise
+        v
+[PENTAGONE Split] - C(5,3) combinatorial distribution into 5 shares
+        v
+[Share Distribution] - one share per server
+        v
+[Client Request] - fetches from available servers (minimum 3) - try 3, if fails try another up to 5
+        v
+[Reconstruction] - combines shares, CRC validates, retries with new combination as required
+        v
+[UNSIGNAL Decode] - ROM held by client, never transmitted
+        v
 [Application Rendered]
 ```
 
@@ -119,7 +119,7 @@ TEMPURA inherits UNSIGNAL's I(M;A)=0 guarantee. An adversary intercepting traffi
 
 #### 5.2 No Transport Security Dependency
 
-TEMPURA does not require HTTPS or TLS. The security model is independent of transport layer — an adversary with full visibility of all HTTP traffic between client and all 5 servers still cannot reconstruct the payload without the client-held ROM.
+TEMPURA does not require HTTPS or TLS. The security model is independent of transport layer - an adversary with full visibility of all HTTP traffic between client and all 5 servers still cannot reconstruct the payload without the client-held ROM.
 
 #### 5.3 Corruption Detection
 
@@ -133,11 +133,11 @@ The client holds a CRC of the expected reconstructed payload. On reconstruction:
 
 | Threat | TEMPURA Response |
 |--------|-----------------|
-| Network interception (all servers) | I(M;A)=0 — no information without ROM |
-| Server compromise (up to 2) | Threshold maintained — no payload exposure |
-| Server offline (up to 2) | Threshold maintained — application continues |
-| ROM compromise | Outside encoding scope — ROM security is operational |
-| Human factors (coercion, dishonesty) | Outside mathematical scope — operational controls required — can torture up to 2 server operators |
+| Network interception (all servers) | I(M;A)=0 - no information without ROM |
+| Server compromise (up to 2) | Threshold maintained - no payload exposure |
+| Server offline (up to 2) | Threshold maintained - application continues |
+| ROM compromise | Outside encoding scope - ROM security is operational |
+| Human factors (coercion, dishonesty) | Outside mathematical scope - operational controls required - can torture up to 2 server operators |
 
 ---
 
@@ -145,7 +145,7 @@ The client holds a CRC of the expected reconstructed payload. On reconstruction:
 
 #### 6.1 Trust Models
 
-TEMPURA is designed for deployment within an **organisational trust model** — parties that have an established relationship and can distribute ROMs via secure out-of-band channels. This is consistent with UNSIGNAL's design scope. A **zero trust model** (trust yourself only) is also possible for applications which don't require server knowledge of payloads.
+TEMPURA is designed for deployment within an **organisational trust model** - parties that have an established relationship and can distribute ROMs via secure out-of-band channels. This is consistent with UNSIGNAL's design scope. A **zero trust model** (trust yourself only) is also possible for applications which don't require server knowledge of payloads.
 
 #### 6.2 Client Requirements
 
@@ -167,11 +167,11 @@ TEMPURA is designed for deployment within an **organisational trust model** — 
 
 Because TEMPURA requires only 3 of 5 servers to serve correctly, application updates can be deployed progressively with minimal or no downtime:
 
-1. Update the payload share on 2 servers — the application continues to serve from the remaining 3 unmodified servers
+1. Update the payload share on 2 servers - the application continues to serve from the remaining 3 unmodified servers
 2. Once the 3rd server receives its updated share, the new version becomes the active payload
 3. The remaining 2 servers can then be updated at any time
 
-This means a new application version goes live the moment the 3rd updated server comes online — no coordinated cutover, minimal or no downtime, no rollback complexity. The threshold itself is the deployment gate.
+This means a new application version goes live the moment the 3rd updated server comes online - no coordinated cutover, minimal or no downtime, no rollback complexity. The threshold itself is the deployment gate.
 
 **Note:** For stateless applications with no external dependencies, downtime is zero. Applications with database schema changes, API version dependencies, or shared server-side state may require coordination to manage the transition window where version X and version Y are simultaneously active across the mesh.
 
@@ -184,7 +184,7 @@ TEMPURA delivers web applications with greater resilience and stronger security 
 | Property | HTTPS / TLS | TEMPURA |
 |----------|-------------|---------|
 | Security model | Computational | Information-Theoretic |
-| Quantum resistance | Dependent on algorithm | I(M;A)=0 — immune by definition |
+| Quantum resistance | Dependent on algorithm | I(M;A)=0 - immune by definition |
 | Server compromise tolerance | None | Up to 2 of 5 servers |
 | Server offline tolerance | None | Up to 2 of 5 servers |
 | Transport dependency | Requires TLS | Plain HTTP sufficient |
