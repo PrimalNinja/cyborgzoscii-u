@@ -23,6 +23,7 @@
     <Compile Include="..\src\ZOSCII.cs" />
     <Compile Include="..\src\ZRollingHash.cs" />
     <Compile Include="..\src\ZTB.cs" />
+	<Compile Include="..\src\ZWT.cs" />
   </ItemGroup>
 
 </Project>

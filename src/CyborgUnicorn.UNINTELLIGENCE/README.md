@@ -13,6 +13,7 @@ is statistically independent of the input without the ROM key material.
 | `U` | UNSIGNAL encode / decode / verify |
 | `B` | Binary operations: compare, split, join, verify |
 | `MQ` | Message Queue operations (queue, store, replication, monitoring) |
+| `ZWT` | ZOSCII Web Tokens: issue, open, introspect, verify |
 
 ---
 
@@ -127,6 +128,21 @@ MQFetchResult:   HasMessage, EncodedBytes, Filename, Pointer
 Encoding/decoding is the caller's responsibility — MQClient sends and receives raw bytes.
 Scan returns string[] (unidentified names) or null on failure
 Identify returns string[] (identified names) or null on failure
+
+```csharp
+MQClient(int intTimeoutSeconds_a = 60)
+void SetUserAgentRandom()
+void SetUserAgentNone()
+void SetUserAgent(string strUserAgent_a)
+MQCheckStatus Check(string strServerURL_a, string strQueueGUID_a, string strAfterPointer_a)
+MQFetchResult FetchNext(string strServerURL_a, string strQueueGUID_a, string strAfterPointer_a)
+MQPublishResult Publish(string strServerURL_a, string strQueueGUID_a, byte[] arrData_a, string strNonce_a = "", int intRetentionDays_a = 7)
+MQFetchResult Get(string strServerURL_a, string strStoredName_a)
+string[] Identify(string strServerURL_a, string[] arrNames_a)
+MQPublishResult Put(string strServerURL_a, byte[] arrData_a, string strNonce_a = "", int intRetentionDays_a = 7)
+string[] Scan(string strServerURL_a)
+MQPublishResult Replicate(string strRemoteServerURL_a, string strRemoteQueueGUID_a, string strLocalServerURL_a, string strTargetQueueGUID_a, string strLastPointer_a, out string strNewPointer_a, int intRetentionDays_a = 7)
+```
 
 ```csharp
 var mq = new MQClient();              // default 60s timeout
@@ -364,6 +380,21 @@ Truncation block: `<BlockID>.ztb` (111 + 65536 bytes: raw header + raw ROM, not 
 `ZTBChain.HEADER_RAW_SIZE`     — 111
 
 ```csharp
+public static bool Create(string strNewBlockID_a, string[] arrSourcePaths_a, string strWorkDir_a, string strChainID_a)
+public static ZTBChain Open(string strWorkDir_a, string strChainID_a, ZTBHashType objHashType_a = ZTBHashType.RollingFull)
+public ZTBBlockResult AddBlock(string strNewBlockID_a, string strPrevBlockID_a, byte[] arrPayload_a)
+public ZTBBlockResult AddBlockText(string strNewBlockID_a, string strPrevBlockID_a, string strText_a)
+public ZTBBlockResult AddBlockFile(string strNewBlockID_a, string strPrevBlockID_a, string strFilePath_a)
+public ZTBBlockResult AddCheckpoint(string strNewBlockID_a, string strPrevBlockID_a, string strLabel_a)
+public ZTBBlockResult AddBranch(string strNewBlockID_a, string strPrevBlockID_a, byte[] arrPayload_a, string strTrunkChainID_a)
+public ZTBBlockResult FetchBlock(string strBlockID_a)
+public ZTBVerifyResult Verify(string strBlockID_a, bool blnWalk_a)
+public ZTBBlockResult Truncate(string strNewBlockID_a, string strCheckpointBlockID_a)
+public ZTBBlockResult Finalise(string strNewBlockID_a, string strPrevBlockID_a, string strLabel_a)
+public void Dispose()
+```
+
+```csharp
 // Create genesis block from 1-3 entropy source files (JPEG, MP3, etc.)
 // Caller supplies the GUID for the genesis block
 bool ok = ZTBChain.Create(strGenesisBlockID, new[] { "photo.jpg", "music.mp3" },
@@ -470,10 +501,125 @@ below the Truncation block can be `SecureDelete`d. The chain above the checkpoin
 
 ---
 
+## ZWT
+
+ZOSCII Web Tokens — a quantum-proof, opaque session/attestation token. The JWT analogue for ZOSCII:
+an issuer attests a user to a relying party, but unlike JWT the whole token is UNSIGNAL-encoded
+(**I(M;A)=0**) — payload, signatures and verification structure are indistinguishable from noise.
+No asymmetric primitive, so there is nothing for Shor's algorithm to attack.
+
+**Keys**
+
+`SHAREDROM` — held by issuer + relying party (per-relationship key)
+`ISSUERROM1` and `ISSUERROM2` — held by issuer only, never shared (one pair for all relying parties, or one pair per relying party). The issuer block is double-encoded with both.
+
+**Claims visibility**
+
+`sharedclaims`  — readable by BOTH parties (both hold SHAREDROM). Live in the SHAREDROM envelope.
+`privateclaims` — readable only by the issuer. Sealed inside the issuer block (double-encoded with ISSUERROM1 and ISSUERROM2).
+
+**Result type**
+
+`ZWTResult`: Success, Error, Token, IssuerSignature, SharedSignature, SharedClaims, PrivateClaims
+
+```csharp
+public static byte[] NewSignature()
+public static byte[] ClaimsFromString(string strClaims_a)
+public static string ClaimsToString(byte[] arrClaims_a)
+public static ZWTResult Issue(byte[] arrSharedSignature_a, byte[] arrPrivateClaims_a, byte[] arrSharedClaims_a, ZOSCIIRom objIssuerRom1_a, ZOSCIIRom objIssuerRom2_a, ZOSCIIRom objSharedRom_a)
+public static ZWTResult Open(byte[] arrToken_a, ZOSCIIRom objSharedRom_a)
+public static ZWTResult Introspect(byte[] arrIssuerData_a, byte[] arrPresentedSharedSignature_a, ZOSCIIRom objIssuerRom1_a, ZOSCIIRom objIssuerRom2_a)
+public static ZWTResult Verify(byte[] arrToken_a, ZOSCIIRom objSharedRom_a, ZOSCIIRom objIssuerRom1_a, ZOSCIIRom objIssuerRom2_a)
+public static ZWTResult UpdateSharedClaims(byte[] arrToken_a, byte[] arrNewSharedClaims_a, ZOSCIIRom objSharedRom_a)
+```
+
+```csharp
+using (ZOSCIIRom sharedRom = ZOSCIIRom.FromFile("shared.rom"))
+using (ZOSCIIRom issuerRom1 = ZOSCIIRom.FromFile("issuer1.rom"))
+using (ZOSCIIRom issuerRom2 = ZOSCIIRom.FromFile("issuer2.rom"))
+{
+    // --- Issuer side: mint a token (holds all three ROMs) ---
+    byte[] arrSharedSig     = ZWT.NewSignature();                       // GUID-based, 16 bytes
+    byte[] arrPrivateClaims = ZWT.ClaimsFromString("{\"uid\":\"42\"}"); // issuer-only
+    byte[] arrSharedClaims  = ZWT.ClaimsFromString("{\"scope\":\"read\"}");
+
+    ZWTResult objIssue = ZWT.Issue(arrSharedSig, arrPrivateClaims, arrSharedClaims, issuerRom1, issuerRom2, sharedRom);
+    byte[] arrToken = objIssue.Token;   // the opaque ZWT — send to relying party
+
+    // --- Relying party side: open the token (holds SHAREDROM only) ---
+    ZWTResult objOpen = ZWT.Open(arrToken, sharedRom);
+    byte[] arrSig     = objOpen.SharedSignature;               // read shared signature
+    string strScope   = ZWT.ClaimsToString(objOpen.SharedClaims);
+    byte[] arrIssuerData = objOpen.IssuerSignature;            // opaque to RP — for introspection
+
+    // --- Issuer side: introspect (holds ISSUERROM1 + ISSUERROM2) ---
+    // Double-decodes the issuer block, confirms the presented sharedsig matches the
+    // sealed copy, and recovers the issuer-only private claims.
+    ZWTResult objIntro = ZWT.Introspect(arrIssuerData, arrSig, issuerRom1, issuerRom2);
+    string strUid = ZWT.ClaimsToString(objIntro.PrivateClaims);
+
+    // --- Issuer-local convenience: open + introspect in one call (needs all three ROMs) ---
+    ZWTResult objVerify = ZWT.Verify(arrToken, sharedRom, issuerRom1, issuerRom2);
+}
+
+// Updating Relyer claims
+// 1. RP has token:
+byte[] token = ...;
+
+// 2. RP updates shared claims:
+byte[] newSharedClaims = ClaimsFromString("{ \"scope\": \"premium\", \"email\": \"new@a.com\" }");
+
+ZWTResult updated = ZWT.UpdateSharedClaims(
+    token,
+    newSharedClaims,
+    sharedRom
+);
+
+byte[] newToken = updated.Token;  // New token with updated shared claims
+
+// 3. RP uses new token:
+ZWTResult open = ZWT.Open(newToken, sharedRom);
+string scope = open.SharedClaims;  // "premium" ✅
+```
+
+**Why only the issuer can forge a valid token**
+
+- Without SHAREDROM a forger can neither open nor produce a ZWT — outsiders are locked out.
+- A relying party holds SHAREDROM, so it can produce *a* `sharedsignature`, but not a matching
+  `issuersignature` — that requires ISSUERROM1 and ISSUERROM2 (issuer-only).
+- A `sharedsignature` is valid only when it matches the copy sealed inside `issuersignature`.
+- Therefore only the issuer can mint a token the issuer will accept. A forged shared-sig has no
+  matching sealed copy and fails introspection.
+
+**What is the purpose of Issuer Claims?**
+
+- Since the internal incoding containing issuer claims is also UNSIGNAL Protocol secured with
+  the issuers own ROM, they can place private information in there knowing it will be secure.
+- Issuer Claim information can be freely passed around and back to multiple issuers servers with
+  full validation and secrecy.
+
+**Not solved by ZWT alone**
+
+- **Replay to the legitimate relying party** — a stolen ZWT can be replayed to its intended
+  recipient. Bind a server-issued nonce inside the token; avoid clock-based expiry.
+- **Revocation** — stateless local verification can't revoke mid-life. Route `issuersignature`
+  through issuer introspection instead — gains revocation, costs a round-trip.
+
+Each envelope binds its full field preimage with a `ZRollingHash` (4-byte) integrity field, so
+`Open` and `Introspect` reject any malformed or tampered token. `sharedclaims` are deliberately
+not sealed inside `issuersignature` — sealing shared-readable data under the issuer's private ROM
+would serve no purpose, and an RP editing its own copy of shared data under its own half of a
+per-relationship key affects nothing but its own door.
+
+---
+
 ## Encryption
 
 Plugin-based encryption registry. Drop DLLs implementing `IEncryptionProvider` into a folder,
 probe by filename, and the encryption appears in the dropdown automatically.
+
+Note: No encryption plugins or encryption code is supplied in this nuget. The encryption plugins 
+can be obtained from the encryption GitHub repo.
 
 **Interface** (implemented by each plugin DLL):
 

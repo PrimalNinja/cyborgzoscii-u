@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net8.0-windows</TargetFrameworks>
     <PackageId>CyborgUnicorn.UNINTELLIGENCE</PackageId>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <Authors>Julian Cassin</Authors>
     <Company>Cyborg Unicorn Pty Ltd</Company>
     <Product>UNINTELLIGENCE SDK</Product>

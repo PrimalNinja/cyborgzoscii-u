@@ -116,6 +116,7 @@ public static class Test
 			runUVerifyTests();
 			runEntropySugarTests();
 			runMicroZOSCIITests();
+			runZWTTests();
 			#endif
 		}
 		finally
@@ -203,6 +204,28 @@ public static class Test
 			}
 		}
 		return blnResult;
+	}
+
+	private static string ExtractNonceFromJson(string strJson_a)
+	{
+		// Try multiple search patterns
+		string[] arrPatterns = { "\"nonce\":\"", "\"nonce\": " };
+		
+		foreach (string strPattern in arrPatterns)
+		{
+			int intStart = strJson_a.IndexOf(strPattern);
+			if (intStart >= 0)
+			{
+				intStart += strPattern.Length;
+				int intEnd = strJson_a.IndexOf("\"", intStart);
+				if (intEnd > intStart)
+				{
+					return strJson_a.Substring(intStart, intEnd - intStart);
+				}
+			}
+		}
+		
+		return "0";
 	}
 
 	// -------------------------------------------------------------------------
@@ -1853,4 +1876,544 @@ public static class Test
 			}
 		}
 	}
+
+	// -------------------------------------------------------------------------
+	// ZWT
+	// -------------------------------------------------------------------------
+
+	#if UNINTELLIGENCE
+
+	private static void runZWTTests()
+	{
+		section("ZWT");
+
+		using (ZOSCIIRom objSharedRom = makeTestROM())
+		using (ZOSCIIRom objIssuerRom = makeTestROM2())
+		using (ZOSCIIRom objIssuerRom2 = makeTestROM3())
+		{
+			// ============================================================
+			// PART 1: Basic ZWT Tests (Issue, Open, Introspect, Verify)
+			// ============================================================
+
+			byte[] arrSharedSig = ZWT.NewSignature();
+			byte[] arrPrivateClaims = ZWT.ClaimsFromString("{\"uid\":\"42\",\"role\":\"admin\"}");
+			byte[] arrSharedClaims = ZWT.ClaimsFromString("{\"scope\":\"read\"}");
+
+			// --- Issue ---
+			ZWTResult objIssue = ZWT.Issue(arrSharedSig, arrPrivateClaims, arrSharedClaims, objIssuerRom, objIssuerRom2, objSharedRom);
+
+			if (objIssue.Success && objIssue.Token != null)
+			{
+				pass("ZWT.Issue - token minted");
+			}
+			else
+			{
+				fail("ZWT.Issue", objIssue.Error);
+			}
+
+			if (objIssue.Success)
+			{
+				byte[] arrToken = objIssue.Token;
+
+				// --- Size report ---
+				Console.WriteLine("    [SIZE] sharedsignature (GUID):  " + arrSharedSig.Length + " bytes");
+				Console.WriteLine("    [SIZE] privateclaims:           " + arrPrivateClaims.Length + " bytes");
+				Console.WriteLine("    [SIZE] sharedclaims:            " + arrSharedClaims.Length + " bytes");
+				Console.WriteLine("    [SIZE] issuersignature (sealed):" + objIssue.IssuerSignature.Length + " bytes");
+				Console.WriteLine("    [SIZE] ZWT token (total):       " + arrToken.Length + " bytes");
+
+				// --- Open ---
+				ZWTResult objOpen = ZWT.Open(arrToken, objSharedRom);
+				if (objOpen.Success && arraysEqual(objOpen.SharedSignature, arrSharedSig))
+				{
+					pass("ZWT.Open - RP reads sharedsignature");
+				}
+				else
+				{
+					fail("ZWT.Open", objOpen.Success ? "sharedsignature mismatch" : objOpen.Error);
+				}
+
+				string strScope = ZWT.ClaimsToString(objOpen.SharedClaims);
+				if (strScope == "{\"scope\":\"read\"}")
+				{
+					pass("ZWT.Open - RP reads sharedclaims: " + strScope);
+				}
+				else
+				{
+					fail("ZWT.Open sharedclaims", "got: " + strScope);
+				}
+
+				// --- Introspect ---
+				ZWTResult objIntro = ZWT.Introspect(objOpen.IssuerSignature, objOpen.SharedSignature, objIssuerRom, objIssuerRom2);
+				if (objIntro.Success && ZWT.ClaimsToString(objIntro.PrivateClaims) == "{\"uid\":\"42\",\"role\":\"admin\"}")
+				{
+					pass("ZWT.Introspect - issuer reads privateclaims");
+				}
+				else
+				{
+					fail("ZWT.Introspect", objIntro.Error);
+				}
+
+				// --- Verify ---
+				ZWTResult objVerify = ZWT.Verify(arrToken, objSharedRom, objIssuerRom, objIssuerRom2);
+				if (objVerify.Success)
+				{
+					pass("ZWT.Verify - full verify passes");
+				}
+				else
+				{
+					fail("ZWT.Verify", objVerify.Error);
+				}
+
+				// --- Tamper test ---
+				byte[] arrTampered = (byte[])arrToken.Clone();
+				arrTampered[arrTampered.Length / 2] ^= 0xFF;
+				ZWTResult objTamperOpen = ZWT.Open(arrTampered, objSharedRom);
+				if (!objTamperOpen.Success)
+				{
+					pass("ZWT tamper - flipped token byte correctly rejected");
+				}
+				else
+				{
+					fail("ZWT tamper", "tampered token incorrectly opened");
+				}
+
+				// --- Wrong sharedsig ---
+				byte[] arrDifferentSig = ZWT.NewSignature();
+				ZWTResult objIntroChanged = ZWT.Introspect(objOpen.IssuerSignature, arrDifferentSig, objIssuerRom, objIssuerRom2);
+				if (!objIntroChanged.Success)
+				{
+					pass("ZWT changed sharedsig - different sharedsig correctly fails");
+				}
+				else
+				{
+					fail("ZWT changed sharedsig", "mismatched sharedsig incorrectly accepted");
+				}
+
+				// --- GUID claims ---
+				byte[] arrGuidPriv = ZWT.ClaimsFromString(Guid.NewGuid().ToString());
+				byte[] arrGuidShared = ZWT.ClaimsFromString(Guid.NewGuid().ToString());
+				ZWTResult objGuid = ZWT.Issue(ZWT.NewSignature(), arrGuidPriv, arrGuidShared, objIssuerRom, objIssuerRom2, objSharedRom);
+				if (objGuid.Success)
+				{
+					Console.WriteLine("    [SIZE] GUID-claims token: sharedclaims " + arrGuidShared.Length + "B, privateclaims " + arrGuidPriv.Length + "B -> token " + objGuid.Token.Length + " bytes");
+					pass("ZWT.Issue - GUID-valued claims token minted");
+				}
+				else
+				{
+					fail("ZWT.Issue GUID claims", objGuid.Error);
+				}
+
+				// --- Empty claims ---
+				ZWTResult objEmpty = ZWT.Issue(ZWT.NewSignature(), null, null, objIssuerRom, objIssuerRom2, objSharedRom);
+				if (objEmpty.Success)
+				{
+					Console.WriteLine("    [SIZE] empty-claims token (baseline): " + objEmpty.Token.Length + " bytes");
+					pass("ZWT.Issue - empty-claims token minted");
+				}
+				else
+				{
+					fail("ZWT.Issue empty claims", objEmpty.Error);
+				}
+			}
+
+			// ============================================================
+			// PART 2: UpdateSharedClaims Test
+			// ============================================================
+			section("ZWT - UpdateSharedClaims");
+
+			byte[] arrSharedSig2 = ZWT.NewSignature();
+			byte[] arrPrivateClaims2 = ZWT.ClaimsFromString("{\"uid\":\"42\",\"role\":\"admin\"}");
+			byte[] arrSharedClaims2 = ZWT.ClaimsFromString("{\"scope\":\"read\",\"email\":\"old@a.com\"}");
+
+			ZWTResult objIssue2 = ZWT.Issue(arrSharedSig2, arrPrivateClaims2, arrSharedClaims2, objIssuerRom, objIssuerRom2, objSharedRom);
+
+			if (!objIssue2.Success)
+			{
+				fail("ZWT.UpdateSharedClaims setup", objIssue2.Error);
+			}
+			else
+			{
+				pass("ZWT.UpdateSharedClaims - original token minted");
+				byte[] arrToken2 = objIssue2.Token;
+
+				// Open original
+				ZWTResult objOpen2 = ZWT.Open(arrToken2, objSharedRom);
+				if (!objOpen2.Success)
+				{
+					fail("ZWT.UpdateSharedClaims Open original", objOpen2.Error);
+				}
+				else
+				{
+					string strOriginalScope = ZWT.ClaimsToString(objOpen2.SharedClaims);
+					if (strOriginalScope.Contains("read"))
+					{
+						pass("ZWT.UpdateSharedClaims - original shared claims: " + strOriginalScope);
+					}
+					else
+					{
+						fail("ZWT.UpdateSharedClaims original claims", "expected 'read', got " + strOriginalScope);
+					}
+
+					// Update shared claims
+					byte[] arrNewSharedClaims = ZWT.ClaimsFromString("{\"scope\":\"read,write\",\"email\":\"new@a.com\"}");
+
+					ZWTResult objUpdate = ZWT.UpdateSharedClaims(
+						arrToken2,
+						arrNewSharedClaims,
+						objSharedRom
+					);
+
+					if (!objUpdate.Success)
+					{
+						fail("ZWT.UpdateSharedClaims", objUpdate.Error);
+					}
+					else
+					{
+						pass("ZWT.UpdateSharedClaims - updated token returned");
+
+						// Open updated
+						ZWTResult objOpenUpdated = ZWT.Open(objUpdate.Token, objSharedRom);
+						if (!objOpenUpdated.Success)
+						{
+							fail("ZWT.UpdateSharedClaims Open updated", objOpenUpdated.Error);
+						}
+						else
+						{
+							string strUpdatedScope = ZWT.ClaimsToString(objOpenUpdated.SharedClaims);
+							if (strUpdatedScope.Contains("write"))
+							{
+								pass("ZWT.UpdateSharedClaims - updated shared claims: " + strUpdatedScope);
+							}
+							else
+							{
+								fail("ZWT.UpdateSharedClaims updated claims", "expected 'write', got " + strUpdatedScope);
+							}
+
+							// sharedsig unchanged
+							if (arraysEqual(objOpen2.SharedSignature, objOpenUpdated.SharedSignature))
+							{
+								pass("ZWT.UpdateSharedClaims - sharedsignature unchanged");
+							}
+							else
+							{
+								fail("ZWT.UpdateSharedClaims sharedsig", "changed unexpectedly");
+							}
+
+							// issuerdata unchanged
+							if (arraysEqual(objOpen2.IssuerSignature, objOpenUpdated.IssuerSignature))
+							{
+								pass("ZWT.UpdateSharedClaims - issuerdata unchanged");
+							}
+							else
+							{
+								fail("ZWT.UpdateSharedClaims issuerdata", "changed unexpectedly");
+							}
+
+							// private claims preserved
+							ZWTResult objIntro2 = ZWT.Introspect(
+								objOpenUpdated.IssuerSignature,
+								objOpenUpdated.SharedSignature,
+								objIssuerRom,
+								objIssuerRom2
+							);
+
+							if (objIntro2.Success)
+							{
+								string strPrivate = ZWT.ClaimsToString(objIntro2.PrivateClaims);
+								if (strPrivate.Contains("admin"))
+								{
+									pass("ZWT.UpdateSharedClaims - private claims preserved: " + strPrivate);
+								}
+								else
+								{
+									fail("ZWT.UpdateSharedClaims private", "expected 'admin', got " + strPrivate);
+								}
+							}
+							else
+							{
+								fail("ZWT.UpdateSharedClaims introspect", objIntro2.Error);
+							}
+						}
+					}
+				}
+			}
+
+			// ============================================================
+			// PART 3: Ping-Pong Test
+			// ============================================================
+			section("ZWT - Ping-Pong (Challenge-Response)");
+
+			// 1. ISSUER creates token with GUID + NONCE in BOTH claims:
+			byte[] arrSharedSig3 = ZWT.NewSignature();
+			string strNonce1 = Convert.ToBase64String(ZWT.NewSignature());
+			string strChallenge = "ping-001";
+
+			byte[] arrPingPrivate = ZWT.ClaimsFromString(
+				$"{{\"guid\":\"{Convert.ToBase64String(arrSharedSig3)}\",\"nonce\":\"{strNonce1}\",\"challenge\":\"{strChallenge}\",\"user\":\"42\"}}"
+			);
+			byte[] arrPingShared = ZWT.ClaimsFromString(
+				$"{{\"guid\":\"{Convert.ToBase64String(arrSharedSig3)}\",\"nonce\":\"{strNonce1}\",\"state\":\"idle\"}}"
+			);
+
+			ZWTResult objPingIssue = ZWT.Issue(
+				arrSharedSig3,
+				arrPingPrivate,
+				arrPingShared,
+				objIssuerRom,
+				objIssuerRom2,
+				objSharedRom
+			);
+
+			if (!objPingIssue.Success)
+			{
+				fail("ZWT.PingPong setup", objPingIssue.Error);
+			}
+			else
+			{
+				pass("ZWT.PingPong - Issuer created token with GUID + nonce in both claims");
+				byte[] arrPingToken = objPingIssue.Token;
+
+				// 2. RP OPENS the token (reads shared claims only):
+				ZWTResult objPingOpen = ZWT.Open(arrPingToken, objSharedRom);
+				if (!objPingOpen.Success)
+				{
+					fail("ZWT.PingPong open", objPingOpen.Error);
+				}
+				else
+				{
+					pass("ZWT.PingPong - RP opened token and read shared GUID + nonce");
+
+					// 3. RP UPDATES the NONCE in shared claims ONLY (ping):
+					string strNewNonce = Convert.ToBase64String(ZWT.NewSignature());
+					byte[] arrPingNewShared = ZWT.ClaimsFromString(
+						$"{{\"guid\":\"{Convert.ToBase64String(arrSharedSig3)}\",\"nonce\":\"{strNewNonce}\",\"state\":\"ping\"}}"
+					);
+
+					ZWTResult objPingUpdate = ZWT.UpdateSharedClaims(
+						arrPingToken,
+						arrPingNewShared,
+						objSharedRom
+					);
+
+					if (!objPingUpdate.Success)
+					{
+						fail("ZWT.PingPong update", objPingUpdate.Error);
+					}
+					else
+					{
+						pass("ZWT.PingPong - RP updated NONCE in shared claims only (ping)");
+						byte[] arrPingUpdatedToken = objPingUpdate.Token;
+
+						// 4. RP OPENS the updated token:
+						ZWTResult objPingOpenUpdated = ZWT.Open(arrPingUpdatedToken, objSharedRom);
+						if (!objPingOpenUpdated.Success)
+						{
+							fail("ZWT.PingPong open updated", objPingOpenUpdated.Error);
+						}
+						else
+						{
+							string strUpdatedShared = ZWT.ClaimsToString(objPingOpenUpdated.SharedClaims);
+							if (strUpdatedShared.Contains(strNewNonce))
+							{
+								pass("ZWT.PingPong - RP sees new shared nonce: " + strNewNonce);
+							}
+							else
+							{
+								fail("ZWT.PingPong shared nonce update", "expected new nonce");
+							}
+
+							// 5. ISSUER INTROSPECTS (has both ROMs):
+							ZWTResult objPingIntro = ZWT.Introspect(
+								objPingOpenUpdated.IssuerSignature,
+								objPingOpenUpdated.SharedSignature,
+								objIssuerRom,
+								objIssuerRom2
+							);
+
+							if (!objPingIntro.Success)
+							{
+								fail("ZWT.PingPong introspect", objPingIntro.Error);
+							}
+							else
+							{
+								// Issuer reads both claims:
+								string strPingPrivateClaims = ZWT.ClaimsToString(objPingIntro.PrivateClaims);
+								string strPingSharedClaims = ZWT.ClaimsToString(objPingOpenUpdated.SharedClaims);
+
+								// Issuer verifies:
+								// 1. GUID still matches (sharedsig == issuersig)
+								bool blnGuidMatches = arraysEqual(objPingOpenUpdated.SharedSignature, objPingIntro.SharedSignature);
+
+								// 2. Nonce in private still original
+								bool blnPrivateHasOriginalNonce = strPingPrivateClaims.Contains(strNonce1);
+
+								// 3. Nonce in shared is new
+								bool blnSharedHasNewNonce = strPingSharedClaims.Contains(strNewNonce);
+
+								if (blnGuidMatches && blnPrivateHasOriginalNonce && blnSharedHasNewNonce)
+								{
+									pass("ZWT.PingPong - Issuer verified: GUID matches, private nonce unchanged (" + strNonce1 + "), shared nonce changed (" + strNewNonce + ")");
+									pass("ZWT.PingPong - ✅ Ping successful! Issuer detected nonce mismatch.");
+								}
+								else
+								{
+									fail("ZWT.PingPong verification",
+										"guidMatch=" + blnGuidMatches +
+										", privateHasOriginal=" + blnPrivateHasOriginalNonce +
+										", sharedHasNew=" + blnSharedHasNewNonce);
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			// ============================================================
+			// PART 4: Ping-Pong Test (Challenge-Response with Counter)
+			// ============================================================
+			section("ZWT - Ping-Pong (Challenge-Response with Counter)");
+
+			// Server-side state:
+			Dictionary<string, int> serverCounterNonce = new Dictionary<string, int>();
+			HashSet<string> usedCounterNonces = new HashSet<string>();
+
+			// 1. ISSUER creates token with initial nonce = 1:
+			int intCounterInitialNonce = 1;
+			string strCounterInitialNonce = intCounterInitialNonce.ToString();
+			byte[] arrCounterSig = ZWT.NewSignature();
+			string strCounterGuid = Convert.ToBase64String(arrCounterSig);
+
+			// Store server state:
+			serverCounterNonce[strCounterGuid] = intCounterInitialNonce;
+
+			byte[] arrCounterPrivate = ZWT.ClaimsFromString(
+				$"{{\"guid\":\"{strCounterGuid}\",\"nonce\":\"{strCounterInitialNonce}\",\"user\":\"42\"}}"
+			);
+			byte[] arrCounterShared = ZWT.ClaimsFromString(
+				$"{{\"guid\":\"{strCounterGuid}\",\"nonce\":\"{strCounterInitialNonce}\",\"state\":\"idle\"}}"
+			);
+
+			ZWTResult objCounterIssue = ZWT.Issue(
+				arrCounterSig,
+				arrCounterPrivate,
+				arrCounterShared,
+				objIssuerRom,
+				objIssuerRom2,
+				objSharedRom
+			);
+
+			if (!objCounterIssue.Success)
+			{
+				fail("ZWT.CounterPingPong setup", objCounterIssue.Error);
+			}
+			else
+			{
+				pass("ZWT.CounterPingPong - Issuer created token with counter: " + strCounterInitialNonce);
+				byte[] arrCounterToken = objCounterIssue.Token;
+
+				// 2. RP OPENS the token:
+				ZWTResult objCounterOpen = ZWT.Open(arrCounterToken, objSharedRom);
+				if (!objCounterOpen.Success)
+				{
+					fail("ZWT.CounterPingPong open", objCounterOpen.Error);
+				}
+				else
+				{
+					pass("ZWT.CounterPingPong - RP opened token");
+
+					// 3. RP INCREMENTS counter by 1 (ping):
+					int intCounterNewNonce = intCounterInitialNonce + 1;
+					string strCounterNewNonce = intCounterNewNonce.ToString();
+
+					byte[] arrCounterNewShared = ZWT.ClaimsFromString(
+						$"{{\"guid\":\"{strCounterGuid}\",\"nonce\":\"{strCounterNewNonce}\",\"state\":\"ping\"}}"
+					);
+
+					ZWTResult objCounterUpdate = ZWT.UpdateSharedClaims(
+						arrCounterToken,
+						arrCounterNewShared,
+						objSharedRom
+					);
+
+					if (!objCounterUpdate.Success)
+					{
+						fail("ZWT.CounterPingPong update", objCounterUpdate.Error);
+					}
+					else
+					{
+						pass("ZWT.CounterPingPong - RP updated counter to: " + strCounterNewNonce + " (ping)");
+						byte[] arrCounterUpdatedToken = objCounterUpdate.Token;
+
+						// 4. RP OPENS updated token:
+						ZWTResult objCounterOpenUpdated = ZWT.Open(arrCounterUpdatedToken, objSharedRom);
+						if (!objCounterOpenUpdated.Success)
+						{
+							fail("ZWT.CounterPingPong open updated", objCounterOpenUpdated.Error);
+						}
+						else
+						{
+							pass("ZWT.CounterPingPong - RP sees new counter");
+
+							// 5. ISSUER INTROSPECTS:
+							ZWTResult objCounterIntro = ZWT.Introspect(
+								objCounterOpenUpdated.IssuerSignature,
+								objCounterOpenUpdated.SharedSignature,
+								objIssuerRom,
+								objIssuerRom2
+							);
+
+							if (!objCounterIntro.Success)
+							{
+								fail("ZWT.CounterPingPong introspect", objCounterIntro.Error);
+							}
+							else
+							{
+								// Issuer reads both claims:
+								string strCounterPrivateClaims = ZWT.ClaimsToString(objCounterIntro.PrivateClaims);
+								string strCounterSharedClaims = ZWT.ClaimsToString(objCounterOpenUpdated.SharedClaims);
+
+								string strSealedNonce = ExtractNonceFromJson(strCounterPrivateClaims);
+								string strSharedNonce = ExtractNonceFromJson(strCounterSharedClaims);
+
+								if (string.IsNullOrEmpty(strSealedNonce)) strSealedNonce = "0";
+								if (string.IsNullOrEmpty(strSharedNonce)) strSharedNonce = "0";
+
+								int intCounterSealedNonce = int.Parse(strSealedNonce);
+								int intCounterSharedNonce = int.Parse(strSharedNonce);
+
+								pass("ZWT.CounterPingPong - Sealed counter: " + intCounterSealedNonce + ", Shared counter: " + intCounterSharedNonce);
+
+								// 6. Issuer verifies:
+								bool blnGuidMatches = arraysEqual(objCounterOpenUpdated.SharedSignature, objCounterIntro.SharedSignature);
+								bool blnNonceChanged = (intCounterSharedNonce != intCounterSealedNonce);
+								bool blnNonceIncremented = (intCounterSharedNonce == intCounterSealedNonce + 1);
+
+								if (blnGuidMatches && blnNonceChanged && blnNonceIncremented)
+								{
+									pass("ZWT.CounterPingPong - ✅ Issuer verified: GUID matches, counter incremented: " + intCounterSealedNonce + " → " + intCounterSharedNonce);
+									pass("ZWT.CounterPingPong - ✅ Challenge-Response successful!");
+
+									// 7. Server updates state:
+									serverCounterNonce[strCounterGuid] = intCounterSharedNonce;
+									pass("ZWT.CounterPingPong - Server state updated to: " + serverCounterNonce[strCounterGuid]);
+								}
+								else
+								{
+									fail("ZWT.CounterPingPong verification",
+										"guidMatch=" + blnGuidMatches +
+										", nonceChanged=" + blnNonceChanged +
+										", nonceIncremented=" + blnNonceIncremented);
+								}
+							}
+						}
+					}
+				}
+			}
+//
+		}
+	}
+
+	#endif
 }
+
