@@ -1,7 +1,8 @@
 # UNSIGNAL Protocol Specification
 
 **Author:** Julian Cassin  
-**Date:** 2026-02-26
+**Date:** 2026-08-20
+**Version:** 1.1 (added suggested implementation section)
 
 ## SOFTWARE LICENSE v1.1
 
@@ -74,3 +75,57 @@ Note: ZOSCII itself will and always remain under MIT license.
 UNSIGNAL Protocol makes the encoded file indistinguishable from random data. Even with infinite compute, an adversary cannot identify the structure of the file or the existence of a message without the authorized ROM.
 
 Commercial Licenses available from Cyborg Unicorn / ZOSCII Foundation.
+
+### 7. SUGGESTED IMPLEMENTATION: ROM EFFECTIVE SIZE AND SLIDING WINDOW (OFFSET REGIME)
+
+*This section describes one reasonable way to derive an effective ROM size and sliding window from the actual ROM size, for implementations that want the 16-bit pointer from H1/H2 to behave sensibly across small and large ROMs. It is a suggested approach, not a normative requirement of the protocol — implementations are free to use a different scheme as long as the encoder and decoder agree.*
+
+Under this approach, the 16-bit pointer derived from H1/H2 (Section 2, Address 1 & 2) is not used directly as a raw offset into the full ROM. Instead, the actual ROM size determines an **effective ROM size** and a **sliding window** size, via three size-based regimes. All percentage math below uses **integer division, truncated — never floating point with rounding.**
+
+**Variables:**
+
+```
+x  = actual ROM size in bytes
+p  = 0.02                          // 2%, applied via integer division
+xp = (x * 2) / 100                 // 2% of the actual ROM size x, integer division
+t1 = 65536 + (65536 * 2) / 100     // = 66846 — fixed regime-1 trigger (2% of 64KB, not of x)
+```
+
+**Regime 1 — small ROM (`x < t1`, i.e. `x < 66846`):**
+
+```
+effective_size (y)   = x - xp
+sliding_window (w)   = xp
+```
+
+**Regime 2 — medium ROM (`t1 <= x < 131072`, i.e. `66846 <= x < 128KB`):**
+
+```
+effective_size (y)   = 65536                 // fixed at 64KB
+sliding_window (w)   = 131072 - x - xp
+```
+
+**Regime 3 — large ROM (`x >= 131072`, i.e. `x >= 128KB`):**
+
+```
+effective_size (y)   = 65536                 // fixed at 64KB
+sliding_window (w)   = 65536                 // fixed at 64KB
+```
+
+**Worked example (x = 70000 bytes):**
+
+```
+xp = 70000 * 2 / 100 = 1400
+t1 = 66846
+70000 >= t1 and 70000 < 131072  ->  Regime 2
+effective_size = 65536
+sliding_window = 131072 - 70000 - 1400 = 59672
+```
+
+If an implementation adopts this regime, the effective size and sliding window are what the offset derived from H1/H2, and the ZOSCII encode/decode addressing, would operate against — not the raw ROM size directly. Whatever scheme an implementation chooses, encoder and decoder must apply it identically, or encoded files will not round-trip correctly.
+
+**Notes:**
+
+- **Regime 1 is a bonus: it lets completely different messages share identical address sequences on the same ROM.** Because the sliding window shifts where addressing effectively starts each session, a given address (e.g. `12`) does not resolve to the same underlying ROM byte from one encode to the next. This means messages as different as "hello", "yabba", "dabba" and "11111" can all produce the exact same address stream using the same ROM — an observer who sees two files with identical or overlapping address sequences learns nothing about whether the underlying messages are related, since the window in effect determines what each address actually decodes to. Regime 1 guarantees this property holds even on ROMs far below 64KB — e.g. a 2KB ROM still gets 40 distinct window positions — rather than losing it below some size cutoff.
+- **This comes at a proportional address-space cost.** `effective_size` and `sliding_window` are drawn from the same pool (`y + w = x`) — below `t1` (64KB+2%), some address space is spent to buy that window range. A ROM can never have both a full 64KB of address space *and* the maximum window count at the same time; e.g. at exactly x=65536 (still Regime 1, since 65536 < t1=66846), the result is 1,310 window positions *and* only 64,226 bytes of address space (65,536 − 1,310).
+- **`t1` (66846) is the regime boundary, not a "best of both" point.** It marks the largest ROM size still in the Regime 1 trade-off before Regime 2 takes over and pins `effective_size` back to a full 65,536, shrinking only the window as ROM size grows toward 128KB.

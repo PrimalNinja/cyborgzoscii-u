@@ -71,6 +71,70 @@ namespace CyborgUnicorn.ZOSCII
             objRom_a.lngROMSize = 0;
         }
 
+        // Build a Tango ROM: round-robin interleave the source ROMs, one byte at a time,
+        // into a combined ROM that is ALWAYS 128KB. Position i takes its byte from
+        // source ROM (i % count); each source ROM advances its own cursor, wrapping at
+        // its own size (so even a 1-byte ROM keeps supplying its single byte). The result
+        // is a normal 128KB RomData - callers then run ordinary ZOSCII/UNSIGNAL against it,
+        // with no Tango awareness downstream.
+        // Convenience overload: take ZOSCIIRom[] directly and convert internally,
+        // so call sites don't repeat the ZOSCIIRom -> RomData conversion.
+        internal static RomData BuildTangoRom(ZOSCIIRom[] arrRoms_a)
+        {
+            RomData[] arrRomData = new RomData[arrRoms_a.Length];
+            int intI = 0;
+
+            for (intI = 0; intI < arrRoms_a.Length; intI++)
+            {
+                arrRomData[intI] = arrRoms_a[intI].GetRomData();
+            }
+
+            return BuildTangoRom(arrRomData);
+        }
+
+        internal static RomData BuildTangoRom(RomData[] arrRoms_a)
+        {
+            RomData objResult = new RomData();
+            byte[] arrCombined = null;
+            long[] arrCursor = null;
+            int intCount = 0;
+            int intI = 0;
+            int intSrc = 0;
+
+            objResult.ptrROMData = null;
+            objResult.lngROMSize = 0;
+            objResult.arrLookup = null;
+
+            try
+            {
+                intCount = arrRoms_a.Length;
+                arrCombined = new byte[ROM_LOAD_MAX];
+                arrCursor = new long[intCount];
+
+                for (intI = 0; intI < intCount; intI++)
+                {
+                    arrCursor[intI] = 0;
+                }
+
+                for (intI = 0; intI < ROM_LOAD_MAX; intI++)
+                {
+                    intSrc = intI % intCount;
+                    arrCombined[intI] = arrRoms_a[intSrc].ptrROMData[arrCursor[intSrc] % arrRoms_a[intSrc].lngROMSize];
+                    arrCursor[intSrc]++;
+                }
+
+                objResult = LoadRomFromBytes(arrCombined);
+            }
+            catch
+            {
+                objResult.ptrROMData = null;
+                objResult.lngROMSize = 0;
+                objResult.arrLookup = null;
+            }
+
+            return objResult;
+        }
+
         internal static void BuildLookupTable(ref RomData objRom_a)
         {
             uint[] arrCounts = new uint[256];
@@ -136,16 +200,6 @@ namespace CyborgUnicorn.ZOSCII
 
             try
             {
-                bool blnTango = blnTango_a && arrExtraRoms_a != null && arrExtraRoms_a.Length > 0;
-                int intROMCount = blnTango ? arrExtraRoms_a.Length : 1;
-
-                Random[] arrRands = null;
-                if (blnTango)
-                {
-                    arrRands = new Random[intROMCount];
-                    for (intI = 0; intI < intROMCount; intI++) { arrRands[intI] = createRandomSeed(ref arrExtraRoms_a[intI]); }
-                }
-
                 arrResult = new byte[arrInput_a.Length * 2];
                 int intPos = 0;
                 Random ptrRand = createRandomSeed(ref objRom_a);
@@ -153,14 +207,12 @@ namespace CyborgUnicorn.ZOSCII
                 for (intI = 0; intI < arrInput_a.Length; intI++)
                 {
                     byte by = arrInput_a[intI];
-                    RomData objRomCurrent = blnTango ? arrExtraRoms_a[intI % intROMCount] : objRom_a;
-                    Random ptrRandCurrent = blnTango ? arrRands[intI % intROMCount] : ptrRand;
-                    uint intCount = objRomCurrent.arrLookup[by].intCount;
+                    uint intCount = objRom_a.arrLookup[by].intCount;
 
                     if (intCount > 0)
                     {
-                        uint intIdx = (uint)ptrRandCurrent.Next((int)intCount);
-                        ushort intAddr = (ushort)objRomCurrent.arrLookup[by].ptrAddresses[intIdx];
+                        uint intIdx = (uint)ptrRand.Next((int)intCount);
+                        ushort intAddr = (ushort)objRom_a.arrLookup[by].ptrAddresses[intIdx];
                         byte[] arrAddr = BitConverter.GetBytes(intAddr);
                         arrResult[intPos++] = arrAddr[0];
                         arrResult[intPos++] = arrAddr[1];
@@ -230,25 +282,15 @@ namespace CyborgUnicorn.ZOSCII
 
             try
             {
-                bool blnTango = blnTango_a && arrExtraRoms_a != null && arrExtraRoms_a.Length > 0;
-                int intROMCount = blnTango ? arrExtraRoms_a.Length : 1;
                 long lngSlots = arrInput_a.Length / 2;
                 arrResult = new byte[lngSlots];
 
                 for (long lngI = 0; lngI < lngSlots; lngI++)
                 {
-                    RomData objRomCurrent = blnTango ? arrExtraRoms_a[lngI % intROMCount] : objRom_a;
                     ushort intAddr = BitConverter.ToUInt16(arrInput_a, (int)(lngI * 2));
 
-                    if (intAddr < objRomCurrent.lngROMSize)
-                    {
-                        arrResult[lngI] = objRomCurrent.ptrROMData[intAddr];
-                    }
-                    else
-                    {
-                        arrResult = null;
-                        break;
-                    }
+                    // Out-of-bounds folds (addr % romSize) rather than failing.
+                    arrResult[lngI] = objRom_a.ptrROMData[intAddr % objRom_a.lngROMSize];
                 }
             }
             catch
@@ -500,10 +542,9 @@ namespace CyborgUnicorn.ZOSCII
             {
                 if (blnTango_a && arrRoms_a.Length > 1)
                 {
-                    RomData[] arrRomData = new RomData[arrRoms_a.Length];
-                    for (int intI = 0; intI < arrRoms_a.Length; intI++) { arrRomData[intI] = arrRoms_a[intI].GetRomData(); }
-                    RomData objFirst = arrRomData[0];
-                    arrResult = clsZOSCII.zencodeByteToByte(ref objFirst, arrInput_a, arrRomData, true);
+                    // Tango front-door: build one 128KB combined ROM, then encode normally.
+                    RomData objTango = clsZOSCII.BuildTangoRom(arrRoms_a);
+                    arrResult = clsZOSCII.zencodeByteToByte(ref objTango, arrInput_a);
                 }
                 else
                 {
@@ -653,10 +694,9 @@ namespace CyborgUnicorn.ZOSCII
             {
                 if (blnTango_a && arrRoms_a.Length > 1)
                 {
-                    RomData[] arrRomData = new RomData[arrRoms_a.Length];
-                    for (int intI = 0; intI < arrRoms_a.Length; intI++) { arrRomData[intI] = arrRoms_a[intI].GetRomData(); }
-                    RomData objFirst = arrRomData[0];
-                    arrResult = clsZOSCII.zdecodeByteToByte(objFirst, arrInput_a, arrRomData, true);
+                    // Tango front-door: build one 128KB combined ROM, then decode normally.
+                    RomData objTango = clsZOSCII.BuildTangoRom(arrRoms_a);
+                    arrResult = clsZOSCII.zdecodeByteToByte(objTango, arrInput_a);
                 }
                 else
                 {

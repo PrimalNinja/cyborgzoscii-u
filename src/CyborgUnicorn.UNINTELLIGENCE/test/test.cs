@@ -1965,13 +1965,13 @@ public static class Test
 					fail("ZWT.Verify", objVerify.Error);
 				}
 
-				// --- Tamper test ---
+				// --- Tamper test (shared region: past the 8-byte length header) ---
 				byte[] arrTampered = (byte[])arrToken.Clone();
-				arrTampered[arrTampered.Length / 2] ^= 0xFF;
+				arrTampered[10] ^= 0xFF;
 				ZWTResult objTamperOpen = ZWT.Open(arrTampered, objSharedRom);
 				if (!objTamperOpen.Success)
 				{
-					pass("ZWT tamper - flipped token byte correctly rejected");
+					pass("ZWT tamper (shared region) - correctly rejected");
 				}
 				else
 				{
@@ -2014,6 +2014,69 @@ public static class Test
 				else
 				{
 					fail("ZWT.Issue empty claims", objEmpty.Error);
+				}
+
+				// --- Tamper issuer data (introspect must reject; open still succeeds) ---
+				// Flip the first byte of issuerdata (its UNSIGNAL header) - always meaningful.
+				byte[] arrTamperTail = (byte[])arrToken.Clone();
+				int intSharedLen = arrToken.Length - objIssue.IssuerSignature.Length;
+				arrTamperTail[intSharedLen] ^= 0xFF;
+				ZWTResult objTailOpen = ZWT.Open(arrTamperTail, objSharedRom);
+				bool blnTailCaught = false;
+				if (objTailOpen.Success)
+				{
+					ZWTResult objTailIntro = ZWT.Introspect(objTailOpen.IssuerSignature, objTailOpen.SharedSignature, objIssuerRom, objIssuerRom2);
+					blnTailCaught = !objTailIntro.Success;
+				}
+				if (blnTailCaught)
+				{
+					pass("ZWT tamper (issuer header) - introspect correctly rejects");
+				}
+				else
+				{
+					fail("ZWT tamper (issuer header)", "tampered issuerdata not rejected");
+				}
+
+				// --- Bare token (no issuer ROMs -> no issuerdata) ---
+				byte[] arrBareSig = ZWT.NewSignature();
+				ZWTResult objBare = ZWT.Issue(arrBareSig, null, ZWT.ClaimsFromString("{\"scope\":\"guest\"}"), null, null, objSharedRom);
+				if (objBare.Success)
+				{
+					Console.WriteLine("    [SIZE] bare token (no issuerdata): " + objBare.Token.Length + " bytes");
+					pass("ZWT.Issue - bare token (no issuer ROMs) minted");
+
+					if (objBare.IssuerSignature.Length == 0)
+					{
+						pass("ZWT bare - issuerData is empty");
+					}
+					else
+					{
+						fail("ZWT bare issuerData", "expected empty, got " + objBare.IssuerSignature.Length);
+					}
+
+					ZWTResult objBareOpen = ZWT.Open(objBare.Token, objSharedRom);
+					if (objBareOpen.Success && arraysEqual(objBareOpen.SharedSignature, arrBareSig) && objBareOpen.IssuerSignature.Length == 0)
+					{
+						pass("ZWT bare - open reads sharedsig, no issuerdata remainder");
+					}
+					else
+					{
+						fail("ZWT bare open", objBareOpen.Error);
+					}
+
+					ZWTResult objBareVerify = ZWT.Verify(objBare.Token, objSharedRom, null, null);
+					if (objBareVerify.Success && ZWT.ClaimsToString(objBareVerify.SharedClaims) == "{\"scope\":\"guest\"}")
+					{
+						pass("ZWT bare - verify passes with no attestation");
+					}
+					else
+					{
+						fail("ZWT bare verify", objBareVerify.Error);
+					}
+				}
+				else
+				{
+					fail("ZWT.Issue bare", objBare.Error);
 				}
 			}
 
@@ -2416,4 +2479,3 @@ public static class Test
 
 	#endif
 }
-

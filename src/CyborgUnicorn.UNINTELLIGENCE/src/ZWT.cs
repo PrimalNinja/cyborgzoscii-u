@@ -8,10 +8,17 @@
 //   SHAREDROM  - held by issuer + relying party (per-relationship key)
 //   ISSUERROM  - held by issuer only (never shared)
 //
-// CONSTRUCTION (spec v0.1)
+// CONSTRUCTION (spec v0.2)
 //   issuersignature = sharedsignature
-//   issuerdata      = UEncode( ISSUERROM1, UEncode( ISSUERROM2, issuerFrame ) )   // double-encoded
-//   zwt             = UEncode( SHAREDROM, sharedFrame )
+//   sharedstuff     = UEncode( SHAREDROM, sharedFrame )
+//   issuerdata      = UEncode( ISSUERROM1, UEncode( ISSUERROM2, issuerFrame ) )   // double-encoded, optional
+//   zwt             = lenheader( sharedstuff.Length ) + sharedstuff [ + issuerdata ]
+//
+// The lenheader is the 32-bit little-endian length of the encoded sharedstuff, each byte
+// concealed as a SHAREDROM address (4 slots / 8 wire bytes). The reader dereferences it to
+// find where sharedstuff ends; everything after is issuerdata (empty = bare token). issuerdata
+// is double-encoded and APPENDED (never wrapped a third time) and is OPTIONAL: omit the issuer
+// ROMs at Issue() for a bare same-party token needing only SHAREDROM.
 //
 // FRAME (flat, little-endian; readable on Z80 / 6502 / C / C# / Python with base+offset):
 //   [ hash 4 ][ version 1 ][ len 2 LE per field EXCEPT the last ][ blobs in fixed order ]
@@ -19,10 +26,10 @@
 //   the block. The 4-byte rolling hash (CRC) leads and covers everything after it (version +
 //   length table + blobs).
 //   issuerFrame  : [ issuersignature(=sharedsig) , privateclaims ]  (privateclaims = last field)
-//   sharedFrame  : [ sharedsignature , sharedclaims , issuerdata ]  (issuerdata    = last field)
-//   issuerdata is the double-UNSIGNAL-encoded issuerFrame, carried as the last field of the
-//   shared frame. Double encoding removes any known-plaintext foothold on privateclaims, since
-//   the relying party already holds the plaintext sharedsignature.
+//   sharedFrame  : [ sharedsignature , sharedclaims ]               (sharedclaims  = last field)
+//   issuerdata (the double-UNSIGNAL-encoded issuerFrame) is NOT a frame field — it is
+//   concatenated after the encoded sharedstuff. Double encoding removes any known-plaintext
+//   foothold on privateclaims, since the relying party already holds the plaintext sharedsignature.
 //
 // VERIFICATION
 //   Relying party : Open(zwt, SHAREDROM) -> reads sharedsig + sharedclaims
@@ -156,6 +163,13 @@ namespace CyborgUnicorn.ZOSCII
         private const int LEN_FIELD = 2;    // per-field length, 16-bit LE (full 64KB per segment)
         private const byte VERSION_0 = 0;   // current frame version
 
+        // Length indirection: the encoded-sharedstuff length is written as 4 bytes (32-bit LE),
+        // each byte concealed as a 2-byte SHAREDROM address whose dereferenced ROM value is that
+        // byte. 4 slots / 8 wire bytes at the front of the token. The reader dereferences it to
+        // find where sharedstuff ends; everything after is issuerdata (empty = bare token).
+        private const int LEN_SLOTS = 4;         // 32-bit length
+        private const int LEN_HEADER_BYTES = 8;  // 4 slots x 2 bytes
+
         // --- Issue ---
 
         /// <summary>
@@ -177,77 +191,104 @@ namespace CyborgUnicorn.ZOSCII
             ZOSCIIRom objSharedRom_a)
         {
             ZWTResult objResult = new ZWTResult();
+            bool blnWantIssuer = false;
+
+            blnWantIssuer = (objIssuerRom1_a != null || objIssuerRom2_a != null);
 
             if (arrSharedSignature_a == null || arrSharedSignature_a.Length == 0)
             {
                 objResult.Error = "sharedsignature is required";
             }
-            else if (objIssuerRom1_a == null || !objIssuerRom1_a.IsLoaded)
-            {
-                objResult.Error = "ISSUERROM1 is not loaded";
-            }
-            else if (objIssuerRom2_a == null || !objIssuerRom2_a.IsLoaded)
-            {
-                objResult.Error = "ISSUERROM2 is not loaded";
-            }
             else if (objSharedRom_a == null || !objSharedRom_a.IsLoaded)
             {
                 objResult.Error = "SHAREDROM is not loaded";
+            }
+            else if (blnWantIssuer && (objIssuerRom1_a == null || !objIssuerRom1_a.IsLoaded))
+            {
+                objResult.Error = "ISSUERROM1 is not loaded";
+            }
+            else if (blnWantIssuer && (objIssuerRom2_a == null || !objIssuerRom2_a.IsLoaded))
+            {
+                objResult.Error = "ISSUERROM2 is not loaded";
             }
             else
             {
                 byte[] arrPrivate = normalise(arrPrivateClaims_a);
                 byte[] arrShared = normalise(arrSharedClaims_a);
+                byte[] arrIssuerData = new byte[0];
+                bool blnOk = true;
 
-                // Issuer block: [hash][version][len issuersig][issuersig][privateclaims]
-                // issuersignature == sharedsignature. privateclaims is the last field (no length).
-                byte[][] arrIssuerFields = new byte[2][];
-                arrIssuerFields[0] = arrSharedSignature_a;
-                arrIssuerFields[1] = arrPrivate;
-
-                byte[] arrIssuerFrame = buildFrame(arrIssuerFields);
-
-                if (arrIssuerFrame == null)
+                // Build issuerdata only when issuer ROMs were supplied.
+                if (blnWantIssuer)
                 {
-                    objResult.Error = "failed to build issuer frame";
-                }
-                else
-                {
-                    // issuerdata = UEncode( ISSUERROM1, UEncode( ISSUERROM2, issuerframe ) )
-                    // Double-encoded: the RP holds plaintext sharedsignature, so double
-                    // encoding removes any known-plaintext foothold against privateclaims.
-                    byte[] arrIssuerInner = UEncode.Bytes(arrIssuerFrame, objIssuerRom2_a);
-                    byte[] arrIssuerData = (arrIssuerInner == null) ? null : UEncode.Bytes(arrIssuerInner, objIssuerRom1_a);
+                    // Issuer block: [hash][version][len issuersig][issuersig(=sharedsig)][privateclaims]
+                    byte[][] arrIssuerFields = new byte[2][];
+                    arrIssuerFields[0] = arrSharedSignature_a;
+                    arrIssuerFields[1] = arrPrivate;
 
-                    if (arrIssuerData == null)
+                    byte[] arrIssuerFrame = buildFrame(arrIssuerFields);
+
+                    if (arrIssuerFrame == null)
                     {
-                        objResult.Error = "ISSUERROM encode failed";
+                        objResult.Error = "failed to build issuer frame";
+                        blnOk = false;
                     }
                     else
                     {
-                        // Shared block: [hash][version][len sharedsig][len sharedclaims][sharedsig][sharedclaims][issuerdata]
-                        // issuerdata is the last field (no length) — runs to end of token.
-                        byte[][] arrOuterFields = new byte[3][];
-                        arrOuterFields[0] = arrSharedSignature_a;
-                        arrOuterFields[1] = arrShared;
-                        arrOuterFields[2] = arrIssuerData;
+                        // issuerdata = UEncode( ISSUERROM1, UEncode( ISSUERROM2, issuerframe ) )
+                        byte[] arrIssuerInner = UEncode.Bytes(arrIssuerFrame, objIssuerRom2_a);
+                        byte[] arrDouble = (arrIssuerInner == null) ? null : UEncode.Bytes(arrIssuerInner, objIssuerRom1_a);
 
-                        byte[] arrOuterFrame = buildFrame(arrOuterFields);
-
-                        if (arrOuterFrame == null)
+                        if (arrDouble == null)
                         {
-                            objResult.Error = "failed to build outer frame";
+                            objResult.Error = "ISSUERROM encode failed";
+                            blnOk = false;
                         }
                         else
                         {
-                            byte[] arrToken = UEncode.Bytes(arrOuterFrame, objSharedRom_a);
+                            arrIssuerData = arrDouble;
+                        }
+                    }
+                }
 
-                            if (arrToken == null)
+                if (blnOk)
+                {
+                    // Shared block: [hash][version][len sharedsig][sharedsig][sharedclaims]
+                    // (issuerdata is NOT a field here - it is concatenated after the encoded blob).
+                    byte[][] arrSharedFields = new byte[2][];
+                    arrSharedFields[0] = arrSharedSignature_a;
+                    arrSharedFields[1] = arrShared;
+
+                    byte[] arrSharedFrame = buildFrame(arrSharedFields);
+
+                    if (arrSharedFrame == null)
+                    {
+                        objResult.Error = "failed to build shared frame";
+                    }
+                    else
+                    {
+                        byte[] arrSharedEncoded = UEncode.Bytes(arrSharedFrame, objSharedRom_a);
+
+                        if (arrSharedEncoded == null)
+                        {
+                            objResult.Error = "SHAREDROM encode failed";
+                        }
+                        else
+                        {
+                            byte[] arrLenHeader = encodeLen(objSharedRom_a, arrSharedEncoded.Length);
+
+                            if (arrLenHeader == null)
                             {
-                                objResult.Error = "SHAREDROM encode failed";
+                                objResult.Error = "failed to encode length header";
                             }
                             else
                             {
+                                // Token = lenheader + sharedEncoded + issuerdata (issuerdata may be empty).
+                                byte[] arrToken = new byte[arrLenHeader.Length + arrSharedEncoded.Length + arrIssuerData.Length];
+                                Array.Copy(arrLenHeader, 0, arrToken, 0, arrLenHeader.Length);
+                                Array.Copy(arrSharedEncoded, 0, arrToken, arrLenHeader.Length, arrSharedEncoded.Length);
+                                Array.Copy(arrIssuerData, 0, arrToken, arrLenHeader.Length + arrSharedEncoded.Length, arrIssuerData.Length);
+
                                 objResult.Token = arrToken;
                                 objResult.IssuerSignature = arrIssuerData;
                                 objResult.SharedSignature = arrSharedSignature_a;
@@ -273,6 +314,7 @@ namespace CyborgUnicorn.ZOSCII
         public static ZWTResult Open(byte[] arrToken_a, ZOSCIIRom objSharedRom_a)
         {
             ZWTResult objResult = new ZWTResult();
+            int intSharedLen = 0;
 
             if (arrToken_a == null || arrToken_a.Length == 0)
             {
@@ -284,26 +326,46 @@ namespace CyborgUnicorn.ZOSCII
             }
             else
             {
-                byte[] arrFrame = UDecode.Bytes(arrToken_a, objSharedRom_a);
+                // Read the 32-bit sharedstuff length from the front via ROM indirection.
+                intSharedLen = decodeLen(objSharedRom_a, arrToken_a, 0);
 
-                if (arrFrame == null)
+                if (intSharedLen < 0)
                 {
-                    objResult.Error = "SHAREDROM decode failed";
+                    objResult.Error = "failed to read length header";
+                }
+                else if (LEN_HEADER_BYTES + intSharedLen > arrToken_a.Length)
+                {
+                    objResult.Error = "length header exceeds token size";
                 }
                 else
                 {
-                    byte[][] arrFields = parseFrame(arrFrame, 3);
+                    // Split: sharedstuff of exactly intSharedLen bytes, then the remainder = issuerdata.
+                    byte[] arrSharedEncoded = new byte[intSharedLen];
+                    byte[] arrIssuerData = new byte[arrToken_a.Length - LEN_HEADER_BYTES - intSharedLen];
+                    Array.Copy(arrToken_a, LEN_HEADER_BYTES, arrSharedEncoded, 0, intSharedLen);
+                    Array.Copy(arrToken_a, LEN_HEADER_BYTES + intSharedLen, arrIssuerData, 0, arrIssuerData.Length);
 
-                    if (arrFields == null)
+                    byte[] arrFrame = UDecode.Bytes(arrSharedEncoded, objSharedRom_a);
+
+                    if (arrFrame == null)
                     {
-                        objResult.Error = "malformed or tampered token (integrity check failed)";
+                        objResult.Error = "SHAREDROM decode failed";
                     }
                     else
                     {
-                        objResult.SharedSignature = arrFields[0];
-                        objResult.SharedClaims = arrFields[1];
-                        objResult.IssuerSignature = arrFields[2];   // issuerdata — opaque to RP, for issuer introspection
-                        objResult.Success = true;
+                        byte[][] arrFields = parseFrame(arrFrame, 2);
+
+                        if (arrFields == null)
+                        {
+                            objResult.Error = "malformed or tampered token (integrity check failed)";
+                        }
+                        else
+                        {
+                            objResult.SharedSignature = arrFields[0];
+                            objResult.SharedClaims = arrFields[1];
+                            objResult.IssuerSignature = arrIssuerData;   // issuerdata — opaque to RP, for introspection (empty = bare token)
+                            objResult.Success = true;
+                        }
                     }
                 }
             }
@@ -313,7 +375,8 @@ namespace CyborgUnicorn.ZOSCII
 
 		/// <summary>
 		/// Update shared claims in an existing ZWT.
-		/// Anyone with SHAREDROM (issuer or RP) can do this.
+		/// Anyone with SHAREDROM (issuer or RP) can do this. The issuerdata tail is preserved
+		/// verbatim (re-appended unchanged), so issuer attestation is untouched.
 		/// </summary>
 		public static ZWTResult UpdateSharedClaims(
 			byte[] arrToken_a,
@@ -322,51 +385,60 @@ namespace CyborgUnicorn.ZOSCII
 		{
 			ZWTResult objResult = new ZWTResult();
 
-			if (arrToken_a == null || arrToken_a.Length == 0)
+			ZWTResult objOpen = Open(arrToken_a, objSharedRom_a);
+
+			if (!objOpen.Success)
 			{
-				objResult.Error = "token is empty";
-			}
-			else if (objSharedRom_a == null || !objSharedRom_a.IsLoaded)
-			{
-				objResult.Error = "SHAREDROM is not loaded";
+				objResult.Error = objOpen.Error;
 			}
 			else
 			{
-				byte[] arrFrame = UDecode.Bytes(arrToken_a, objSharedRom_a);
-				if (arrFrame == null)
+				// Rebuild the shared frame with the new claims (same sharedsignature).
+				byte[][] arrSharedFields = new byte[2][];
+				arrSharedFields[0] = objOpen.SharedSignature;
+				arrSharedFields[1] = normalise(arrNewSharedClaims_a);
+
+				byte[] arrSharedFrame = buildFrame(arrSharedFields);
+
+				if (arrSharedFrame == null)
 				{
-					objResult.Error = "SHAREDROM decode failed";
+					objResult.Error = "failed to rebuild shared frame";
 				}
 				else
 				{
-					byte[][] arrFields = parseFrame(arrFrame, 3);
-					if (arrFields == null)
+					byte[] arrSharedEncoded = UEncode.Bytes(arrSharedFrame, objSharedRom_a);
+
+					if (arrSharedEncoded == null)
 					{
-						objResult.Error = "malformed or tampered token (integrity check failed)";
+						objResult.Error = "SHAREDROM encode failed";
 					}
 					else
 					{
-						arrFields[1] = normalise(arrNewSharedClaims_a);
-						byte[] arrNewFrame = buildFrame(arrFields);
-						if (arrNewFrame == null)
+						byte[] arrLenHeader = encodeLen(objSharedRom_a, arrSharedEncoded.Length);
+
+						if (arrLenHeader == null)
 						{
-							objResult.Error = "failed to rebuild frame";
+							objResult.Error = "failed to encode length header";
 						}
 						else
 						{
-							byte[] arrNewToken = UEncode.Bytes(arrNewFrame, objSharedRom_a);
-							if (arrNewToken == null)
+							// Preserve the original issuerdata tail verbatim.
+							byte[] arrIssuerData = objOpen.IssuerSignature;
+							if (arrIssuerData == null)
 							{
-								objResult.Error = "SHAREDROM encode failed";
+								arrIssuerData = new byte[0];
 							}
-							else
-							{
-								objResult.Success = true;
-								objResult.Token = arrNewToken;
-								objResult.SharedSignature = arrFields[0];
-								objResult.SharedClaims = arrFields[1];
-								objResult.IssuerSignature = arrFields[2];
-							}
+
+							byte[] arrNewToken = new byte[arrLenHeader.Length + arrSharedEncoded.Length + arrIssuerData.Length];
+							Array.Copy(arrLenHeader, 0, arrNewToken, 0, arrLenHeader.Length);
+							Array.Copy(arrSharedEncoded, 0, arrNewToken, arrLenHeader.Length, arrSharedEncoded.Length);
+							Array.Copy(arrIssuerData, 0, arrNewToken, arrLenHeader.Length + arrSharedEncoded.Length, arrIssuerData.Length);
+
+							objResult.Success = true;
+							objResult.Token = arrNewToken;
+							objResult.SharedSignature = objOpen.SharedSignature;
+							objResult.SharedClaims = arrSharedFields[1];
+							objResult.IssuerSignature = arrIssuerData;
 						}
 					}
 				}
@@ -473,6 +545,14 @@ namespace CyborgUnicorn.ZOSCII
             {
                 objResult.Error = objOpen.Error;
             }
+            else if (objOpen.IssuerSignature == null || objOpen.IssuerSignature.Length == 0)
+            {
+                // Bare token: no issuer attestation present. Shared parts verify by decoding alone.
+                objResult.SharedSignature = objOpen.SharedSignature;
+                objResult.SharedClaims = objOpen.SharedClaims;
+                objResult.PrivateClaims = new byte[0];
+                objResult.Success = true;
+            }
             else
             {
                 ZWTResult objIntro = Introspect(objOpen.IssuerSignature, objOpen.SharedSignature, objIssuerRom1_a, objIssuerRom2_a);
@@ -548,6 +628,126 @@ namespace CyborgUnicorn.ZOSCII
         // -------------------------------------------------------------------------
         // Private
         // -------------------------------------------------------------------------
+
+        // --- Length indirection (32-bit LE, concealed as ROM slots) ---
+
+        // Encode a 32-bit length as LEN_SLOTS ROM address slots against objRom_a.
+        // Each length byte -> a 2-byte address whose ROM value is that byte. Returns 8 bytes, or null.
+        private static byte[] encodeLen(ZOSCIIRom objRom_a, int intValue_a)
+        {
+            byte[] arrResult = null;
+            byte[] arrRom = null;
+            byte[] arrOut = null;
+            int intI = 0;
+            int intByte = 0;
+            int intAddr = 0;
+            bool blnOk = true;
+
+            try
+            {
+                arrRom = objRom_a.GetRomData().ptrROMData;
+                arrOut = new byte[LEN_HEADER_BYTES];
+
+                for (intI = 0; intI < LEN_SLOTS && blnOk; intI++)
+                {
+                    intByte = (intValue_a >> (intI * 8)) & 0xFF;
+                    intAddr = findRomByte(arrRom, (byte)intByte);
+
+                    if (intAddr < 0)
+                    {
+                        blnOk = false;
+                    }
+                    else
+                    {
+                        arrOut[intI * 2] = (byte)(intAddr & 0xFF);
+                        arrOut[(intI * 2) + 1] = (byte)((intAddr >> 8) & 0xFF);
+                    }
+                }
+
+                if (blnOk)
+                {
+                    arrResult = arrOut;
+                }
+            }
+            catch
+            {
+                arrResult = null;
+            }
+
+            return arrResult;
+        }
+
+        // Decode LEN_SLOTS address slots at intOffset_a back to a 32-bit length. Returns -1 on failure.
+        private static int decodeLen(ZOSCIIRom objRom_a, byte[] arrBytes_a, int intOffset_a)
+        {
+            int intResult = -1;
+            byte[] arrRom = null;
+            long lngRomSize = 0;
+            int intValue = 0;
+            int intI = 0;
+            int intAddr = 0;
+            bool blnOk = true;
+
+            try
+            {
+                arrRom = objRom_a.GetRomData().ptrROMData;
+                lngRomSize = arrRom.Length;
+
+                if (arrBytes_a != null && arrBytes_a.Length >= intOffset_a + LEN_HEADER_BYTES)
+                {
+                    for (intI = 0; intI < LEN_SLOTS && blnOk; intI++)
+                    {
+                        intAddr = (arrBytes_a[intOffset_a + (intI * 2)] & 0xFF)
+                                | ((arrBytes_a[intOffset_a + (intI * 2) + 1] & 0xFF) << 8);
+
+                        if (intAddr >= lngRomSize)
+                        {
+                            blnOk = false;
+                        }
+                        else
+                        {
+                            intValue = intValue | ((arrRom[intAddr] & 0xFF) << (intI * 8));
+                        }
+                    }
+
+                    if (blnOk)
+                    {
+                        intResult = intValue;
+                    }
+                }
+            }
+            catch
+            {
+                intResult = -1;
+            }
+
+            return intResult;
+        }
+
+        // Scan the first 64KB of the ROM for an address whose byte equals byTarget_a.
+        // Returns a 16-bit address, or -1 if the byte does not occur in that window.
+        private static int findRomByte(byte[] arrRom_a, byte byTarget_a)
+        {
+            int intResult = -1;
+            int intWindow = 0;
+            int intI = 0;
+
+            intWindow = arrRom_a.Length;
+            if (intWindow > 65536)
+            {
+                intWindow = 65536;
+            }
+
+            for (intI = 0; intI < intWindow && intResult < 0; intI++)
+            {
+                if (arrRom_a[intI] == byTarget_a)
+                {
+                    intResult = intI;
+                }
+            }
+
+            return intResult;
+        }
 
         private static byte[] normalise(byte[] arrInput_a)
         {

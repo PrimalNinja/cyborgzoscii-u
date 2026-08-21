@@ -39,26 +39,74 @@ namespace CyborgUnicorn.ZOSCII
             return new Random((int)(intWindowHash ^ (uint)Environment.TickCount));
         }
 
+        // Regime trigger: 64KB + 2%-of-64KB = 66846 (fixed, not 2% of actual ROM).
+        private const long REGIME_T1 = 66846L;
+
+        // 2% of ROM size, integer division (no float).
+        private static long Pct2(long lngRomSize_a)
+        {
+            return (lngRomSize_a * 2) / 100;
+        }
+
+        // Effective ROM size (the span addresses index into), by regime:
+        //   x <  66846           -> x - 2%
+        //   66846 <= x < 131072  -> 65536
+        //   x >= 131072          -> 65536
+        private static long EffectiveSize(long lngRomSize_a)
+        {
+            long lngResult = 0;
+
+            if (lngRomSize_a < REGIME_T1)
+            {
+                lngResult = lngRomSize_a - Pct2(lngRomSize_a);
+            }
+            else
+            {
+                lngResult = 65536L;
+            }
+
+            return lngResult;
+        }
+
+        // Sliding window (offset range), by regime:
+        //   x <  66846           -> 2%
+        //   66846 <= x < 131072  -> 131072 - x - 2%
+        //   x >= 131072          -> 65536
+        private static long SlidingWindow(long lngRomSize_a)
+        {
+            long lngResult = 0;
+
+            if (lngRomSize_a < REGIME_T1)
+            {
+                lngResult = Pct2(lngRomSize_a);
+            }
+            else if (lngRomSize_a < 131072L)
+            {
+                lngResult = 131072L - lngRomSize_a - Pct2(lngRomSize_a);
+            }
+            else
+            {
+                lngResult = 65536L;
+            }
+
+            return lngResult;
+        }
+
+        // Resolve the logical-start offset: fold the 16-bit header pointer into the
+        // sliding-window range for this ROM size.
         private static ushort FindOffset(byte byLow_a, byte byHigh_a, long lngROMSize_a)
         {
             ushort intResult = 0;
             ushort intRaw = (ushort)(byLow_a | (byHigh_a << 8));
+            long lngMax = SlidingWindow(lngROMSize_a);
 
-            if (lngROMSize_a >= 131072L)
+            if (lngMax <= 0)
             {
-                intResult = intRaw;
+                intResult = 0;
             }
             else
             {
-                long lngMax = (lngROMSize_a * UNSIGNAL_OFFSET_LIMIT_PCT) / 100;
-                if (lngMax == 0)
-                {
-                    intResult = 0;
-                }
-                else
-                {
-                    intResult = (ushort)(intRaw % (lngMax + 1));
-                }
+                intResult = (ushort)(intRaw % (lngMax + 1));
             }
 
             return intResult;
@@ -134,8 +182,8 @@ namespace CyborgUnicorn.ZOSCII
                 ptrRandEncode.NextBytes(ptrPrefix);
                 ptrRandEncode.NextBytes(ptrSuffix);
 
-                lngEffectiveSize = ptrRom_a.lngROMSize - intROMOffset;
-                if (lngEffectiveSize > 65536L) { lngEffectiveSize = 65536L; }
+                lngEffectiveSize = EffectiveSize(ptrRom_a.lngROMSize);
+
 
                 for (lngI = 0; lngI < lngEffectiveSize; lngI++)
                 {
@@ -275,8 +323,8 @@ namespace CyborgUnicorn.ZOSCII
                 ptrRandEncode.NextBytes(ptrPrefix);
                 ptrRandEncode.NextBytes(ptrSuffix);
 
-                lngEffectiveSize = ptrRom_a.lngROMSize - intROMOffset;
-                if (lngEffectiveSize > 65536L) { lngEffectiveSize = 65536L; }
+                lngEffectiveSize = EffectiveSize(ptrRom_a.lngROMSize);
+
 
                 for (lngI = 0; lngI < lngEffectiveSize; lngI++)
                 {
@@ -422,8 +470,7 @@ namespace CyborgUnicorn.ZOSCII
 
                     if (intI == byPrefixLen)
                     {
-                        long lngEffSize = ptrRom_a.lngROMSize - intOffset;
-                        if (lngEffSize > 65536) { lngEffSize = 65536; }
+                        long lngEffSize = EffectiveSize(ptrRom_a.lngROMSize);
 
                         for (intI = 0; intI < lngSlots; intI++)
                         {
@@ -441,10 +488,8 @@ namespace CyborgUnicorn.ZOSCII
                             }
                             else
                             {
-                                if (intAddr < lngEffSize)
-                                {
-                                    ptrOutput_a.WriteByte(ptrRom_a.ptrROMData[intOffset + intAddr]);
-                                }
+                                ushort intFolded = (ushort)(intAddr % lngEffSize);
+                                ptrOutput_a.WriteByte(ptrRom_a.ptrROMData[intOffset + intFolded]);
                             }
                         }
 
@@ -546,10 +591,9 @@ namespace CyborgUnicorn.ZOSCII
             {
                 if (blnTango_a && arrRoms_a.Length > 1)
                 {
-                    RomData[] arrRomData = new RomData[arrRoms_a.Length];
-                    for (int intI = 0; intI < arrRoms_a.Length; intI++) { arrRomData[intI] = arrRoms_a[intI].GetRomData(); }
-                    RomData objFirst = arrRomData[0];
-                    arrResult = clsUnsignal.fuencodeByteToByte(ref objFirst, arrInput_a, arrRomData, true);
+                    // Tango front-door: build one 128KB combined ROM, then UNSIGNAL-encode normally.
+                    RomData objTango = clsZOSCII.BuildTangoRom(arrRoms_a);
+                    arrResult = clsUnsignal.fuencodeByteToByte(ref objTango, arrInput_a);
                 }
                 else
                 {
@@ -653,10 +697,9 @@ namespace CyborgUnicorn.ZOSCII
             {
                 if (blnTango_a && arrRoms_a.Length > 1)
                 {
-                    RomData[] arrRomData = new RomData[arrRoms_a.Length];
-                    for (int intI = 0; intI < arrRoms_a.Length; intI++) { arrRomData[intI] = arrRoms_a[intI].GetRomData(); }
-                    RomData objFirst = arrRomData[0];
-                    arrResult = clsUnsignal.fudecodeByteToByte(objFirst, arrInput_a, arrRomData, true);
+                    // Tango front-door: build one 128KB combined ROM, then UNSIGNAL-decode normally.
+                    RomData objTango = clsZOSCII.BuildTangoRom(arrRoms_a);
+                    arrResult = clsUnsignal.fudecodeByteToByte(objTango, arrInput_a);
                 }
                 else
                 {

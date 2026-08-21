@@ -518,6 +518,10 @@ No asymmetric primitive, so there is nothing for Shor's algorithm to attack.
 `sharedclaims`  — readable by BOTH parties (both hold SHAREDROM). Live in the SHAREDROM envelope.
 `privateclaims` — readable only by the issuer. Sealed inside the issuer block (double-encoded with ISSUERROM1 and ISSUERROM2).
 
+**Structure**
+
+A ZWT is a concatenation: `lenheader + sharedstuff [+ issuerdata]`. `sharedstuff` is the SHAREDROM-encoded shared block (sharedsignature + sharedclaims); `issuerdata` is the double-encoded issuer block, appended after it. `lenheader` is the 32-bit length of `sharedstuff` concealed as SHAREDROM address slots, so a reader knows where `sharedstuff` ends and `issuerdata` begins. `issuerdata` is **optional** — omit the issuer ROMs at `Issue()` (pass `null`) for a bare same-party token that needs only SHAREDROM and carries no attestation. `IssuerSignature` on the result holds `issuerdata` (empty for a bare token).
+
 **Result type**
 
 `ZWTResult`: Success, Error, Token, IssuerSignature, SharedSignature, SharedClaims, PrivateClaims
@@ -560,6 +564,11 @@ using (ZOSCIIRom issuerRom2 = ZOSCIIRom.FromFile("issuer2.rom"))
 
     // --- Issuer-local convenience: open + introspect in one call (needs all three ROMs) ---
     ZWTResult objVerify = ZWT.Verify(arrToken, sharedRom, issuerRom1, issuerRom2);
+
+    // --- Bare same-party token: no issuer ROMs, no attestation, needs only SHAREDROM ---
+    // Pass null for both issuer ROMs; the result Token has no issuerdata appended.
+    ZWTResult objBare = ZWT.Issue(ZWT.NewSignature(), null, arrSharedClaims, null, null, sharedRom);
+    ZWTResult objBareOpen = ZWT.Open(objBare.Token, sharedRom);  // IssuerSignature is empty
 }
 
 // Updating Relyer claims
