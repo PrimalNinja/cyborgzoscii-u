@@ -4,7 +4,7 @@
 
 **Author:** Julian Cassin
 **Date:** 2026-06-10
-**Version:** 1.0
+**Version:** 1.1 (Draft)
 **License:** UNINTELLIGENCE License v1.1 / MIT (core ZOSCII)
 
 ---
@@ -164,7 +164,7 @@ The data is **physically and structurally not there** until all 5 channels conve
 
 The GUID is not a decryption key. It is a **shatter pattern** - telling the recipient where the holes are.
 
-### Extraction Algorithm (Pseudocode)
+### Extraction Algorithm (Pseudocode - NOT ACTUAL ALGORITHM)
 
 ```
 function extractDelta(ROM, GUID, targetBytes):
