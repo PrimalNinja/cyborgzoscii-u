@@ -4,9 +4,9 @@
 **Date:** 2026-09-09
 **Version:** 2.0 (DRAFT)
 
-## SOFTWARE LICENSE v1.1
+## SOFTWARE LICENSE v1.2
 
-Block Reinforced Index Confidentiality Scheme is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+Block Reinforced Index Confidentiality Scheme is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ---
 

@@ -1,7 +1,7 @@
 # UNSIGNAL Protocol: Intelligence Neutralisation Analysis
 
 *UNSIGNAL Protocol is part of the ZOSCII ecosystem*
-*License: UNINTELLIGENCE SOFTWARE LICENSE v1.1*
+*License: UNINTELLIGENCE SOFTWARE LICENSE v1.2*
 *Copyright (c) 2026 Cyborg Unicorn Pty Ltd*
 
 ---

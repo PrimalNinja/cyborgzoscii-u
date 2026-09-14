@@ -3,8 +3,9 @@
 **Author:** Julian Cassin
 **Date:** 2026-05-06
 
-## SOFTWARE LICENSE v1.1
-TEMPURA Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+## SOFTWARE LICENSE v1.2
+
+TEMPURA Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ---
 

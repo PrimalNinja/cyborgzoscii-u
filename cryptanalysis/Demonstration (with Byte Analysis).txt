@@ -1,7 +1,7 @@
 ZOSCII/UNSIGNAL Demonstration Guide
 ====================================
 (c) 2026 Cyborg Unicorn Pty Ltd
-MIT License / UNINTELLIGENCE SOFTWARE LICENSE v1.1
+MIT License / UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 This guide demonstrates how ZOSCII encoding produces completely different
 output every time, even with identical input files, and how UNSIGNAL wraps

@@ -3,9 +3,9 @@
 **Author:** Julian Cassin
 **Date:** 2026-02-28
 
-## SOFTWARE LICENSE v1.1
+## SOFTWARE LICENSE v1.2
 
-UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ## Overview
 

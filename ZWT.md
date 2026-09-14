@@ -3,6 +3,10 @@
 **Version 0.3 (DRAFT)** (document version; the wire `version` byte is still 0)
 **Author:** Julian Cassin
 
+## SOFTWARE LICENSE v1.2
+
+ZWT is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
+
 A quantum-proof, opaque session/attestation token. The JWT analogue for ZOSCII: an issuer attests a user to a relying party, but unlike JWT the token is information-theoretically opaque and its verification structure is concealed. No asymmetric primitive -- nothing for Shor's algorithm to attack.
 
 ---

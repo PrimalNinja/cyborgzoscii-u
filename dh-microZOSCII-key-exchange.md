@@ -4,9 +4,9 @@
 **Author:** Julian Cassin
 **Date:** 2026-05-08
 
-## SOFTWARE LICENSE v1.1
+## SOFTWARE LICENSE v1.2
 
-DH-microZOSCII is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+DH-microZOSCII is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ---
 

@@ -4,9 +4,9 @@
 **Date:** 2026-08-20
 **Version:** 1.1 (added suggested implementation section)
 
-## SOFTWARE LICENSE v1.1
+## SOFTWARE LICENSE v1.2
 
-UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+UNSIGNAL Protocol is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ### 1. OVERVIEW
 

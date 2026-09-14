@@ -3,9 +3,9 @@
 **Author:** Julian Cassin
 **Date:** 2026-03-05
 
-## SOFTWARE LICENSE v1.1
+## SOFTWARE LICENSE v1.2
 
-superZOSCII Protocol (The Fourth Protocol) is released under UNINTELLIGENCE SOFTWARE LICENSE v1.1
+superZOSCII Protocol (The Fourth Protocol) is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 **Draft Version 1**
 

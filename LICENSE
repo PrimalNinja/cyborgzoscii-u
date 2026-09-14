@@ -1,12 +1,16 @@
-UNINTELLIGENCE SOFTWARE LICENSE v1.1
+UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 Copyright (c) 2026 Cyborg Unicorn Pty Ltd
 
 Permission is hereby granted, free of charge, to any person or organization obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the following conditions:
 
+SOFTWARE LICENSE v1.2
+
+What v1.2 does is clarify vagueness of v1.1 - anything in v1.1 and v1.2 is applicable to both - choose which one you want.
+
 REBRANDING:
 
-✗ Rebranding of products under UNINTELLIGENCE SOFTWARE LICENSE v1.1 is NOT permitted.
+✗ Rebranding of products under UNINTELLIGENCE SOFTWARE LICENSE v1.1 or later is NOT permitted.
 
 examples:
 
@@ -22,16 +26,24 @@ PERMITTED USERS:
 ✓ Academic and research institutions
 ✓ Journalists and media organizations
 ✓ Civil society organizations
+✓ Any non-government military organization or non-government defense contractor (product tender/development/sales, not employee extensions to governments or government shell company)
 
 PROHIBITED USERS AND USES:
 
-The Software shall NOT be used by, for, or on behalf of:
+The Software shall NOT be used by, for, or on behalf of unless sourced from the permitted users as part of a larger body of work:
+
 ✗ Any governmental intelligence agency
-✗ Any military organization or defense contractor
-✗ Any law enforcement agency (national/federal level)
+✗ Any government military organization or government defense contractor
 ✗ Any governmental surveillance operation
+✗ Any law enforcement agency (national/federal level)
 ✗ Any entity conducting mass surveillance
 ✗ Any entity whose primary purpose is signals intelligence (SIGINT), communications intelligence (COMINT), or cyber warfare
+
+Examples:
+
+A military contractor can make a Jet Fighter that uses UNINTELLIGENCE products and sells them to the Government - this is permitted.
+
+The Government themselves cannot make a Jet Fighter and fit it with UNINTELLIGENCE whether directly or via contractors operating as staff extensions.
 
 PROHIBITED APPLICATIONS:
 

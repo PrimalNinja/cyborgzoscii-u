@@ -5,7 +5,7 @@
 **Author:** Julian Cassin
 **Date:** 2026-06-10
 **Version:** 1.1 (Draft)
-**License:** UNINTELLIGENCE License v1.1 / MIT (core ZOSCII)
+**License:** UNINTELLIGENCE License v1.2 / MIT (core ZOSCII)
 
 ---
 
