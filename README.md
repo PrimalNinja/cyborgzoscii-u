@@ -21,17 +21,13 @@ CyborgZOSCII is an alternative to ASCII/PETSCII that uses direct ROM addressing 
 
 microZOSCII is a ZOSCII-derived, Quantum Proof mechanism to bootstrap full ZOSCII.
 
-## UNSIGNAL Protocol
+## UNSIGNAL / microUNSIGNAL Protocol
 
-UNSIGNAL Protocol Specification - using ZOSCII for the ultimate Quantum Proof protection.
+UNSIGNAL and microUNSIGNAL Protocol Specifications - using ZOSCII for the ultimate Quantum Proof protection.
 
-## NoEyes Handshake Protocol
+## BRICS / microBRICS Protocol
 
-NoEyes Handshake Protocol Specification - using microZOSCII and ZOSCII for the ultimate Quantum Proof 'real' zero-trust end to end handshake.
-
-## superZOSCII Protocol (The Fourth Protocol)
-
-superZOSCII Protocol (The Fourth Protocol) is a theoretical extension to the UNSIGNAL Protocol that introduces per-packet window rotation across arbitrarily large ROMs. All packet indirection metadata resides within the currently paged-in 64KB window, maintaining the self-referential security model of ZOSCII.
+BRICS and microBRICS Protocol Specifications - using ZOSCII for the ultimate ultimate Quantum Proof protection.
 
 ## BRAINLESS Protocol
 
@@ -60,3 +56,11 @@ Examples:
  noisegen https://mq.example.com/index.php myqueue mykey.jpg 60 -ua clear
  noisegen https://mq.example.com/index.php myqueue mykey.jpg -ua "Mozilla/5.0"
  
+## NoEyes Handshake Protocol (Useful?)
+
+NoEyes Handshake Protocol Specification - using microZOSCII and ZOSCII for the ultimate Quantum Proof 'real' zero-trust end to end handshake.
+
+## superZOSCII Protocol (The Fourth Protocol - Deprecated)
+
+superZOSCII Protocol (The Fourth Protocol) is a theoretical extension to the UNSIGNAL Protocol that introduces per-packet window rotation across arbitrarily large ROMs. All packet indirection metadata resides within the currently paged-in 64KB window, maintaining the self-referential security model of ZOSCII.
+
