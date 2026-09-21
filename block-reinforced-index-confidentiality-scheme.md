@@ -1,24 +1,43 @@
-# Block Reinforced Index Confidentiality Scheme Specification
+# Block Reinforced Index Confidentiality Scheme Specification — 16-bit / byte
 
 **Author:** Julian Cassin
-**Date:** 2026-09-09
-**Version:** 2.0 (DRAFT)
+**Version:** 2.0 (16-bit / byte configuration)
 
 ## SOFTWARE LICENSE v1.2
 
-Block Reinforced Index Confidentiality Scheme is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
+BRICS is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ---
 
 ### 1. OVERVIEW
 
-Block Reinforced Index Confidentiality is an evolution of the UNSIGNAL Protocol that introduces **per-block offsets and sizes**, enabling the same address to decode to different values in different blocks of the same file.
+BRICS is a ZOSCII implementation that neutralizes pattern recognition and heuristic analysis. Randomized offsets and variable padding ensure that identical inputs never produce identical outputs, even on the same ROM.
+
+This document is the **16-bit / byte** configuration. It is one of four parallel UNSIGNAL/BRICS specifications that differ only by address size and block policy; the 8-bit / nibble configuration (the micro variant) is identical in structure with the size tokens swapped.
 
 ---
 
-### 2. FILE HEADER (FH) - 6 Addresses × 2 Bytes = 12 Bytes
+### 1a. ADDRESS SIZE
 
-| Header | Size | What you do |
+This configuration uses an **16-bit address**. An **address** is one emitted reference: **2 bytes** in the encoded output, indexing one **byte** in the ROM.
+
+A composed value — the ROM start pointer, a block offset, a block size — is built from **two addresses** (a low part and a high part) whose dereferenced values combine into **one** value the width of the address: `ROM[low]` is the low byte, `ROM[high]` the high byte, together one 16-bit value. The composition shift is **8** (the byte width in bits):
+
+```
+value = (ROM[high] << 8) | ROM[low]
+```
+
+The pointer is the same width as the address size — two bytes compose one address-sized value, not a wider one.
+
+Keep two units distinct: the **addressable unit** (a byte — what one address indexes in the ROM) and the **address** (the emitted reference — 2 bytes in the encoded output). Header sizes and the data payload are counted in bytes of encoded output.
+
+**Why this address size.** 16-bit addressing spans a byte-scale ROM up to 64KB — the standard full-ROM configuration. 32-bit addressing is not recommended: for most files the top bytes of every address are zero the overwhelming majority of the time (≈90% high-order zero bytes — storage waste and a conspicuous regular structure in the output), and it loses the odd/even one-byte misalignment benefit, which depends on the granularity being fine enough that a one-byte shift is meaningful.
+
+---
+
+### 2. FILE HEADER (FH) — 6 Addresses (2 bytes each = 12 bytes)
+
+| Header | Size | Dereference |
 |--------|------|-------------|
 | **FH1** | 2 bytes | `ROM[FH1]` = low byte of Block 1 offset |
 | **FH2** | 2 bytes | `ROM[FH2]` = high byte of Block 1 offset |
@@ -29,24 +48,28 @@ Block Reinforced Index Confidentiality is an evolution of the UNSIGNAL Protocol 
 
 **Total file header size:** 6 × 2 = 12 bytes
 
+FH5 and FH6 each point to a ROM position whose value is 10 or greater; that value is the length of a random prefix / suffix byte array. FH1/FH2 and FH3/FH4 can point to odd or even positions, shifting all addresses by one byte from the start or end without an attacker knowing which. The prefix hides where the message starts; the suffix hides where it ends (defeating a backwards walk).
+
 ---
 
 ### 3. FILE STRUCTURE
 
 ```
-[FH][Prefix][Block 1][Block 2][Block 3]...[Suffix]
+[FH][Prefix][Block 1][Block 2]...[Suffix]
 
 FH:       [FH1][FH2][FH3][FH4][FH5][FH6]  (12 bytes)
 Prefix:   random bytes                     (length from ROM[FH5])
-Payload:  [Block 1][Block 2]...        (variable)
+Payload:  [Block 1][Block 2]...            (variable)
 Suffix:   random bytes                     (length from ROM[FH6])
 ```
 
+**BRICS uses multiple blocks (N ≥ 1), each with its own offset and size.** The same address decodes to a different value in different blocks, because each block re-offsets the ROM. The file header points at block 1; each block's header points at the next. The chain terminates when the payload region (bounded by the known suffix length) is consumed — the final block's "NEXT block" values are unused noise. A single-block BRICS file (N = 1) is exactly an UNSIGNAL file.
+
 ---
 
-### 4. BLOCK HEADER (BH) - 4 Addresses × 2 Bytes = 8 Bytes
+### 4. BLOCK HEADER (BH) — 4 Addresses (2 bytes each = 8 bytes)
 
-| Header | Size | What you do |
+| Header | Size | Dereference |
 |--------|------|-------------|
 | **BH1** | 2 bytes | `ROM[BH1]` = low byte of NEXT block offset |
 | **BH2** | 2 bytes | `ROM[BH2]` = high byte of NEXT block offset |
@@ -63,10 +86,10 @@ Suffix:   random bytes                     (length from ROM[FH6])
 Block N:
   [BH1][BH2][BH3][BH4][Data bytes...]
 
-  BH1 = 2-byte ADDRESS → ROM[BH1]   = low byte of NEXT block offset
-  BH2 = 2-byte ADDRESS → ROM[BH2]   = high byte of NEXT block offset
-  BH3 = 2-byte ADDRESS → ROM[BH3]   = low byte of NEXT block size
-  BH4 = 2-byte ADDRESS → ROM[BH4]   = high byte of NEXT block size
+  BH1 = 2 bytes ADDRESS → ROM[BH1] = low byte of NEXT block offset
+  BH2 = 2 bytes ADDRESS → ROM[BH2] = high byte of NEXT block offset
+  BH3 = 2 bytes ADDRESS → ROM[BH3] = low byte of NEXT block size
+  BH4 = 2 bytes ADDRESS → ROM[BH4] = high byte of NEXT block size
 
   next_offset = (ROM[BH2] << 8) | ROM[BH1]
   next_size   = (ROM[BH4] << 8) | ROM[BH3]
@@ -82,8 +105,8 @@ Block N:
 ```
 block1_offset = (ROM[FH2] << 8) | ROM[FH1]
 block1_size   = (ROM[FH4] << 8) | ROM[FH3]
-prefix_len      = ROM[FH5]
-suffix_len      = ROM[FH6]
+prefix_len    = ROM[FH5]
+suffix_len    = ROM[FH6]
 
 Skip prefix_len bytes
 
@@ -93,129 +116,123 @@ next_offset = (ROM[BH2] << 8) | ROM[BH1]
 next_size   = (ROM[BH4] << 8) | ROM[BH3]
 Decode block1_size bytes using ROM[block1_offset + address]
 
-// Block 2
+// Subsequent blocks (BRICS N>1; UNSIGNAL has none)
 Read BH1, BH2, BH3, BH4
 next_offset = (ROM[BH2] << 8) | ROM[BH1]
 next_size   = (ROM[BH4] << 8) | ROM[BH3]
 Decode previous_next_size bytes using ROM[previous_next_offset + address]
 
-// Continue until end of payload
+// Continue until the payload region is consumed
 Skip suffix_len bytes
 ```
 
+The decoder does not look for an end-of-chain marker. The payload region is bounded up front by the known `suffix_len`; the decoder walks blocks only within that region and stops when it is consumed. The final block's BH is decoded but its "NEXT block" values are never used — they are indistinguishable from the surrounding noise, which is intended.
+
 ---
 
-### 7. SUMMARY
+### 7. CORE LOGIC (MINIMAL)
+
+The block/offset/padding machinery above wraps plain ZOSCII. The underlying encode/decode is address-size-agnostic and is the same operation in every configuration:
+
+```javascript
+// Minimal ZOSCII (Internal)
+encode = (r,m) => [...m].map(c => [...r].map((b,i)=>b==c?i:[]).flat().sort(()=>Math.random()-.5)[0]);
+decode = (r,a) => a.map(a => r[a]).join('');
+```
+
+For each message value, collect every ROM index holding that value and pick one at random; decode is `ROM[address]`. ZOSCII itself remains under the MIT license; the BRICS layer is under UNINTELLIGENCE SOFTWARE LICENSE v1.2.
+
+---
+
+### 8. SUGGESTED IMPLEMENTATION: BLOCK SIZE WHEN ENCODING
+
+*Encoder-only guidance, not a wire-format requirement. The decoder reads each size from the headers and follows it; only the encoder applies this. Implementations are free to choose their own range.*
+
+**Recommendation:** choose each block's size as a random element count — a reasonable default is **between 128 and 512** — drawn **independently per block**. The range is not fixed by the scheme.
+
+Per-block offsets mean the same address decodes to a different value in different blocks; this is the primary strengthening and holds even for fixed-size blocks. Randomising the size per block replaces a single known structural template with a per-block combinatorial constraint: a candidate ROM must produce a length chain in which every block independently lands in the chosen range and the chain fits the payload. There is nothing to brute-force in the usual sense — every ROM decodes to plausible output — so the only cheap attack is *discarding* made-up ROMs whose decoded block-length chain does not fit the file; random per-block sizing forces each such decision to satisfy an independent length constraint at every block.
+
+**No CSPRNG is required.** The size randomness selects block sizes only; it carries no security. An attacker without the ROM cannot read any block size, offset, or content regardless of how predictably the sizes were chosen. The confidentiality is in ROM secrecy, exactly as everywhere else in ZOSCII — never in a random number generator.
+
+---
+
+### 9. SUGGESTED IMPLEMENTATION: REGIME 1 — EFFECTIVE ROM SIZE AND SLIDING WINDOW
+
+*Default offset regime (`-r1`). One reasonable way to derive an effective ROM size and sliding window from the actual ROM size, so the 16-bit pointer behaves sensibly across small and large ROMs. Suggested, not normative — encoder and decoder must agree. All percentage math uses integer division, truncated — never floating point with rounding.*
+
+**Variables:**
+
+```
+x  = actual ROM size in bytes
+xp = (x * 2) / 100                 // 2% of x, integer division
+t1 = 65536 + (65536 * 2) / 100     // = 66846 — fixed Rule-1 trigger (2% of 64KB, not of x)
+```
+
+**Rule 1 — small ROM (`x < t1`):**
+
+```
+effective_size (y) = x - xp
+sliding_window (w) = xp
+```
+
+**Rule 2 — medium ROM (`t1 <= x < 131072`):**
+
+```
+effective_size (y) = 65536
+sliding_window (w) = 131072 - x - xp
+```
+
+**Rule 3 — large ROM (`x >= 131072`):**
+
+```
+effective_size (y) = 65536
+sliding_window (w) = 65536
+```
+
+The offset derived from the FH pointer, and the ZOSCII addressing, operate against the effective size and sliding window — not the raw ROM size. Encoder and decoder must apply the same scheme or files will not round-trip.
+
+**Rule 1 is a bonus:** because the sliding window shifts where addressing effectively starts each session, a given address does not resolve to the same underlying ROM byte from one encode to the next. Completely different messages can produce the exact same address stream on the same ROM — an observer seeing overlapping address sequences learns nothing about whether the underlying messages are related. This holds even on ROMs far below 64KB. The cost is proportional: `effective_size` and `sliding_window` are drawn from the same pool (`y + w = x`), so a ROM cannot have both a full 64KB of address space and the maximum window count at once.
+
+---
+
+### 10. SUGGESTED IMPLEMENTATION: REGIME 2 — ADDRESS-SPACE WRAP-AROUND
+
+*Second offset regime (`-r2`), backward compatible with Regime 1: `hl mod window_size` is a no-op on any address a Regime 1 encoder produced. Suggested, not normative; encoder and decoder must agree.*
+
+**When to use Regime 2.** Where the cyclic repetition it creates does not leak. The clearest case is BRICS applied per block: the full address space is used within each block, and the blocks of a message have no correlation to each other, so per-block wrapping exposes no cross-block pattern. Choose Regime 2 where the wrapped address space is confined to a unit (a block, a segment, a session) with no exploitable relationship to any other unit. Where one flat address space spans correlated content, prefer Regime 1.
+
+**What it does.** Regime 1 leaves the address space beyond the window unused when the window is smaller than the full address space (64KB). Regime 2 wraps the address space around the window — addresses use the **full** address space, and on read the decoder folds each back in:
+
+```
+hl = hl mod window_size
+ld a, (hl)
+```
+
+So a smaller window still gives full addressing — addresses past the window wrap back and re-use it from the start. At the limit, a **1-byte ROM backs the full address space**: that single value has 65536 instances (every address mods to 0). Any ROM size, however small, can back the full address space this way — provided it contains the values the message needs.
+
+**Encoder side.** The encoder wraps too, expressed as cycling: it walks the window recording positions for each value, and at the window end cycles back to the start until the instance list spans the full address space. Encoder cycling and decoder `hl mod window_size` are the same wrap from both ends.
+
+**The repeating pattern is still secret.** A small ROM wrapped to fill the address space is the small ROM repeated cyclically. This is not a leak: the pattern *is* the ROM, and the ROM is secret. Without the ROM the repetition is unreadable; with it, an observer would simply decode.
+
+**Floor.** The ROM must still contain every value the message uses — wrapping supplies many instances of the values present, it cannot conjure an absent value. A 1-byte ROM is the degenerate case: it can only encode a message of that single byte value.
+
+---
+
+### 11. SUMMARY
 
 | Element | In file | Dereference | Result |
 |---------|---------|-------------|--------|
-| **FH1** | 2-byte addr | `ROM[FH1]` | low byte of Block 1 offset |
-| **FH2** | 2-byte addr | `ROM[FH2]` | high byte of Block 1 offset |
-| **FH3** | 2-byte addr | `ROM[FH3]` | low byte of Block 1 size |
-| **FH4** | 2-byte addr | `ROM[FH4]` | high byte of Block 1 size |
-| **FH5** | 2-byte addr | `ROM[FH5]` | prefix length |
-| **FH6** | 2-byte addr | `ROM[FH6]` | suffix length |
-| **BH1** | 2-byte addr | `ROM[BH1]` | low byte of NEXT block offset |
-| **BH2** | 2-byte addr | `ROM[BH2]` | high byte of NEXT block offset |
-| **BH3** | 2-byte addr | `ROM[BH3]` | low byte of NEXT block size |
-| **BH4** | 2-byte addr | `ROM[BH4]` | high byte of NEXT block size |
-| **Data** | 2-byte addr | `ROM[offset + address]` | actual byte |
-
----
-
-### 8. Worked Example — 100-element message in 3 blocks
-
-A 100-element message split into three blocks (40 + 35 + 25 elements). This example uses the 16-bit-address / byte configuration, so each element on the wire is a 2-byte address, each BH is 4 addresses (8 bytes), and the FH is 6 addresses (12 bytes). **Sizes are in address space (element counts) and are data-only — they exclude the block's own 8-byte BH.**
-
-Chosen for this example: `prefix_len = 13`, `suffix_len = 21`, block sizes `40, 35, 25`.
-
-**Byte layout:**
-
-```
-Region     Bytes                         Byte offset
---------   ---------------------------   -----------
-FH         6 addr × 2         = 12        0
-Prefix     random             = 13        12
-Block 1  BH(8) + 40×2       = 88        25
-Block 2  BH(8) + 35×2       = 78        113
-Block 3  BH(8) + 25×2       = 58        191
-Suffix     random             = 21        249
---------                                  -----------
-FILE TOTAL                    = 270        (EOF 270)
-```
-
-**What each header carries (each value is `ROM[addr]`):**
-
-```
-FH → block 1 params + pad lengths:
-  block1_offset = (ROM[FH2]<<8) | ROM[FH1]
-  block1_size   = (ROM[FH4]<<8) | ROM[FH3]   = 40
-  prefix_len      = ROM[FH5]                    = 13
-  suffix_len      = ROM[FH6]                    = 21
-
-Block 1's BH → block 2 params:
-  block2_offset = (ROM[BH2]<<8) | ROM[BH1]
-  block2_size   = (ROM[BH4]<<8) | ROM[BH3]   = 35
-
-Block 2's BH → block 3 params:
-  block3_offset = (ROM[BH2]<<8) | ROM[BH1]
-  block3_size   = (ROM[BH4]<<8) | ROM[BH3]   = 25
-
-Block 3's BH → next params point past the payload region;
-  the decoder stops because the payload region (bounded by
-  suffix_len from the file end) is exhausted, not because the
-  chain self-terminates. Block 3's BH values are unused noise.
-```
-
-**Decode walk:**
-
-```
-payload_region = file_len(270) − FH(12) − prefix_len(13) − suffix_len(21)
-               = 224 bytes           (byte offsets 25 .. 248)
-
-Read FH → blk1 offset/size(40), prefix_len(13), suffix_len(21)
-Skip 13 prefix bytes                              → at offset 25
-
-Block 1 @ offset 25:
-  read BH (8 bytes)          → blk2 offset/size(35)
-  decode 40 elements (80 bytes) using ROM[blk1_offset + addr]
-                                                   → at offset 113
-
-Block 2 @ offset 113:
-  read BH (8 bytes)          → blk3 offset/size(25)
-  decode 35 elements (70 bytes) using ROM[blk2_offset + addr]
-                                                   → at offset 191
-
-Block 3 @ offset 191:
-  read BH (8 bytes)          → (values unused)
-  decode 25 elements (50 bytes) using ROM[blk3_offset + addr]
-                                                   → at offset 249
-
-offset 249 == payload end (270 − 21 suffix). Payload region
-exhausted → stop. Remaining 21 bytes are the random suffix.
-```
-
-**Note on termination:** the decoder does not look for an end-of-chain marker. The payload region is bounded up front by the known `suffix_len` (offsets 25–248 here); the decoder walks blocks only within that region and stops when it is consumed. The final block's BH is decoded but its "next block" values are never used — they are indistinguishable from the surrounding noise, which is intended.
-
----
-
-### 9. SUGGESTED IMPLEMENTATION: BLOCK SIZE WHEN ENCODING
-
-*This section is encoder-only guidance, not a scheme requirement. The wire format does not care how block sizes were chosen — the decoder simply reads each size from the block headers and follows it. Only the encoder applies this; the decoder needs no knowledge of the scheme. Implementations are free to choose their own range.*
-
-**Recommendation:** when encoding, choose each block's size as a random number of elements — a reasonable default is **between 128 and 512** — drawn **independently per block**. The range is not fixed by the scheme; pick your own.
-
-**Why block at all (the base benefit):** per-block offsets mean the same address decodes to a different value in different blocks. This holds regardless of how sizes are chosen — even fixed-size blocks gain it. Blocking is the primary strengthening.
-
-**Why randomise the size (the multiplier):** a documented fixed block size (e.g. always 256) makes the block boundaries fall at predictable strides. This does not leak the message — the block headers are still `ROM[addr]` values unreadable without the ROM — but it presents a single known structural template. Randomising the size **per block** replaces that one template with a per-block combinatorial constraint: a candidate ROM must produce a length chain in which *every* block independently lands in the chosen range *and* the chain fits the payload. This maximises the unpredictability of address reuse within a single message and makes structural candidate-elimination combinatorially harder, at a cost of only a few bytes of overhead variance. (There is nothing to "brute-force" in the usual sense — there is no recognisable correct decode to search toward, since every ROM decodes to plausible output. The only cheap thing an attacker can do is *discard* made-up ROMs whose decoded block-length chain does not fit the file; random per-block sizing forces each discarded-or-not decision to satisfy an independent length constraint at every block, so fewer come cheap.) Blocking is the benefit; randomising the size multiplies it.
-
-**Encoding steps:**
-
-1. For blocks 1..N−1, draw an independent random size in the chosen range (e.g. 128–512 elements).
-2. The final block takes the remainder of the payload, so the block sizes sum exactly to the payload region.
-3. Below a small floor (e.g. payloads under 256 elements), a single block is acceptable — there is nothing to gain from blocking a payload smaller than one block.
-
-**No CSPRNG is required.** The randomness here selects block sizes only; it does not carry the security. From an attacker's point of view decoding is still blind — they lack the ROM, so they cannot read any block size, any offset, or any content regardless of how predictably or unpredictably the encoder chose the sizes. A weak or fully predictable size generator does not help an attacker who cannot read the block headers in the first place. The size randomness buys *structural unpredictability against candidate-elimination*, not confidentiality of the message — the message confidentiality comes from the ROM being secret, exactly as everywhere else. As with the rest of ZOSCII, the security is in ROM secrecy, never in the quality of a random number generator.
+| **FH1** | 2 bytes addr | `ROM[FH1]` | low byte of Block 1 offset |
+| **FH2** | 2 bytes addr | `ROM[FH2]` | high byte of Block 1 offset |
+| **FH3** | 2 bytes addr | `ROM[FH3]` | low byte of Block 1 size |
+| **FH4** | 2 bytes addr | `ROM[FH4]` | high byte of Block 1 size |
+| **FH5** | 2 bytes addr | `ROM[FH5]` | prefix length |
+| **FH6** | 2 bytes addr | `ROM[FH6]` | suffix length |
+| **BH1** | 2 bytes addr | `ROM[BH1]` | low byte of NEXT block offset |
+| **BH2** | 2 bytes addr | `ROM[BH2]` | high byte of NEXT block offset |
+| **BH3** | 2 bytes addr | `ROM[BH3]` | low byte of NEXT block size |
+| **BH4** | 2 bytes addr | `ROM[BH4]` | high byte of NEXT block size |
+| **Data** | 2 bytes addr | `ROM[offset + address]` | actual byte |
 
 ---
 
