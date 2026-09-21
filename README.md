@@ -2,7 +2,7 @@
 
 ZOSCII Zero Overhead Secure Code Information Interchange.
 
-All Sourcecode, Tools and Applications under this repository are released uner the UNINTELLIGENCE SOFTWARE LICENSE v1.1.
+All Sourcecode, Tools and Applications under this repository are released uner the UNINTELLIGENCE SOFTWARE LICENSE v1.2.
 
 For MIT Licenced versions: https://github.com/PrimalNinja/cyborgzoscii 
 
