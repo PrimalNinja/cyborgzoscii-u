@@ -11,9 +11,9 @@ UNSIGNAL is released under UNINTELLIGENCE SOFTWARE LICENSE v1.2
 
 ### 1. OVERVIEW
 
-UNSIGNAL is a ZOSCII implementation that neutralizes pattern recognition and heuristic analysis. Randomized offsets and variable padding ensure that identical inputs never produce identical outputs, even on the same ROM.
+UNSIGNAL is a ZOSCII implementation that neutralizes pattern recognition and heuristic analysis. A randomized ROM offset and variable prefix/suffix padding ensure that identical inputs never produce identical outputs, even on the same ROM.
 
-This document is the **8-bit / nibble** configuration. It is one of four parallel UNSIGNAL/BRICS specifications that differ only by address size and block policy; the 16-bit / byte configuration (the standard variant) is identical in structure with the size tokens swapped.
+This document is the **8-bit / nibble** configuration. Its 16-bit / byte counterpart (the standard variant) is identical in structure with the size tokens swapped.
 
 ---
 
@@ -21,7 +21,7 @@ This document is the **8-bit / nibble** configuration. It is one of four paralle
 
 This configuration uses an **8-bit address**. An **address** is one emitted reference: **1 byte** in the encoded output, indexing one **nibble** in the ROM.
 
-A composed value — the ROM start pointer, a block offset, a block size — is built from **two addresses** (a low part and a high part) whose dereferenced values combine into **one** value the width of the address: `ROM[low]` is the low nibble, `ROM[high]` the high nibble, together one 8-bit value. The composition shift is **4** (the nibble width in bits):
+A composed value — the ROM start pointer — is built from **two addresses** (a low part and a high part) whose dereferenced values combine into **one** value the width of the address: `ROM[low]` is the low nibble, `ROM[high]` the high nibble, together one 8-bit value. The composition shift is **4** (the nibble width in bits):
 
 ```
 value = (ROM[high] << 4) | ROM[low]
@@ -34,105 +34,67 @@ Keep two units distinct: the **addressable unit** (a nibble — what one address
 **Why this address size.** 8-bit addressing spans a nibble-scale ROM up to 256 positions — the micro configuration. A ROM larger than 256 nibbles (e.g. 512) needs 16-bit addressing to reach every position. 32-bit addressing is not recommended: for most files the top bytes of every address are zero the overwhelming majority of the time (≈90% high-order zero bytes — storage waste and a conspicuous regular structure in the output), and it loses the odd/even one-nibble misalignment benefit, which depends on the granularity being fine enough that a one-nibble shift is meaningful.
 
 ---
+### 2. HEADER — 4 Addresses (1 byte each = 4 bytes)
 
-### 2. FILE HEADER (FH) — 6 Addresses (1 byte each = 6 bytes)
+Every UNSIGNAL file begins with a 4-address header. Addresses are stored low part first (little-endian), consistent at every width.
 
 | Header | Size | Dereference |
 |--------|------|-------------|
-| **FH1** | 1 byte | `ROM[FH1]` = low nibble of Block 1 offset |
-| **FH2** | 1 byte | `ROM[FH2]` = high nibble of Block 1 offset |
-| **FH3** | 1 byte | `ROM[FH3]` = low nibble of Block 1 size |
-| **FH4** | 1 byte | `ROM[FH4]` = high nibble of Block 1 size |
-| **FH5** | 1 byte | `ROM[FH5]` = prefix length |
-| **FH6** | 1 byte | `ROM[FH6]` = suffix length |
+| **H1** | 1 byte | `ROM[H1]` = low nibble of ROM start pointer |
+| **H2** | 1 byte | `ROM[H2]` = high nibble of ROM start pointer |
+| **H3** | 1 byte | `ROM[H3]` = prefix length |
+| **H4** | 1 byte | `ROM[H4]` = suffix length |
 
-**Total file header size:** 6 × 1 = 6 bytes
+**Total header size:** 4 × 1 = 4 bytes
 
-FH5 and FH6 each point to a ROM position whose value is 10 or greater; that value is the length of a random prefix / suffix byte array. FH1/FH2 and FH3/FH4 can point to odd or even positions, shifting all addresses by one nibble from the start or end without an attacker knowing which. The prefix hides where the message starts; the suffix hides where it ends (defeating a backwards walk).
+H1/H2 compose the ROM start pointer — the logical "start" of the ROM for this session — as `(ROM[H2] << 4) | ROM[H1]`. H3 and H4 each point to a ROM position whose value is 10 or greater; that value is the length of a random prefix / suffix byte array. H1/H2 can point to an odd or even position, shifting all addresses by one nibble from the start without an attacker knowing which. The prefix hides where the message starts; the suffix hides where it ends (defeating a backwards walk).
 
 ---
 
 ### 3. FILE STRUCTURE
 
 ```
-[FH][Prefix][Block 1][Block 2]...[Suffix]
+[H1][H2][H3][H4][Prefix][Encoded stream][Suffix]
 
-FH:       [FH1][FH2][FH3][FH4][FH5][FH6]  (6 bytes)
-Prefix:   random bytes                     (length from ROM[FH5])
-Payload:  [Block 1][Block 2]...            (variable)
-Suffix:   random bytes                     (length from ROM[FH6])
+Header:   [H1][H2][H3][H4]                (4 bytes)
+Prefix:   random bytes                     (length from ROM[H3])
+Payload:  encoded address stream           (variable)
+Suffix:   random bytes                     (length from ROM[H4])
 ```
 
-**UNSIGNAL uses a single block (N = 1).** The file header points at one region; there is no block chain and no per-block re-offsetting. The block header fields below are still present and read exactly as described, but the "NEXT block" they point to is past the payload and its values are unused noise — the decoder stops when the single payload region (bounded by the known suffix length) is consumed. To re-offset per block, use BRICS, which is UNSIGNAL with N > 1 and an independent offset per block.
+UNSIGNAL is a single flat stream — one ROM offset for the whole message, no blocks and no per-block re-offsetting. (Per-block offsets are what BRICS adds on top of this structure.)
 
 ---
 
-### 4. BLOCK HEADER (BH) — 4 Addresses (1 byte each = 4 bytes)
+### 4. ENCODING STEPS
 
-| Header | Size | Dereference |
-|--------|------|-------------|
-| **BH1** | 1 byte | `ROM[BH1]` = low nibble of NEXT block offset |
-| **BH2** | 1 byte | `ROM[BH2]` = high nibble of NEXT block offset |
-| **BH3** | 1 byte | `ROM[BH3]` = low nibble of NEXT block size |
-| **BH4** | 1 byte | `ROM[BH4]` = high nibble of NEXT block size |
-
-**Total block header size:** 4 × 1 = 4 bytes
+1. **Select randoms:** generate random values for the ROM start pointer (low/high) and the prefix/suffix lengths.
+2. **Map header:** use ZOSCII logic to find addresses H1–H4 whose dereferenced ROM values equal those randoms.
+3. **Generate noise:** build a prefix and a suffix of random bytes of the chosen lengths.
+4. **Encode data:** ZOSCII-encode the message, offsetting the search space by the ROM pointer from H1/H2.
+5. **Assemble:** `[H1][H2][H3][H4] + [Prefix] + [Encoded stream] + [Suffix]`.
 
 ---
 
-### 5. BLOCK STRUCTURE
+### 5. DECODING STEPS
 
 ```
-Block N:
-  [BH1][BH2][BH3][BH4][Data bytes...]
+rom_pointer = (ROM[H2] << 4) | ROM[H1]
+prefix_len  = ROM[H3]
+suffix_len  = ROM[H4]
 
-  BH1 = 1 byte ADDRESS → ROM[BH1] = low nibble of NEXT block offset
-  BH2 = 1 byte ADDRESS → ROM[BH2] = high nibble of NEXT block offset
-  BH3 = 1 byte ADDRESS → ROM[BH3] = low nibble of NEXT block size
-  BH4 = 1 byte ADDRESS → ROM[BH4] = high nibble of NEXT block size
-
-  next_offset = (ROM[BH2] << 4) | ROM[BH1]
-  next_size   = (ROM[BH4] << 4) | ROM[BH3]
-
-  Data = bytes encoded using CURRENT block's offset
-       → One dereference: ROM[offset + address]
+Skip prefix_len bytes after the header
+Terminate suffix_len bytes before end of file
+Decode the remaining address stream: ROM[rom_pointer + address]
 ```
+
+The prefix and suffix are stripped by their known lengths; everything between is the encoded stream, decoded against the ROM at the session pointer.
 
 ---
 
-### 6. DECODING
+### 6. CORE LOGIC (MINIMAL)
 
-```
-block1_offset = (ROM[FH2] << 4) | ROM[FH1]
-block1_size   = (ROM[FH4] << 4) | ROM[FH3]
-prefix_len    = ROM[FH5]
-suffix_len    = ROM[FH6]
-
-Skip prefix_len bytes
-
-// Block 1
-Read BH1, BH2, BH3, BH4
-next_offset = (ROM[BH2] << 4) | ROM[BH1]
-next_size   = (ROM[BH4] << 4) | ROM[BH3]
-Decode block1_size bytes using ROM[block1_offset + address]
-
-// Subsequent blocks (BRICS N>1; UNSIGNAL has none)
-Read BH1, BH2, BH3, BH4
-next_offset = (ROM[BH2] << 4) | ROM[BH1]
-next_size   = (ROM[BH4] << 4) | ROM[BH3]
-Decode previous_next_size bytes using ROM[previous_next_offset + address]
-
-// Continue until the payload region is consumed
-Skip suffix_len bytes
-```
-
-The decoder does not look for an end-of-chain marker. The payload region is bounded up front by the known `suffix_len`; the decoder walks blocks only within that region and stops when it is consumed. The final block's BH is decoded but its "NEXT block" values are never used — they are indistinguishable from the surrounding noise, which is intended.
-
----
-
-### 7. CORE LOGIC (MINIMAL)
-
-The block/offset/padding machinery above wraps plain ZOSCII. The underlying encode/decode is address-size-agnostic and is the same operation in every configuration:
+The offset/padding machinery above wraps plain ZOSCII. The underlying encode/decode is address-size-agnostic and is the same operation in every configuration:
 
 ```javascript
 // Minimal ZOSCII (Internal)
@@ -144,19 +106,7 @@ For each message value, collect every ROM index holding that value and pick one 
 
 ---
 
-### 8. SUGGESTED IMPLEMENTATION: BLOCK SIZE WHEN ENCODING
-
-*Encoder-only guidance, not a wire-format requirement. The decoder reads each size from the headers and follows it; only the encoder applies this. Applies only when blocking is used (BRICS). UNSIGNAL is single-block, so there is one region and nothing to size per block.*
-
-**Recommendation:** choose each block's size as a random element count — a reasonable default is **between 128 and 512** — drawn **independently per block**. The range is not fixed by the scheme.
-
-Per-block offsets mean the same address decodes to a different value in different blocks; this is the primary strengthening and holds even for fixed-size blocks. Randomising the size per block replaces a single known structural template with a per-block combinatorial constraint: a candidate ROM must produce a length chain in which every block independently lands in the chosen range and the chain fits the payload. There is nothing to brute-force in the usual sense — every ROM decodes to plausible output — so the only cheap attack is *discarding* made-up ROMs whose decoded block-length chain does not fit the file; random per-block sizing forces each such decision to satisfy an independent length constraint at every block.
-
-**No CSPRNG is required.** The size randomness selects block sizes only; it carries no security. An attacker without the ROM cannot read any block size, offset, or content regardless of how predictably the sizes were chosen. The confidentiality is in ROM secrecy, exactly as everywhere else in ZOSCII — never in a random number generator.
-
----
-
-### 9. SUGGESTED IMPLEMENTATION: REGIME 1 — EFFECTIVE ROM SIZE AND SLIDING WINDOW
+### 7. SUGGESTED IMPLEMENTATION: REGIME 1 — EFFECTIVE ROM SIZE AND SLIDING WINDOW
 
 *Default offset regime (`-r1`). One reasonable way to derive an effective ROM size and sliding window from the actual ROM size, so the 8-bit pointer behaves sensibly across small and large ROMs. Suggested, not normative — encoder and decoder must agree. All percentage math uses integer division, truncated — never floating point with rounding.*
 
@@ -189,13 +139,13 @@ effective_size (y) = 256
 sliding_window (w) = 256
 ```
 
-The offset derived from the FH pointer, and the ZOSCII addressing, operate against the effective size and sliding window — not the raw ROM size. Encoder and decoder must apply the same scheme or files will not round-trip.
+The offset derived from the header pointer, and the ZOSCII addressing, operate against the effective size and sliding window — not the raw ROM size. Encoder and decoder must apply the same scheme or files will not round-trip.
 
 **Rule 1 is a bonus:** because the sliding window shifts where addressing effectively starts each session, a given address does not resolve to the same underlying ROM nibble from one encode to the next. Completely different messages can produce the exact same address stream on the same ROM — an observer seeing overlapping address sequences learns nothing about whether the underlying messages are related. This holds even on ROMs far below 256 positions. The cost is proportional: `effective_size` and `sliding_window` are drawn from the same pool (`y + w = x`), so a ROM cannot have both a full 256 positions of address space and the maximum window count at once.
 
 ---
 
-### 10. SUGGESTED IMPLEMENTATION: REGIME 2 — ADDRESS-SPACE WRAP-AROUND
+### 8. SUGGESTED IMPLEMENTATION: REGIME 2 — ADDRESS-SPACE WRAP-AROUND
 
 *Second offset regime (`-r2`), backward compatible with Regime 1: `hl mod window_size` is a no-op on any address a Regime 1 encoder produced. Suggested, not normative; encoder and decoder must agree.*
 
@@ -218,22 +168,4 @@ So a smaller window still gives full addressing — addresses past the window wr
 
 ---
 
-### 11. SUMMARY
-
-| Element | In file | Dereference | Result |
-|---------|---------|-------------|--------|
-| **FH1** | 1 byte addr | `ROM[FH1]` | low nibble of Block 1 offset |
-| **FH2** | 1 byte addr | `ROM[FH2]` | high nibble of Block 1 offset |
-| **FH3** | 1 byte addr | `ROM[FH3]` | low nibble of Block 1 size |
-| **FH4** | 1 byte addr | `ROM[FH4]` | high nibble of Block 1 size |
-| **FH5** | 1 byte addr | `ROM[FH5]` | prefix length |
-| **FH6** | 1 byte addr | `ROM[FH6]` | suffix length |
-| **BH1** | 1 byte addr | `ROM[BH1]` | low nibble of NEXT block offset |
-| **BH2** | 1 byte addr | `ROM[BH2]` | high nibble of NEXT block offset |
-| **BH3** | 1 byte addr | `ROM[BH3]` | low nibble of NEXT block size |
-| **BH4** | 1 byte addr | `ROM[BH4]` | high nibble of NEXT block size |
-| **Data** | 1 byte addr | `ROM[offset + address]` | actual byte |
-
----
-
-**UNSIGNAL Protocol: Randomized offsets. Variable padding. Identical inputs, never identical outputs.**
+**UNSIGNAL Protocol: Randomized offset. Variable padding. Identical inputs, never identical outputs.**
