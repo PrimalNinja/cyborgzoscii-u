@@ -1,0 +1,1 @@
+This folder contains the nuget classes for which the ZWR tools use compiled in.

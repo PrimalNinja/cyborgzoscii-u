@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>mp3id</AssemblyName>
+    <RootNamespace>Mp3Id</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Publish settings for a single standalone Windows .exe. Example:
+         dotnet publish -c Release -r win-x64 -p:SelfContained=true -p:PublishSingleFile=true -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+</Project>

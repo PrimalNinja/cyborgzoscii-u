@@ -1,4 +1,4 @@
-# CyborgZOSCII UNINTELLIGENCE Version v20260922
+# CyborgZOSCII UNINTELLIGENCE Version v20260924
 
 ZOSCII Zero Overhead Secure Code Information Interchange.
 
@@ -35,9 +35,19 @@ ZOSCII already provides information-theoretic security (mathematically unbreakab
 
 **ZOSCII: Where information theory meets practical engineering, and encryption becomes obsolete.**
 
+## ZOSCII Web Radio
+
+Start your own ZOSCII Web Radio stream with the tools within the zwr folder.
+
+ mp3ids to fix mp3 tags in bulk.
+ zwrpublish to publish a folder of mp3s into a nominated ZOSCII MQ queue (existing ZOSCII MQ Radio Player will work with ZOSCII encoded tracks)
+ zwrserve to serve the queue as an ICY protocol stream (SHOUTcast and Icecast) (not required for the native MQ Players)
+ 
+ https://github.com/PrimalNinja/cyborgzoscii for ZOSCII MQ and player which is released under MIT License.
+
 ## HTTP Noise Generator
 
-The puropse of the HTTP Noise Generator is to fetch URLs that are part of a ZOSCII MQ queue that is monitored and fetch them round robin style.  
+The purpose of the HTTP Noise Generator is to fetch URLs that are part of a ZOSCII MQ queue that is monitored and fetch them round robin style.  
 Your IP address is not hidden, the intent is to give you the ability to plausibly deny you consiously visited a website or URL.
 Nothing is stored, cached or logged.
 
