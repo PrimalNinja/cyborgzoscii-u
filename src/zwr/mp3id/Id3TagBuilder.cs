@@ -8,12 +8,19 @@ namespace Mp3Id
 {
     /// <summary>
     /// Builds a minimal ID3v2.3 tag: TIT2 (title), TPE1 (artist), TYER (year),
-    /// TCOP (copyright), and optionally COMM (comment) and APIC (front-cover album art).
-    /// Safe, fully specification-compliant ISO-8859-1 encoding structure for ID3v2.3 frameworks.
+    /// TCOP (copyright), and optionally COMM (comment), USLT (lyrics) and APIC
+    /// (front-cover album art).
+    /// Text frames (TIT2/TPE1/TYER/TCOP/COMM/USLT) are written UTF-8 (encoding byte 0x03)
+    /// so Chinese, Korean, and any other non-Latin-1 text round-trips correctly. APIC's own
+    /// encoding byte is the one exception: it's set to 0x00 (Latin-1) regardless, since its
+    /// description field is always empty here and 0x00 is the one value every ID3v2.3 reader
+    /// is guaranteed to handle for that field, including strict/older parsers that reject or
+    /// skip an APIC frame over an unexpected encoding byte.
     /// </summary>
     internal static class Id3TagBuilder
     {
-        private const byte EncodingIso8859 = 0x00; // 0x00 is native Latin-1/ASCII for ID3v2.3
+        private const byte EncodingUtf8 = 0x03;     // used for TIT2/TPE1/TYER/TCOP/COMM/USLT - full Unicode (CJK etc.)
+        private const byte EncodingIso8859 = 0x00;  // used only for APIC's encoding byte - description is always empty, and 0x00 is the one encoding value every ID3v2.3 reader is guaranteed to accept for that field
         private const byte PictureTypeFrontCover = 0x03;
 
         public static byte[] BuildMinimalId3Tag(string title, string artist, string year, string copyright, string comment, string lyrics, byte[] albumArtJpeg)
@@ -75,10 +82,10 @@ namespace Mp3Id
         // TIT2/TPE1/TYER/TCOP-style frame: encoding byte + text + null terminator.
         private static byte[] BuildTextFrame(string frameId, string text)
         {
-            byte[] textBytes = Encoding.GetEncoding("iso-8859-1").GetBytes(text ?? "");
+            byte[] textBytes = Encoding.UTF8.GetBytes(text ?? "");
             byte[] textContent = new byte[1 + textBytes.Length + 1];
 
-            textContent[0] = EncodingIso8859; 
+            textContent[0] = EncodingUtf8;
             Array.Copy(textBytes, 0, textContent, 1, textBytes.Length);
             textContent[textContent.Length - 1] = 0x00;
 
@@ -89,11 +96,11 @@ namespace Mp3Id
         private static byte[] BuildCommentFrame(string language, string text)
         {
             byte[] langBytes = Encoding.ASCII.GetBytes(PadLanguageCode(language));
-            byte[] textBytes = Encoding.GetEncoding("iso-8859-1").GetBytes(text ?? "");
+            byte[] textBytes = Encoding.UTF8.GetBytes(text ?? "");
 
             using (MemoryStream ms = new MemoryStream())
             {
-                ms.WriteByte(EncodingIso8859);
+                ms.WriteByte(EncodingUtf8);
                 ms.Write(langBytes, 0, 3);
                 ms.WriteByte(0x00); // empty short description string + its null terminator
                 ms.Write(textBytes, 0, textBytes.Length);
@@ -104,14 +111,15 @@ namespace Mp3Id
         }
 
         // USLT: encoding(1) + language(3, ISO-639-2) + content descriptor + \0 + lyrics text + \0
+        // Unsynchronised = plain lyrics, no per-line/per-word timing. That's what this writes.
         private static byte[] BuildLyricsFrame(string language, string text)
         {
             byte[] langBytes = Encoding.ASCII.GetBytes(PadLanguageCode(language));
-            byte[] textBytes = Encoding.GetEncoding("iso-8859-1").GetBytes(text ?? "");
+            byte[] textBytes = Encoding.UTF8.GetBytes(text ?? "");
 
             using (MemoryStream ms = new MemoryStream())
             {
-                ms.WriteByte(EncodingIso8859);
+                ms.WriteByte(EncodingUtf8);
                 ms.Write(langBytes, 0, 3);
                 ms.WriteByte(0x00); // empty content descriptor string + its null terminator
                 ms.Write(textBytes, 0, textBytes.Length);
