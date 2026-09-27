@@ -8,7 +8,7 @@
 // playing and who is connected.
 //
 // Usage:
-//   zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>]
+//   zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <url> [-c <seconds>]]
 //
 //   -i  ICY protocol: listen on <port>, pull from <queue> at <mqurl>
 //   -z  unZOSCII each message with <romfile>
@@ -20,6 +20,12 @@
 //   -p  seconds between polls when waiting for new messages (default 10)
 //   -e  local MP3 played from the top, looped, while waiting for new messages
 //       (default: silence)
+//   -a  post the current public IP address to <url> whenever it changes, so a
+//       website that redirects home can be kept pointing at the right address
+//       (default: disabled)
+//   -c  seconds between IP checks - only used with -a (default 300 = 5 minutes;
+//       the check is a real HTTP call to a public "what's my IP" service, not a
+//       free local lookup, so anything much below 60s risks getting rate-limited)
 //
 // Working files in <exepath>/t/<port>/  (one folder per port, so several instances can share the exe)
 //   <session#>_<yyyyMMddHHmmss>.ptr   line 1 = MQ pointer (last completed message)
@@ -37,6 +43,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -61,6 +68,11 @@ public static class ZWRServe
 	internal const int DECODE_ZOSCII = 1;
 	internal const int DECODE_UNSIGNAL = 2;
 
+	internal const string IP_LOOKUP_URL = "https://api.ipify.org";  // plain-text public IPv4 address, one line, no auth needed
+	internal const int IP_CHECK_DEFAULT_SECONDS = 300;              // -c default: 5 minutes between checks
+	internal const int IP_CHECK_WARN_SECONDS = 60;                  // -c below this prints a rate-limit warning at startup, but still runs
+	internal const int IP_HTTP_TIMEOUT_SECONDS = 5;
+
 	// -------------------------------------------------------------------------
 	// Globals
 	// -------------------------------------------------------------------------
@@ -78,6 +90,9 @@ public static class ZWRServe
 	internal static string g_strElevatorFile = "";
 	internal static List<MP3Frame> g_objElevator = null;
 	internal static string g_strElevatorTitle = "";
+
+	internal static string g_strIpAnnounceURL = "";     // -a: empty means the feature is off
+	internal static int g_intIpCheckSeconds = IP_CHECK_DEFAULT_SECONDS;  // -c
 
 	internal static volatile bool g_blnStopping = false;
 	internal static int g_intListenerCount = 0;
@@ -118,7 +133,7 @@ public static class ZWRServe
 
 	private static void printUsage()
 	{
-		Console.WriteLine("Usage: zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>]");
+		Console.WriteLine("Usage: zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <url> [-c <seconds>]]");
 		Console.WriteLine();
 		Console.WriteLine("  -i  ICY (Icecast/SHOUTcast) server on <port>, streaming <queue> from <mqurl>");
 		Console.WriteLine("  -z  unZOSCII messages with <romfile>");
@@ -127,6 +142,8 @@ public static class ZWRServe
 		Console.WriteLine("  -w  wait for new messages at the end of the queue - default is loop to the start");
 		Console.WriteLine("  -p  poll interval in seconds while waiting (default 10)");
 		Console.WriteLine("  -e  MP3 looped from the top while waiting (default silence)");
+		Console.WriteLine("  -a  post the current public IP to <url> whenever it changes");
+		Console.WriteLine("  -c  seconds between IP checks - only used with -a (default 300)");
 		Console.WriteLine();
 		Console.WriteLine("Example: zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom");
 		Console.WriteLine("Listen:  http://localhost:8000/        new session");
@@ -165,6 +182,16 @@ public static class ZWRServe
 			else if (strArg == "-e" && intI + 1 < arrArgs_a.Length)
 			{
 				g_strElevatorFile = arrArgs_a[intI + 1];
+				intI += 2;
+			}
+			else if (strArg == "-a" && intI + 1 < arrArgs_a.Length)
+			{
+				g_strIpAnnounceURL = arrArgs_a[intI + 1];
+				intI += 2;
+			}
+			else if (strArg == "-c" && intI + 1 < arrArgs_a.Length)
+			{
+				blnResult = int.TryParse(arrArgs_a[intI + 1], out g_intIpCheckSeconds) && g_intIpCheckSeconds > 0;
 				intI += 2;
 			}
 			else if (strArg == "-s")
@@ -313,6 +340,7 @@ public static class ZWRServe
 	{
 		TcpListener objListener = null;
 		Thread objStationThread = null;
+		Thread objIpThread = null;
 
 		try
 		{
@@ -362,6 +390,13 @@ public static class ZWRServe
 			Log("Mode:      " + (g_blnShared ? "shared pointer (session 0)" : "session per listener") + (g_blnLoop ? ", loop" : ", wait at end"));
 			Log("Waiting:   " + ((g_objElevator != null) ? "elevator " + g_strElevatorFile + " (" + g_objElevator[0].SampleRate + "Hz/" + g_objElevator[0].Channels + "ch, " + g_objElevator.Count + " frames)" : "silence"));
 			Log("Work dir:  " + g_strTempFolder);
+			Log("IP announce: " + (g_strIpAnnounceURL.Length > 0 ? g_strIpAnnounceURL + " (checked every " + g_intIpCheckSeconds + "s)" : "disabled"));
+
+			if (g_strIpAnnounceURL.Length > 0 && g_intIpCheckSeconds < IP_CHECK_WARN_SECONDS)
+			{
+				Log("Warning: -c " + g_intIpCheckSeconds + "s is a short interval for a public IP lookup service - it may start rate-limiting or blocking these requests.");
+			}
+
 			Log("Listening: http://0.0.0.0:" + g_intPort + "/  (Ctrl+C to stop)");
 
 			if (g_blnShared)
@@ -370,6 +405,13 @@ public static class ZWRServe
 				objStationThread = new Thread(g_objStation.Run);
 				objStationThread.IsBackground = true;
 				objStationThread.Start();
+			}
+
+			if (g_strIpAnnounceURL.Length > 0)
+			{
+				objIpThread = new Thread(IpAnnounceLoop);
+				objIpThread.IsBackground = true;
+				objIpThread.Start();
 			}
 
 			while (!g_blnStopping)
@@ -401,6 +443,131 @@ public static class ZWRServe
 			}
 
 			Log("Stopped.");
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Optional IP announce (-a / -c)
+	// -------------------------------------------------------------------------
+	//
+	// Periodically fetches this machine's public-facing IP from an external
+	// "what's my IP" service (IP_LOOKUP_URL) - there's no free local way to learn
+	// the WAN address a home router is currently using, so this is a real network
+	// call each time, not a free lookup. Only when the address actually changes
+	// does it POST the new value to -a <url>, so a website doing a home-IP
+	// redirect can be kept up to date without polling anything itself.
+
+	private static void IpAnnounceLoop()
+	{
+		string strLastAnnouncedIp = "";
+
+		using (HttpClient objHttp = new HttpClient())
+		{
+			objHttp.Timeout = TimeSpan.FromSeconds(IP_HTTP_TIMEOUT_SECONDS);
+
+			while (!g_blnStopping)
+			{
+				string strIp = fetchPublicIp(objHttp);
+
+				if (strIp != null && strIp != strLastAnnouncedIp)
+				{
+					Log("[ip] address " + (strLastAnnouncedIp.Length > 0 ? "changed " + strLastAnnouncedIp + " -> " + strIp : "is " + strIp) + ", announcing to " + g_strIpAnnounceURL);
+
+					if (announceIp(objHttp, strIp))
+					{
+						strLastAnnouncedIp = strIp;
+						Log("[ip] announce OK");
+					}
+					else
+					{
+						Log("[ip] announce failed, will retry at the next check");
+					}
+				}
+
+				ipSleepInterruptible(g_intIpCheckSeconds * 1000);
+			}
+		}
+	}
+
+	// Plain-text response expected, e.g. "203.0.113.7". Returns null on any failure - the
+	// loop just tries again next interval rather than treating a lookup failure as a change.
+	private static string fetchPublicIp(HttpClient objHttp_a)
+	{
+		string strResult = null;
+
+		try
+		{
+			string strBody = objHttp_a.GetStringAsync(IP_LOOKUP_URL).GetAwaiter().GetResult();
+
+			if (strBody != null)
+			{
+				strBody = strBody.Trim();
+
+				if (strBody.Length > 0 && strBody.Length <= 45)  // sanity: longest valid IPv6 text form
+				{
+					strResult = strBody;
+				}
+			}
+		}
+		catch (Exception objEx)
+		{
+			Log("[ip] error fetching public IP - " + objEx.Message);
+		}
+
+		return strResult;
+	}
+
+	// If g_strIpAnnounceURL contains the literal "{ip}", it's substituted in and a GET is sent -
+	// convenient for simple dynamic-DNS-style endpoints that expect the address in the URL/query
+	// string. Otherwise a real HTTP POST is sent with the address as form field "ip".
+	private static bool announceIp(HttpClient objHttp_a, string strIp_a)
+	{
+		bool blnResult = false;
+
+		try
+		{
+			HttpResponseMessage objResponse;
+
+			if (g_strIpAnnounceURL.Contains("{ip}"))
+			{
+				string strUrl = g_strIpAnnounceURL.Replace("{ip}", Uri.EscapeDataString(strIp_a));
+				objResponse = objHttp_a.GetAsync(strUrl).GetAwaiter().GetResult();
+			}
+			else
+			{
+				FormUrlEncodedContent objContent = new FormUrlEncodedContent(new[]
+				{
+					new KeyValuePair<string, string>("ip", strIp_a)
+				});
+
+				objResponse = objHttp_a.PostAsync(g_strIpAnnounceURL, objContent).GetAwaiter().GetResult();
+			}
+
+			blnResult = objResponse.IsSuccessStatusCode;
+
+			if (!blnResult)
+			{
+				Log("[ip] announce endpoint returned " + (int)objResponse.StatusCode + " " + objResponse.ReasonPhrase);
+			}
+		}
+		catch (Exception objEx)
+		{
+			Log("[ip] error announcing IP - " + objEx.Message);
+		}
+
+		return blnResult;
+	}
+
+	// Sleeps in short slices so Ctrl+C / shutdown doesn't have to wait out a full interval.
+	private static void ipSleepInterruptible(int intMs_a)
+	{
+		int intSlept = 0;
+
+		while (intSlept < intMs_a && !g_blnStopping)
+		{
+			int intChunk = Math.Min(250, intMs_a - intSlept);
+			Thread.Sleep(intChunk);
+			intSlept += intChunk;
 		}
 	}
 

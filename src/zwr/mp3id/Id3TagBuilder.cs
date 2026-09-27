@@ -7,8 +7,8 @@ using System.Text;
 namespace Mp3Id
 {
     /// <summary>
-    /// Builds a minimal ID3v2.3 tag: TIT2 (title), TPE1 (artist), TYER (year),
-    /// TCOP (copyright), and optionally COMM (comment), USLT (lyrics) and APIC
+    /// Builds a minimal ID3v2.3 tag: TIT2 (title), TPE1 (artist, omitted if none is supplied),
+    /// TYER (year), TCOP (copyright), and optionally COMM (comment), USLT (lyrics) and APIC
     /// (front-cover album art).
     /// Text frames (TIT2/TPE1/TYER/TCOP/COMM/USLT) are written UTF-8 (encoding byte 0x03)
     /// so Chinese, Korean, and any other non-Latin-1 text round-trips correctly. APIC's own
@@ -28,10 +28,15 @@ namespace Mp3Id
             List<byte[]> frames = new List<byte[]>
             {
                 BuildTextFrame("TIT2", title),
-                BuildTextFrame("TPE1", artist),
-                BuildTextFrame("TYER", year),   // Official ID3v2.3 year tracking frame
-                BuildTextFrame("TCOP", copyright),
             };
+
+            if (!string.IsNullOrEmpty(artist))
+            {
+                frames.Add(BuildTextFrame("TPE1", artist));
+            }
+
+            frames.Add(BuildTextFrame("TYER", year));   // Official ID3v2.3 year tracking frame
+            frames.Add(BuildTextFrame("TCOP", copyright));
 
             if (!string.IsNullOrEmpty(comment))
             {

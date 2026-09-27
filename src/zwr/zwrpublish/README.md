@@ -6,7 +6,7 @@ player and zwrserve expect.
 ## Usage
 
 ```
-zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-d]
+zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-s<order>] [-d]
 ```
 
 | Flag | Meaning |
@@ -15,23 +15,27 @@ zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-
 | `-z <romfile>` | ZOSCII encode each file with `<romfile>` (any file: a jpg, png, anything) |
 | `-u <romfile>` | UNSIGNAL encode each file with `<romfile>` |
 | `-r <days>` | retention in days (default 7) |
+| `-s<order>` | order to publish the MP3s in: `-sf` = by filename (default), `-sd` = by each file's filesystem last-write datetime |
 | `-d` | dry run: list what would be published, publish nothing |
 
 With neither `-z` nor `-u`, the files are published as they are.
 
 ```
-zwrpublish c:\music https://cyborgunicorn.com.au/radio/indexmq.php "Cyborg Unicorn" -z logo.png -r 3650
+zwrpublish c:\music https://cyborgunicorn.com.au/radio/indexmq.php "Cyborg Unicorn" -z logo.png -r 3650 -sd
 ```
 
 ## What it publishes
 
-For each `.mp3` in the folder (not subfolders), in name order, ignoring case:
+For each `.mp3` in the folder (not subfolders), in the order set by `-s<order>` (default
+`-sf`, filename order; `-sd` sorts by each file's filesystem last-write datetime instead):
 
 1. `<name>.jpg` (or `.jpeg`), the cover image, if present
 2. `<name>.txt`, the lyrics or text, if present
 3. `<name>.mp3`
 
-Extensions are matched ignoring case. Files with no matching MP3 are ignored.
+Extensions are matched ignoring case. Files with no matching MP3 are ignored. Whichever order
+the MP3s are published in, the jpg and txt for a given track are always published immediately
+before that track's mp3.
 
 ## Order and retries
 

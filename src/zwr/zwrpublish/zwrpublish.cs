@@ -3,18 +3,22 @@
 // UNINTELLIGENCE License.
 // ZOSCII core logic remains under MIT License.
 //
-// Publishes a folder of MP3s to a ZOSCII MQ queue. For each MP3 (in name order):
+// Publishes a folder of MP3s to a ZOSCII MQ queue. For each MP3 (in filename or file-datetime
+// order, see -s below):
 //   <name>.jpg or <name>.jpeg   cover image, if present
 //   <name>.lyrics.txt           lyrics / text, if present
 //   <name>.mp3                  the track
 //
 // Usage:
-//   zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-d]
+//   zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-s<order>] [-d]
 //
 //   -z  ZOSCII encode each file with <romfile>
 //   -u  UNSIGNAL encode each file with <romfile>
 //       (neither: files are published as they are)
 //   -r  retention in days (default 7)
+//   -s<order>  order to publish the MP3s in: -sf = by filename (default), -sd = by each
+//              file's filesystem last-write datetime. Either way, for each MP3 the matching
+//              jpg/jpeg and .lyrics.txt (if present) are still published immediately before it.
 //   -d  dry run: list what would be published, publish nothing
 //
 // The MQ names messages by the second they arrive, so messages published within the same
@@ -46,6 +50,7 @@ public static class ZWRPublish
 	private static string g_strROMFile = "";
 	private static int g_intEncodeMode = ENCODE_NONE;
 	private static int g_intRetentionDays = 7;
+	private static string g_strSortOrder = "sf";  // -sf (filename, default) or -sd (file datetime)
 	private static bool g_blnDryRun = false;
 	private static ZOSCIIRom g_objRom = null;
 	private static MQClient g_objMQ = null;
@@ -76,15 +81,18 @@ public static class ZWRPublish
 
 	private static void printUsage()
 	{
-		Console.WriteLine("Usage: zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-d]");
+		Console.WriteLine("Usage: zwrpublish <folder> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-r <days>] [-s<order>] [-d]");
 		Console.WriteLine();
-		Console.WriteLine("  For each MP3 in <folder>, in name order, publishes <name>.jpg (or .jpeg),");
+		Console.WriteLine("  For each MP3 in <folder>, in the chosen order, publishes <name>.jpg (or .jpeg),");
 		Console.WriteLine("  then <name>.lyrics.txt, then <name>.mp3. The jpg and txt are optional.");
 		Console.WriteLine();
 		Console.WriteLine("  -z  ZOSCII encode with <romfile>");
 		Console.WriteLine("  -u  UNSIGNAL encode with <romfile>");
 		Console.WriteLine("      (neither: publish the files as they are)");
 		Console.WriteLine("  -r  retention in days (default 7)");
+		Console.WriteLine("  -s<order>  order to publish the MP3s in:");
+		Console.WriteLine("             -sf = by filename (default)");
+		Console.WriteLine("             -sd = by each file's filesystem last-write datetime");
 		Console.WriteLine("  -d  dry run - list what would be published, publish nothing");
 		Console.WriteLine();
 		Console.WriteLine("Example: zwrpublish c:\\music https://example.com/radio/indexmq.php \"Cyborg Unicorn\" -z logo.png");
@@ -115,6 +123,21 @@ public static class ZWRPublish
 			{
 				g_blnDryRun = true;
 				intI++;
+			}
+			else if (strArg.Length > 2 && strArg.StartsWith("-s"))
+			{
+				string strOrder = strArg.Substring(2);
+
+				if (strOrder == "f" || strOrder == "d")
+				{
+					g_strSortOrder = "s" + strOrder;
+					intI++;
+				}
+				else
+				{
+					Console.WriteLine("Unknown sort order: " + arrArgs_a[intI] + " - use -sf (filename) or -sd (file datetime)");
+					blnResult = false;
+				}
 			}
 			else if (strArg.StartsWith("-"))
 			{
@@ -195,13 +218,31 @@ public static class ZWRPublish
 				}
 			}
 
-			objMP3s.Sort(StringComparer.OrdinalIgnoreCase);
+			if (g_strSortOrder == "sd")
+			{
+				objMP3s.Sort(delegate (string strA, string strB)
+				{
+					int intCompare = File.GetLastWriteTime(strA).CompareTo(File.GetLastWriteTime(strB));
+
+					if (intCompare == 0)
+					{
+						intCompare = string.Compare(strA, strB, StringComparison.OrdinalIgnoreCase);
+					}
+
+					return intCompare;
+				});
+			}
+			else
+			{
+				objMP3s.Sort(StringComparer.OrdinalIgnoreCase);
+			}
 		}
 
 		Console.WriteLine("Folder:    " + g_strFolder + "  (" + objMP3s.Count + " MP3s)");
 		Console.WriteLine("Queue:     " + g_strQueue + " @ " + g_strMQURL);
 		Console.WriteLine("Encode:    " + (g_intEncodeMode == ENCODE_ZOSCII ? "ZOSCII (" + g_strROMFile + ")" : (g_intEncodeMode == ENCODE_UNSIGNAL ? "UNSIGNAL (" + g_strROMFile + ")" : "none")));
 		Console.WriteLine("Retention: " + g_intRetentionDays + " days");
+		Console.WriteLine("Order:     " + (g_strSortOrder == "sd" ? "-sd (file datetime)" : "-sf (filename, default)"));
 		if (g_blnDryRun)
 		{
 			Console.WriteLine("DRY RUN - nothing will be published");

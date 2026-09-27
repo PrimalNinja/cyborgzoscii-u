@@ -9,16 +9,25 @@ namespace Mp3Id
     /// <summary>
     /// Ports mp3id.php's cleanAndRewriteTags()/buildMinimalID3Tag()/filenameToTitle(),
     /// adds the new rules: fail hard on files that don't pass the basic MP3 check
-    /// (same style of check as zwrserve.cs's MP3Reader), and picks up a matching
-    /// .jpg (album art) and .txt (comment) next to each mp3.
+    /// (same style of check as zwrserve.cs's MP3Reader), picks up a matching .jpg
+    /// (album art) and .txt (comment) next to each mp3, and - when the caller passes
+    /// no artist (-a wasn't given) - reads whatever artist is already tagged on the
+    /// file first and carries it over unchanged, rather than blanking it out.
     /// </summary>
     internal static class Mp3TagWriter
     {
         /// <summary>
         /// Processes one mp3 file in place. Throws on any failure (caller logs the message).
         /// Returns a human-readable summary of what was written, for the success log.
+        /// requestedArtist: the -a "<artist>" value, or null/empty if -a wasn't given - in
+        /// which case any artist already tagged on the file is read first and carried over
+        /// unchanged; if the file has no existing artist tag either, no TPE1 frame is written.
+        /// forcedAlbumArt/forcedAlbumArtName: when supplied (the -l <logofile> flag), this
+        /// exact image is used as the album art for every file and <filename>.jpg next to
+        /// the mp3 is never even looked at. When null, the per-file <filename>.jpg (if any)
+        /// is used instead, same as before.
         /// </summary>
-        public static string ProcessFile(string filePath, string artistName, string copyright)
+        public static string ProcessFile(string filePath, string requestedArtist, string copyright, byte[] forcedAlbumArt, string forcedAlbumArtName)
         {
             if (!File.Exists(filePath))
             {
@@ -72,6 +81,27 @@ namespace Mp3Id
                 throw new Exception("Basic MP3 check failed - no valid MPEG Layer III frame sync found");
             }
 
+            // Resolve the artist to write: -a wins if given; otherwise look for the artist
+            // already tagged on the file (in the ID3v2 header(s) we're about to strip) and
+            // carry it over unchanged; if neither is available, no artist frame is written.
+            string finalArtist = requestedArtist;
+            string artistNote = null;
+
+            if (string.IsNullOrEmpty(finalArtist))
+            {
+                string existingArtist = Id3TagReader.TryReadArtist(content, audioStart);
+
+                if (existingArtist != null)
+                {
+                    finalArtist = existingArtist;
+                    artistNote = "preserved from existing tag";
+                }
+                else
+                {
+                    artistNote = "none - no -a given and no existing artist tag found";
+                }
+            }
+
             byte[] audioData = new byte[audioLength];
             Array.Copy(content, audioStart, audioData, 0, audioLength);
 
@@ -83,20 +113,34 @@ namespace Mp3Id
             string txtPath = baseNameNoExt + ".txt";
             string lyricsPath = baseNameNoExt + ".lyrics.txt";
 
-            byte[] albumArt = null;
+            byte[] albumArt;
+            string albumArtLabel;
             string comment = null;
             string lyrics = null;
 
-            if (File.Exists(jpgPath))
+            if (forcedAlbumArt != null)
+            {
+                // -l <logofile> was given: use it for every file, don't even check for a
+                // matching <filename>.jpg.
+                albumArt = forcedAlbumArt;
+                albumArtLabel = forcedAlbumArtName + " (logo, used for every file)";
+            }
+            else if (File.Exists(jpgPath))
             {
                 try
                 {
                     albumArt = File.ReadAllBytes(jpgPath);
+                    albumArtLabel = Path.GetFileName(jpgPath);
                 }
                 catch (Exception ex)
                 {
                     throw new Exception("Found " + Path.GetFileName(jpgPath) + " but could not read it - " + ex.Message);
                 }
+            }
+            else
+            {
+                albumArt = null;
+                albumArtLabel = null;
             }
 
             if (File.Exists(txtPath))
@@ -123,7 +167,7 @@ namespace Mp3Id
                 }
             }
 
-            byte[] newTag = Id3TagBuilder.BuildMinimalId3Tag(title, artistName, year, copyright, comment, lyrics, albumArt);
+            byte[] newTag = Id3TagBuilder.BuildMinimalId3Tag(title, finalArtist, year, copyright, comment, lyrics, albumArt);
 
             byte[] newContent = new byte[newTag.Length + audioData.Length];
             Array.Copy(newTag, 0, newContent, 0, newTag.Length);
@@ -150,11 +194,13 @@ namespace Mp3Id
 
             List<string> parts = new List<string>();
             parts.Add("Title='" + title + "'");
-            parts.Add("Artist='" + artistName + "'");
+            parts.Add(finalArtist != null
+                ? "Artist='" + finalArtist + "'" + (artistNote != null ? " (" + artistNote + ")" : "")
+                : "Artist=" + artistNote);
             parts.Add("Year='" + year + "'");
             parts.Add("Copyright='" + copyright + "'");
             parts.Add(albumArt != null
-                ? "AlbumArt='" + Path.GetFileName(jpgPath) + "' (" + albumArt.Length + " bytes)"
+                ? "AlbumArt='" + albumArtLabel + "' (" + albumArt.Length + " bytes)"
                 : "AlbumArt=none");
             parts.Add(comment != null
                 ? "Comment='" + Path.GetFileName(txtPath) + "' (" + comment.Length + " chars)"

@@ -6,7 +6,7 @@ listeners. Works with VLC, Winamp, foobar2000 and a browser `<audio>` element.
 ## Usage
 
 ```
-zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>]
+zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <url> [-c <seconds>]]
 ```
 
 | Flag | Meaning |
@@ -18,9 +18,12 @@ zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <
 | `-w` | wait for new messages at the end of the queue (default: loop to the start) |
 | `-p <seconds>` | poll interval while waiting for new messages (default 10) |
 | `-e <mp3file>` | local MP3 played from the top, looped, while waiting (default: silence) |
+| `-a <url>` | post the current public IP to `<url>` whenever it changes (default: disabled) |
+| `-c <seconds>` | seconds between IP checks - only used with `-a` (default 300) |
 
 ```
 zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom
+zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom -a https://example.com/update-ip -c 120
 ```
 
 ## Listener URLs
@@ -72,6 +75,16 @@ listener disconnects, so the timestamp is the last-used time. A cleanup tool del
   changes, and doesn't recover. zwrserve logs a warning when it happens. Silence always matches
   the last track, so it's safe.
 - Ctrl+C, or closing the console window, saves every session's pointer and offset.
+- Optional (`-a <url>`): every `-c` seconds (default 300 = 5 minutes), zwrserve fetches its
+  current public IP from an external "what's my IP" service and, only if it's changed since
+  the last successful announce, sends it to `<url>` - either a `POST` with form field `ip`,
+  or a `GET` with `{ip}` substituted in the URL if it contains that literal placeholder
+  (e.g. `-a "https://example.com/update?myip={ip}"`), useful for simple dynamic-DNS-style
+  webhooks. This is a real network call each time - there's no free local way to learn a
+  home router's WAN address - so `-c` below ~60 seconds risks the lookup service
+  rate-limiting or blocking the requests; zwrserve logs a warning at startup if it's set
+  that low, but still runs. Lookup or announce failures are logged and retried at the next
+  interval; they never affect streaming.
 
 ## Build
 

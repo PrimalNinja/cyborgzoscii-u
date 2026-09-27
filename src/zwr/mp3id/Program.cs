@@ -11,7 +11,7 @@ namespace Mp3Id
     /// Ported from the original web (mp3id.php) tool.
     ///
     /// Usage:
-    ///   mp3id.exe <folderpath> "<copyright text>"
+    ///   mp3id.exe <folderpath> "<copyright text>" [-a "<artist>"] [-l <logofile>] [-s<order>]
     ///
     /// Behaviour:
     ///   - Processes every *.mp3 file directly inside <folderpath> (not subfolders),
@@ -19,12 +19,22 @@ namespace Mp3Id
     ///   - For each file: strips ALL existing ID3 tags and writes a fresh minimal
     ///     ID3v2.3 tag containing:
     ///       TIT2 = title, the filename verbatim (minus .mp3)
-    ///       TPE1 = artist, from ArtistName below
+    ///       TPE1 = artist, from -a "<artist>" if given; otherwise the existing TPE1 value
+    ///              already in the file (if any) is read first and carried over unchanged,
+    ///              so the artist is left as it is; if there's no -a and no existing artist
+    ///              tag, no TPE1 frame is written at all
     ///       TYER / TDRC = year, taken from the file's last-modified date
     ///       TCOP = copyright, from the second command-line argument
     ///       COMM = contents of "<filename>.txt" next to the mp3, if present
     ///       USLT = contents of "<filename>.lyrics.txt" next to the mp3, if present (plain lyrics, no timing)
-    ///       APIC = contents of "<filename>.jpg" next to the mp3, if present (front cover)
+    ///       APIC = station logo, if -l <logofile> was given (same image for every file,
+    ///              <filename>.jpg is never even checked in that case); otherwise the
+    ///              contents of "<filename>.jpg" next to the mp3, if present (front cover)
+    ///   - Files are processed in the order set by -s<order> (default -sf):
+    ///       -sf = sort by filename (default)
+    ///       -sd = sort by each file's filesystem last-write datetime
+    ///     Sorting only changes the order files are processed/logged in - the per-file
+    ///     .jpg/.txt/.lyrics.txt matching rules are unchanged either way.
     ///   - The file's original last-write time is restored after saving, exactly
     ///     like the PHP tool (touch()).
     ///   - Writes <folderpath>/logs/yyyyMMdd.log (successes) and
@@ -32,27 +42,108 @@ namespace Mp3Id
     /// </summary>
     internal static class Program
     {
-        // ==================== CONFIGURATION ====================
-        // Artist is still fixed here; copyright is now supplied on the command line.
-        private const string ArtistName = "Cyborg Unicorn / Primal Ninja";
-
         private static string _logPath;
         private static string _errorLogPath;
         private static readonly object LogLock = new object();
 
         private static int Main(string[] args)
         {
+            string artistName = null;
+            string sortOrder = "sf"; // default: sort by filename
+
             if (args.Length < 2 || string.IsNullOrWhiteSpace(args[0]) || string.IsNullOrWhiteSpace(args[1]))
             {
-                Console.WriteLine("MP3 Tag Cleaner & Updater");
-                Console.WriteLine("Usage: mp3id.exe <folderpath> \"<copyright text>\"");
-                Console.WriteLine();
-                Console.WriteLine("Example: mp3id.exe C:\\Radio\\Uploads \"Copyright (c) 2026 Cyborg Unicorn. All rights reserved.\"");
+                PrintUsage();
                 return 1;
             }
 
             string copyright = args[1];
             string folder;
+            string logoPath = null;
+
+            // Anything after the two required positional args: -a <artist> (optional), -l <logofile>, -s<order>.
+            for (int i = 2; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "-a", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length || string.IsNullOrWhiteSpace(args[i + 1]))
+                    {
+                        Console.WriteLine("Error: -a requires an artist name, e.g. -a \"DJ Someone\"");
+                        return 1;
+                    }
+
+                    artistName = args[i + 1];
+                    i++;
+                }
+                else if (string.Equals(args[i], "-l", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length || string.IsNullOrWhiteSpace(args[i + 1]))
+                    {
+                        Console.WriteLine("Error: -l requires a filename, e.g. -l C:\\Radio\\logo.jpg");
+                        return 1;
+                    }
+
+                    logoPath = args[i + 1];
+                    i++;
+                }
+                else if (args[i].Length > 2 && args[i].StartsWith("-s", StringComparison.OrdinalIgnoreCase))
+                {
+                    string order = args[i].Substring(2).ToLowerInvariant();
+
+                    if (order != "f" && order != "d")
+                    {
+                        Console.WriteLine("Error: unrecognised sort order '" + args[i] + "' - use -sf (filename) or -sd (file datetime)");
+                        return 1;
+                    }
+
+                    sortOrder = "s" + order;
+                }
+                else
+                {
+                    Console.WriteLine("Error: unrecognised argument: " + args[i]);
+                    return 1;
+                }
+            }
+
+            byte[] logoBytes = null;
+            string logoName = null;
+
+            if (logoPath != null)
+            {
+                try
+                {
+                    logoPath = Path.GetFullPath(logoPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error: invalid -l path - " + ex.Message);
+                    return 1;
+                }
+
+                if (!File.Exists(logoPath))
+                {
+                    Console.WriteLine("Error: -l file does not exist: " + logoPath);
+                    return 1;
+                }
+
+                try
+                {
+                    logoBytes = File.ReadAllBytes(logoPath);
+                    logoName = Path.GetFileName(logoPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error: cannot read -l file " + logoPath + " - " + ex.Message);
+                    return 1;
+                }
+
+                // Not a strict validation, just a sanity check: JPEG files start with FF D8.
+                if (logoBytes.Length < 2 || logoBytes[0] != 0xFF || logoBytes[1] != 0xD8)
+                {
+                    Console.WriteLine("Error: -l file does not look like a JPEG (no FF D8 signature): " + logoPath);
+                    return 1;
+                }
+            }
 
             try
             {
@@ -88,23 +179,43 @@ namespace Mp3Id
 
             Console.WriteLine("MP3 Tag Cleaner & Updater");
             Console.WriteLine("Folder:    " + folder);
-            Console.WriteLine("Artist:    " + ArtistName);
+            Console.WriteLine("Artist:    " + (artistName ?? "(not given - existing artist tag, if any, will be preserved unchanged)"));
             Console.WriteLine("Copyright: " + copyright);
             Console.WriteLine("Year:      auto-set from each file's modification date");
+            Console.WriteLine("Logo:      " + (logoPath != null ? logoPath + " (used for every file, " + logoBytes.Length + " bytes)" : "none - per-file <filename>.jpg is used if present"));
+            Console.WriteLine("Order:     " + (sortOrder == "sd" ? "-sd (file datetime)" : "-sf (filename, default)"));
             Console.WriteLine("Log:       " + _logPath);
             Console.WriteLine("Errors:    " + _errorLogPath);
             Console.WriteLine();
 
-            LogSuccess("==== Run started. Folder: " + folder + " | Copyright: " + copyright + " ====");
+            LogSuccess("==== Run started. Folder: " + folder + " | Artist: " + (artistName ?? "(not given - existing tag preserved if present)") + " | Copyright: " + copyright + (logoPath != null ? " | Logo: " + logoPath : "") + " | Order: " + sortOrder + " ====");
 
             string[] mp3Files;
 
             try
             {
                 // Top-level only, same scope as the PHP tool's glob("*.mp3") in its working directory.
-                mp3Files = Directory.GetFiles(folder, "*.mp3", SearchOption.TopDirectoryOnly)
-                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                                     .ToArray();
+                // Read every filename (and, for -sd, its filesystem last-write datetime) up front,
+                // then sort the whole batch before processing starts - the sort order only changes
+                // the order files are handled/logged in; the per-file .jpg/.txt/.lyrics.txt rules
+                // in Mp3TagWriter are unaffected either way.
+                string[] rawFiles = Directory.GetFiles(folder, "*.mp3", SearchOption.TopDirectoryOnly);
+
+                if (sortOrder == "sd")
+                {
+                    mp3Files = rawFiles
+                        .Select(f => new { Path = f, WriteTime = File.GetLastWriteTime(f) })
+                        .OrderBy(f => f.WriteTime)
+                        .ThenBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+                        .Select(f => f.Path)
+                        .ToArray();
+                }
+                else
+                {
+                    mp3Files = rawFiles
+                        .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
             }
             catch (Exception ex)
             {
@@ -129,7 +240,7 @@ namespace Mp3Id
 
                 try
                 {
-                    string detail = Mp3TagWriter.ProcessFile(filePath, ArtistName, copyright);
+                    string detail = Mp3TagWriter.ProcessFile(filePath, artistName, copyright, logoBytes, logoName);
                     successCount++;
                     LogSuccess(fileName + " - " + detail);
                     Console.WriteLine("[OK]   " + fileName);
@@ -147,6 +258,27 @@ namespace Mp3Id
             LogSuccess("==== Run complete: " + successCount + " updated, " + failCount + " failed ====");
 
             return failCount > 0 ? 2 : 0;
+        }
+
+        // -------------------------------------------------------------------
+        // Usage
+        // -------------------------------------------------------------------
+
+        private static void PrintUsage()
+        {
+            Console.WriteLine("MP3 Tag Cleaner & Updater");
+            Console.WriteLine("Usage: mp3id.exe <folderpath> \"<copyright text>\" [-a \"<artist>\"] [-l <logofile>] [-s<order>]");
+            Console.WriteLine();
+            Console.WriteLine("Example: mp3id.exe C:\\Radio\\Uploads \"Copyright (c) 2026 Cyborg Unicorn. All rights reserved.\" -a \"Cyborg Unicorn\"");
+            Console.WriteLine("Example: mp3id.exe C:\\Radio\\Uploads \"Copyright (c) 2026 Cyborg Unicorn.\" -l C:\\Radio\\logo.jpg -sd");
+            Console.WriteLine();
+            Console.WriteLine("  -a <artist>    Artist name to write to TPE1. Optional: if omitted, any artist");
+            Console.WriteLine("                 already tagged on the file is read first and left unchanged;");
+            Console.WriteLine("                 if the file has no existing artist tag either, none is written.");
+            Console.WriteLine("  -l <logofile>  Use this .jpg as the album art for every mp3 in the folder,");
+            Console.WriteLine("                 instead of looking for a matching <filename>.jpg per file.");
+            Console.WriteLine("  -s<order>      Order files are processed in. -sf = by filename (default),");
+            Console.WriteLine("                 -sd = by each file's filesystem last-modified datetime.");
         }
 
         // -------------------------------------------------------------------
