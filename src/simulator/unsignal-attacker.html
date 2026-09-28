@@ -448,7 +448,11 @@ function run(){
         return null;
       });
       const learnedInside=known.size;
-      log('propagation: '+learnedInside+' ROM cell(s) learned from crib; '+outsideHit+'/'+(A.length-m)+' position(s) outside the crib recovered = '+(A.length-m?(100*outsideHit/(A.length-m)).toFixed(2):0)+'%');
+      const outsideN=A.length-m, expOut=outsideN*learnedInside/65536, pOut=pTail(outsideHit,expOut);
+      log('propagation: '+learnedInside+' ROM cell(s) learned from crib; '+outsideHit+'/'+outsideN+' position(s) outside the crib share an address with it (chance ≈ '+expOut.toFixed(1)+').');
+      log(outsideHit===0 ? '  nothing outside the crib reuses its addresses.'
+        : pOut<0.001 ? '  far above chance: these are likely real message bytes recovered by address reuse.'
+        : '  at chance level: likely random padding or noise that happens to match a learned address, NOT recovered message bytes.');
       log('  '+rec.map(c=>c===null?'·':show(c)).join(''));
     }
     log(truthLine());
@@ -501,7 +505,8 @@ function run(){
     const rec=A.map(a=>known.has(a)?known.get(a):null);
     const got=rec.filter(c=>c!==null).length;
     log('propagation via address reuse across the '+A.length+' message addresses:');
-    log('recovered '+got+' / '+A.length+' = '+(100*got/A.length).toFixed(1)+'%');
+    const outside=got-w.length, expOut=(A.length-w.length)*known.size/65536;
+    log('recovered '+got+' / '+A.length+' = '+(100*got/A.length).toFixed(1)+'%  ('+w.length+' from the crib itself, '+outside+' elsewhere in the message; chance ≈ '+expOut.toFixed(1)+')');
     log('  '+rec.map(c=>c===null?'·':show(c)).join(''));
     if($('hasROM').checked){ const t=romDecode(A); let ok=0,chk=0;
       for(let i=0;i<rec.length;i++) if(rec[i]!==null){ chk++; if(t[i]===rec[i]) ok++; }
