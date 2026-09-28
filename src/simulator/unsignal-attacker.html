@@ -59,7 +59,7 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
   <h2>1 · ROM &amp; ENCODE (build a target ciphertext)</h2>
   <div class="mode-row">
     <label><input type="radio" name="mode" value="zoscii"> ZOSCII (64KB)</label>
-    <label><input type="radio" name="mode" value="unsignal" checked> UNSIGNAL (128KB + sliding window)</label>
+    <label><input type="radio" name="mode" value="unsignal" checked> UNSIGNAL (any ROM size, Regime 1 sliding window)</label>
     <label><input type="checkbox" id="brainless"> BRAINLESS (XOR whole file)</label>
   </div>
   <label>MESSAGE TO ENCODE</label>
@@ -129,13 +129,24 @@ It runs inside this page, so it could read the encoder panel too. An honest atta
 
 <script>
 (function(){
-const ROM_SIZE=131072, WINDOW=65536, GW=512, GH=256, PX=2, OFF_LIMIT_PCT=2;
+const ROM_SIZE=131072, WINDOW=65536, GW=512, GH=256, PX=2;
+// UNSIGNAL spec v1.2 section 7 - Regime 1: effective ROM size (y) and sliding window (w). Integer math only.
+function regime1(x){
+  const xp=Math.floor(x*2/100), t1=65536+Math.floor(65536*2/100);   // t1 = 66846
+  if(x<t1)     return {y:x-xp,  w:xp,        rule:1};
+  if(x<131072) return {y:65536, w:x-65536,   rule:2};   // spec text says 131072-x-xp; that overruns/goes negative, see notes
+  return              {y:65536, w:65536,     rule:3};
+}
+// ROM start pointer -> window offset: one of w window positions, so offset + y <= x always
+function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer % r.w : 0; }
+
 let rom=new Uint8Array(ROM_SIZE), lookup=new Array(256), actualSize=ROM_SIZE;
 let mode='unsignal', canvas, ctx;
 // target state (encoder-private; attacks must NOT read these except where labelled demo ground truth)
 let ciphertext=[];        // message addresses: rel (unsignal) or abs (zoscii)
 let truth=[];             // plaintext bytes (ground truth)
 let winOffset=0;          // window offset (unsignal)
+let effSize=65536;        // Regime 1 effective size (y) of the current encode
 let fileBytes=[];         // assembled file (pre-brainless)
 let trueFrame=null;       // {msgStartByte, msgLenAddrs, prefixLen, suffixLen, brainless} — demo ground truth
 let attackFileText='', customSrc='', customName='';
@@ -165,7 +176,7 @@ function render(){
   ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
   for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){ const i=y*GW+x; if(i<actualSize){ ctx.fillStyle='rgb(0,'+rom[i]+',0)'; ctx.fillRect(x*PX,y*PX,PX,PX);} }
   if(mode==='zoscii'){ box(0,Math.ceil(Math.min(WINDOW,actualSize)/GW),'#00ff00'); }
-  else { const sr=Math.floor(winOffset/GW), er=Math.ceil(Math.min(winOffset+WINDOW,actualSize)/GW); box(sr,er,'#ff6600'); }
+  else { const sr=Math.floor(winOffset/GW), er=Math.ceil(Math.min(winOffset+effSize,actualSize)/GW); box(sr,er,'#ff6600'); }
 }
 function box(sr,er,col){ if(er-sr<=0) return; ctx.strokeStyle=col; ctx.lineWidth=3; ctx.setLineDash([6,4]);
   ctx.strokeRect(1.5, sr*PX+1.5, GW*PX-3, (er-sr)*PX-3); ctx.setLineDash([]); }
@@ -175,7 +186,7 @@ function stats(){
   $('sUniq').textContent=p.filter(Boolean).length+' / 256';
 }
 function dropROM(e){ e.preventDefault(); canvas.style.borderColor='#444'; const f=e.dataTransfer.files[0]; if(!f) return;
-  const r=new FileReader(); r.onload=ev=>{ const b=new Uint8Array(ev.target.result); actualSize=b.length;
+  const r=new FileReader(); r.onload=ev=>{ const b=new Uint8Array(ev.target.result); actualSize=Math.min(b.length,ROM_SIZE);
     for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; rebuild(); render(); stats(); elog('[rom] loaded '+f.name+' ('+b.length+' B)'); };
   r.readAsArrayBuffer(f); }
 
@@ -186,23 +197,21 @@ function genHeader(){
     return c.length? c[Math.random()*c.length|0] : 0; };
   const h1=pick(0,255),h2=pick(0,255),h3=pick(10,255),h4=pick(10,255);
   const oLo=rom[h1],oHi=rom[h2],pl=rom[h3],sl=rom[h4];
-  let raw=(oHi<<8)|oLo, off=0;
-  if(actualSize>=ROM_SIZE) off=raw;
-  else { const mx=Math.floor(actualSize*OFF_LIMIT_PCT/100); if(mx>0) off=raw%(mx+1); }
+  const raw=(oHi<<8)|oLo, reg=regime1(actualSize), off=windowOffsetFor(raw,actualSize);
   const pre=[],suf=[]; for(let i=0;i<pl;i++) pre.push(Math.random()*256|0); for(let i=0;i<sl;i++) suf.push(Math.random()*256|0);
-  return {h1,h2,h3,h4,oLo,oHi,pl,sl,off,pre,suf};
+  return {h1,h2,h3,h4,oLo,oHi,pl,sl,off,pre,suf,y:reg.y,w:reg.w,rule:reg.rule};
 }
 
 // ---------- ENCODE ----------
 function encode(){
   const msg=$('inputMessage').value; truth=[...new TextEncoder().encode(msg)]; ciphertext=[];
   let header=null;
-  if(mode==='zoscii'){ winOffset=0;
+  if(mode==='zoscii'){ winOffset=0; effSize=Math.min(actualSize,WINDOW);
     for(const b of truth){ const c=lookup[b]; ciphertext.push(c&&c.length? c[Math.random()*c.length|0] : null); }
   } else {
-    header=genHeader(); winOffset=header.off;
+    header=genHeader(); winOffset=header.off; effSize=header.y;
     const wlook=new Array(256); for(let i=0;i<256;i++) wlook[i]=[];
-    for(let i=0;i<WINDOW;i++){ const a=winOffset+i; if(a<actualSize) wlook[rom[a]].push(i); }
+    for(let i=0;i<effSize;i++){ const a=winOffset+i; if(a<actualSize) wlook[rom[a]].push(i); }
     for(const b of truth){ const c=wlook[b]; ciphertext.push(c&&c.length? c[Math.random()*c.length|0] : null); }
   }
   if(ciphertext.some(a=>a===null)) elog('[warn] some bytes absent from ROM/window → skipped in file (rare on full random ROM).');
@@ -223,7 +232,7 @@ function encode(){
   $('sLen').textContent=nAddr;
   render();
   elog('[encode] '+truth.length+' bytes → '+nAddr+' addresses, mode='+mode+(bl?' +BRAINLESS':'')+
-      (mode==='unsignal'?'  (prefixLen='+header.pl+', suffixLen='+header.sl+', msg starts at byte '+msgStartByte+')':''));
+      (mode==='unsignal'?'  (prefixLen='+header.pl+', suffixLen='+header.sl+', msg starts at byte '+msgStartByte+', offset '+winOffset+', Regime 1 rule '+header.rule+': y='+header.y+' w='+header.w+')':''));
 }
 
 // ---------- ATTACKER-SIDE PRIMITIVES (file bytes only) ----------
@@ -325,8 +334,8 @@ function run(){
   if(type==='repeat'){
     if(mode==='zoscii') log('framing: ZOSCII has no header/prefix → one alignment per reading.');
     else {
-      log('framing: UNKNOWN. Message starts at byte 8+prefixLen; prefixLen∈[0,255] is rom[h3] → not computable without ROM.');
-      log('The 256 prefixLen values collapse to 2 byte alignments per reading (EVEN/ODD).');
+      log('framing: UNKNOWN. Message starts at byte 8+prefixLen; prefixLen∈[10,255] is rom[h3] → not computable without ROM.');
+      log('The 246 prefixLen values collapse to 2 byte alignments per reading (EVEN/ODD).');
     }
     blank();
     const masters=getMasters(hyps); let anyPairs=0;
@@ -336,7 +345,7 @@ function run(){
     }
     blank();
     log(masters.length+' distinct structures = 2 BRAINLESS readings × '+(mode==='zoscii'?1:2)+' alignment(s).');
-    if(mode==='unsignal') log('within each: up to 128 candidate message-start offsets (prefixLen/2), all unknown.');
+    if(mode==='unsignal') log('within each: up to 123 candidate message-start offsets (prefixLen/2), all unknown.');
 
     // per-reading chance check: expected equal-address pairs = n(n-1)/2 / 65536
     const leakyReadings=masters.filter(M=>{ const n=M.A.length; if(n<2) return false;

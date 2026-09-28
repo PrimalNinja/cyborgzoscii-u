@@ -346,7 +346,17 @@
         // CONSTANTS
         // ====================================================================
         const ROM_SIZE = 131072;           // 128KB
-        const WINDOW_SIZE = 65536;          // 64KB sliding window
+        const WINDOW_SIZE = 65536;          // 16-bit address space
+// UNSIGNAL spec v1.2 section 7 - Regime 1: effective ROM size (y) and sliding window (w). Integer math only.
+function regime1(x){
+  const xp=Math.floor(x*2/100), t1=65536+Math.floor(65536*2/100);   // t1 = 66846
+  if(x<t1)     return {y:x-xp,  w:xp,        rule:1};
+  if(x<131072) return {y:65536, w:x-65536,   rule:2};   // spec text says 131072-x-xp; that overruns/goes negative, see notes
+  return              {y:65536, w:65536,     rule:3};
+}
+// ROM start pointer -> window offset: one of w window positions, so offset + y <= x always
+function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer % r.w : 0; }
+
         const SHARE_COUNT = 5;
         const PATTERN_LEN = 10;
         
@@ -362,6 +372,8 @@
         // STATE
         // ====================================================================
         let rom = new Uint8Array(ROM_SIZE);
+        let actualSize = ROM_SIZE;          // real ROM size: the key is the file as-is, never padded
+        let currentEffSize = WINDOW_SIZE;   // Regime 1 effective size (y) of the current encode
         let lookup = new Array(256);
         let windowLookup = new Array(256);
         let currentWindowOffset = 0;
@@ -467,7 +479,7 @@
         // ====================================================================
         function rebuildLookup() {
             for (let i = 0; i < 256; i++) lookup[i] = [];
-            let maxAddr = Math.min(ROM_SIZE, WINDOW_SIZE);
+            let maxAddr = Math.min(actualSize, WINDOW_SIZE);
             for (let i = 0; i < maxAddr; i++) {
                 lookup[rom[i]].push(i);
             }
@@ -478,13 +490,13 @@
             if (missing > 0) {
                 log(`Warning: ROM missing ${missing} byte values. Some bytes cannot be encoded.`, 'warning');
             } else {
-                log(`ROM ready: All 256 byte values available in first 64KB.`, 'success');
+                log(`ROM ready: All 256 byte values available in the header address range.`, 'success');
             }
         }
         
         function rebuildWindowLookup() {
             for (let i = 0; i < 256; i++) windowLookup[i] = [];
-            let windowEnd = Math.min(currentWindowOffset + WINDOW_SIZE, ROM_SIZE);
+            let windowEnd = Math.min(currentWindowOffset + currentEffSize, actualSize);
             for (let i = currentWindowOffset; i < windowEnd; i++) {
                 let relAddr = i - currentWindowOffset;
                 windowLookup[rom[i]].push(relAddr);
@@ -492,6 +504,7 @@
         }
         
         function generateRandomROM() {
+            actualSize = ROM_SIZE;
             for (let i = 0; i < ROM_SIZE; i++) {
                 rom[i] = Math.floor(Math.random() * 256);
             }
@@ -503,19 +516,20 @@
         
         function updateROMPreview() {
             let preview = '';
-            for (let i = 0; i < Math.min(64, ROM_SIZE); i++) {
+            for (let i = 0; i < Math.min(64, actualSize); i++) {
                 preview += rom[i].toString(16).toUpperCase().padStart(2, '0') + ' ';
                 if ((i + 1) % 16 === 0) preview += '\n';
             }
-            if (ROM_SIZE > 64) preview += '...';
-            document.getElementById('divROMPreview').innerHTML = `<strong>ROM loaded:</strong> ${ROM_SIZE} bytes<br><strong>First 64 bytes:</strong><br>${preview}`;
+            if (actualSize > 64) preview += '...';
+            let reg = regime1(actualSize);
+            document.getElementById('divROMPreview').innerHTML = `<strong>ROM loaded:</strong> ${actualSize} bytes (Regime 1 rule ${reg.rule}: effective size ${reg.y}, ${reg.w} window position(s))<br><strong>First 64 bytes:</strong><br>${preview}`;
         }
         
         function updateStats() {
             let present = new Array(256).fill(false);
-            for (let i = 0; i < ROM_SIZE; i++) present[rom[i]] = true;
+            for (let i = 0; i < actualSize; i++) present[rom[i]] = true;
             let unique = present.filter(v => v).length;
-            document.getElementById('romSize').innerText = `${ROM_SIZE} / ${ROM_SIZE}`;
+            document.getElementById('romSize').innerText = `${actualSize}`;
             document.getElementById('uniqueBytes').innerText = `${unique} / 256`;
         }
         
@@ -547,12 +561,8 @@
             let suffixLen = rom[h4Addr];
             
             let rawOffset = (offsetHigh << 8) | offsetLow;
-            let windowOffset = rawOffset;
-            
-            if (windowOffset + WINDOW_SIZE > ROM_SIZE) {
-                windowOffset = ROM_SIZE - WINDOW_SIZE;
-                if (windowOffset < 0) windowOffset = 0;
-            }
+            let reg = regime1(actualSize);
+            let windowOffset = windowOffsetFor(rawOffset, actualSize);
             
             let prefix = [];
             for (let i = 0; i < prefixLen; i++) {
@@ -569,6 +579,7 @@
                 h1Val: offsetLow, h2Val: offsetHigh,
                 h3Val: prefixLen, h4Val: suffixLen,
                 windowOffset, rawOffset,
+                effSize: reg.y, slideW: reg.w, rule: reg.rule,
                 prefixLen, suffixLen,
                 prefix, suffix
             };
@@ -595,7 +606,7 @@
             let bytes = [];
             for (let relAddr of addresses) {
                 let absAddr = windowOffset + relAddr;
-                if (absAddr >= ROM_SIZE) {
+                if (relAddr >= regime1(actualSize).y || absAddr >= actualSize) {
                     return null;
                 }
                 bytes.push(rom[absAddr]);
@@ -834,6 +845,7 @@
             // Step 3: Generate header and set window
             currentHeader = generateUNSIGNALHeader();
             currentWindowOffset = currentHeader.windowOffset;
+            currentEffSize = currentHeader.effSize;
             rebuildWindowLookup();
             
             log(`UNSIGNAL Header generated:`, 'info');
@@ -841,7 +853,7 @@
             log(`  H2@${addressOut(currentHeader.h2Addr)} → ${currentHeader.h2Val} (offset high)`, 'info');
             log(`  H3@${addressOut(currentHeader.h3Addr)} → ${currentHeader.h3Val} (prefix len)`, 'info');
             log(`  H4@${addressOut(currentHeader.h4Addr)} → ${currentHeader.h4Val} (suffix len)`, 'info');
-            log(`Window offset: ${currentWindowOffset} (0x${currentWindowOffset.toString(16).toUpperCase()})`, 'success');
+            log(`ROM pointer: ${currentHeader.rawOffset} → window offset ${currentWindowOffset} (Regime 1 rule ${currentHeader.rule}: effective size ${currentHeader.effSize}, ${currentHeader.slideW} window position(s))`, 'success');
             log(`Prefix: ${currentHeader.prefixLen} bytes, Suffix: ${currentHeader.suffixLen} bytes`, 'info');
             
             // Step 4: Encode to addresses (encode the CRC+data, NOT the raw data)
@@ -962,7 +974,7 @@
                 let h3Addr = (joined[5] << 8) | joined[4];
                 let h4Addr = (joined[7] << 8) | joined[6];
                 
-                if (h1Addr >= ROM_SIZE || h2Addr >= ROM_SIZE || h3Addr >= ROM_SIZE || h4Addr >= ROM_SIZE) {
+                if (h1Addr >= actualSize || h2Addr >= actualSize || h3Addr >= actualSize || h4Addr >= actualSize) {
                     log(`  Header addresses out of ROM range`, 'error');
                     continue;
                 }
@@ -971,11 +983,7 @@
                 let offsetHigh = rom[h2Addr];
                 let prefixLen = rom[h3Addr];
                 let suffixLen = rom[h4Addr];
-                let windowOffset = (offsetHigh << 8) | offsetLow;
-                
-                if (windowOffset + WINDOW_SIZE > ROM_SIZE) {
-                    windowOffset = ROM_SIZE - WINDOW_SIZE;
-                }
+                let windowOffset = windowOffsetFor((offsetHigh << 8) | offsetLow, actualSize);
                 
                 log(`  Header valid: window offset = ${windowOffset} (0x${windowOffset.toString(16).toUpperCase()})`, 'success');
                 
@@ -1075,17 +1083,11 @@
                 let reader = new FileReader();
                 reader.onload = function(evt) {
                     let bytes = new Uint8Array(evt.target.result);
-                    for (let i = 0; i < ROM_SIZE && i < bytes.length; i++) {
-                        rom[i] = bytes[i];
-                    }
-                    if (bytes.length < ROM_SIZE) {
-                        for (let i = bytes.length; i < ROM_SIZE; i++) {
-                            rom[i] = Math.floor(Math.random() * 256);
-                        }
-                        log(`ROM loaded: ${bytes.length} bytes from file, padded to ${ROM_SIZE} bytes with random`, 'warning');
-                    } else {
-                        log(`ROM loaded: ${ROM_SIZE} bytes from file`, 'success');
-                    }
+                    // the ROM is the file exactly as given - padding it would change the key
+                    actualSize = Math.min(bytes.length, ROM_SIZE);   // past 128KB is never addressable
+                    rom.fill(0);
+                    for (let i = 0; i < actualSize; i++) rom[i] = bytes[i];
+                    log(`ROM loaded: ${bytes.length} bytes from file` + (bytes.length > ROM_SIZE ? ` (only the first ${ROM_SIZE} are addressable)` : ''), 'success');
                     rebuildLookup();
                     updateROMPreview();
                     updateStats();

@@ -438,7 +438,7 @@ button.primary:hover {
             </div>
             <div class="mode-option unsignal">
                 <input type="radio" id="modeUNSIGNAL" name="encodingMode" value="unsignal" checked>
-                <label for="modeUNSIGNAL">🔶 UNSIGNAL (128KB ROM + sliding window)</label>
+                <label for="modeUNSIGNAL">🔶 UNSIGNAL (any ROM size • Regime 1 sliding window)</label>
             </div>
             <div class="brainless-checkbox">
                 <input type="checkbox" id="brainlessMode">
@@ -573,7 +573,17 @@ button.primary:hover {
             const GRID_WIDTH = 512;              // 512 columns
             const GRID_HEIGHT = 256;              // 256 rows
             const PIXEL_SIZE = 2;                 // Each cell = 2×2 pixels
-			const UNSIGNAL_OFFSET_LIMIT_PCT = 2;
+
+// UNSIGNAL spec v1.2 section 7 - Regime 1: effective ROM size (y) and sliding window (w). Integer math only.
+function regime1(x){
+  const xp=Math.floor(x*2/100), t1=65536+Math.floor(65536*2/100);   // t1 = 66846
+  if(x<t1)     return {y:x-xp,  w:xp,        rule:1};
+  if(x<131072) return {y:65536, w:x-65536,   rule:2};   // spec text says 131072-x-xp; that overruns/goes negative, see notes
+  return              {y:65536, w:65536,     rule:3};
+}
+// ROM start pointer -> window offset: one of w window positions, so offset + y <= x always
+function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer % r.w : 0; }
+
             
             // Keep these for backward compatibility
             const ZOSCII_ROM_SIZE = ROM_SIZE;
@@ -604,6 +614,7 @@ button.primary:hover {
 			let pulseInterval = null;
 			let windowLookup = null;
 			let actualROMSize = ROM_SIZE;
+			let currentEffSize = 65536;   // Regime 1 effective size (y) of the current encode
             
             // ==================== INITIALIZATION ====================
             function init() {
@@ -895,7 +906,7 @@ button.primary:hover {
 				if (offset === undefined || offset === null) return;
 				
 				let startRow = Math.floor(offset / GRID_WIDTH);
-				let endAddr = Math.min(offset + WINDOW_SIZE, actualROMSize);
+				let endAddr = Math.min(offset + currentEffSize, actualROMSize);
 				let endRow = Math.ceil(endAddr / GRID_WIDTH);
 				let windowRows = endRow - startRow;
 				if (windowRows <= 0) return;
@@ -980,16 +991,8 @@ button.primary:hover {
 				suffixLen = rom[h4Addr];
 				
 				let rawOffset = (offsetHigh << 8) | offsetLow;
-				let windowOffset = 0;
-				
-				if (actualROMSize >= ROM_SIZE) {
-					windowOffset = rawOffset;
-				} else {
-					let maxOffset = Math.floor((actualROMSize * UNSIGNAL_OFFSET_LIMIT_PCT) / 100);
-					if (maxOffset > 0) {
-						windowOffset = rawOffset % (maxOffset + 1);
-					}
-				}
+				let reg = regime1(actualROMSize);
+				let windowOffset = windowOffsetFor(rawOffset, actualROMSize);
 				
 				//windowOffset = Math.floor(windowOffset / GRID_WIDTH) * GRID_WIDTH;
 				
@@ -1011,6 +1014,9 @@ button.primary:hover {
 					h4Val: suffixLen,
 					windowOffset,
 					rawOffset,
+					effSize: reg.y,
+					slideW: reg.w,
+					rule: reg.rule,
 					prefixLen,
 					suffixLen,
 					prefix,
@@ -1041,6 +1047,7 @@ button.primary:hover {
                 
                 if (currentMode === 'zoscii') {
                     currentWindowOffset = 0;
+                    currentEffSize = Math.min(actualROMSize, 65536);
                     document.getElementById('zosciiAddresses').value = '';
                     document.getElementById('outputBytes').innerText = '0';
                     document.getElementById('windowOffset').innerText = '0';
@@ -1048,6 +1055,7 @@ button.primary:hover {
                 } else {
                     currentHeader = generateUNSIGNALHeader();
                     currentWindowOffset = currentHeader.windowOffset;
+                    currentEffSize = currentHeader.effSize;
                     
                     document.getElementById('h1Addr').innerText = addressOut(currentHeader.h1Addr);
                     document.getElementById('h2Addr').innerText = addressOut(currentHeader.h2Addr);
@@ -1059,16 +1067,16 @@ button.primary:hover {
                     document.getElementById('h3Val').innerText = currentHeader.h3Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h3Val + ')';
                     document.getElementById('h4Val').innerText = currentHeader.h4Val.toString(16).padStart(2,'0') + 'h (' + currentHeader.h4Val + ')';
                     
-                    let offsetHex = currentHeader.h1Val.toString(16).toUpperCase().padStart(2,'0') + currentHeader.h2Val.toString(16).toUpperCase().padStart(2,'0');
 					let rawOffset = (currentHeader.h2Val << 8) | currentHeader.h1Val;
-                    document.getElementById('offsetCalc').innerHTML = `<b>${offsetHex}h (${rawOffset})</b>`;
+                    let offsetHex = rawOffset.toString(16).toUpperCase().padStart(4,'0');
+                    document.getElementById('offsetCalc').innerHTML = `<b>pointer ${offsetHex}h (${rawOffset}) → offset ${currentWindowOffset}</b>`;
                     document.getElementById('prefixLen').innerText = currentHeader.prefixLen;
                     document.getElementById('suffixLen').innerText = currentHeader.suffixLen;
                     
                     document.getElementById('windowOffset').innerText = addressOut(currentWindowOffset);
                     document.getElementById('unsignalInfo').innerHTML = 
                         `<span class="window-label">🔶 CURRENT WINDOW:</span> ` +
-                        `Offset ${offsetHex}h`;
+                        `Pointer ${offsetHex}h → offset ${currentWindowOffset} • Regime 1 rule ${currentHeader.rule}: effective size ${currentHeader.effSize}, ${currentHeader.slideW} window position(s)`;
                     
                     document.getElementById('headerOutput').value = addressOut(currentHeader.h1Addr) + ' ' + addressOut(currentHeader.h2Addr) + ' ' + addressOut(currentHeader.h3Addr) + ' ' + addressOut(currentHeader.h4Addr);
                     
@@ -1090,7 +1098,7 @@ button.primary:hover {
 					windowLookup[i] = [];
 				}
 				
-				for (let i = 0; i < WINDOW_SIZE; i++) {
+				for (let i = 0; i < currentEffSize; i++) {
 					let absAddr = currentWindowOffset + i;
 					if (absAddr < actualROMSize) {
 						let val = rom[absAddr];
@@ -1356,7 +1364,7 @@ button.primary:hover {
                 reader.onload = function(event) {
                     let arrayBuffer = event.target.result;
                     let fileBytes = new Uint8Array(arrayBuffer);
-					actualROMSize = fileBytes.length;
+					actualROMSize = Math.min(fileBytes.length, ROM_SIZE);   // anything past 128KB is never addressable (offset <= 65535, address <= 65535)
                     
                     for (let i = 0; i < ROM_SIZE; i++) {
 						if (i < fileBytes.length)
