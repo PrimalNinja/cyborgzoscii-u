@@ -1,4 +1,4 @@
-# UNSIGNAL Protocol Specification — 8-bit / nibble
+# microUNSIGNAL - UNSIGNAL Protocol Specification — 8-bit / nibble
 
 **Author:** Julian Cassin
 **Version:** 1.2 (8-bit / nibble configuration)

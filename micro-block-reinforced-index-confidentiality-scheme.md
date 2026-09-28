@@ -1,4 +1,4 @@
-# Block Reinforced Index Confidentiality Scheme Specification — 8-bit / nibble
+# microBRICS - Block Reinforced Index Confidentiality Scheme Specification — 8-bit / nibble
 
 **Author:** Julian Cassin
 **Version:** 2.0 (8-bit / nibble configuration)
