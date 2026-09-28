@@ -48,6 +48,15 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
 .mode-row input { width:auto; margin:0; accent-color:#00ff00; }
 .filewrap { margin-bottom:12px; }
 .filewrap input[type=file] { color:#aaa; font-size:13px; }
+
+/* wide-screen: two columns like the visual demo — encoder left, attack right */
+@media (min-width:1600px){
+  body{ display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; max-width:2200px; margin:0 auto; }
+  body>h1, body>.subtitle{ grid-column:1 / -1; margin:0; }
+  body>.subtitle{ margin-bottom:8px; }
+  .panel{ margin-bottom:0; }
+  #console{ height:520px; }
+}
 </style>
 </head>
 <body>
