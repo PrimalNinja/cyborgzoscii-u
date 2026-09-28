@@ -79,6 +79,8 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
   </div>
   <label style="margin-top:12px">FULL FILE BYTES (this, and only this, is what the attacker gets)</label>
   <textarea id="fileOut" class="readonly" rows="3" readonly></textarea>
+  <label>ENCODER LOG (encoder side only, never shown to the attacker)</label>
+  <textarea id="encLog" class="readonly" rows="3" readonly></textarea>
 </div>
 
 <!-- ATTACKER -->
@@ -94,22 +96,29 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
         <option value="kpa">Known-plaintext ROM reconstruction (assumes framing+crib guessed)</option>
         <option value="brainless">BRAINLESS peel (invert keyless XOR)</option>
         <option value="rom">Baseline: full decode WITH ROM (codebook = game over)</option>
+        <option value="custom">Custom attack (your own .js file)</option>
       </select>
     </div>
     <div>
       <label>ATTACK FILE (dictionary, one word per line)</label>
       <div class="filewrap"><input type="file" id="attackFile" accept=".txt,.dic,.lst,text/plain"></div>
+      <label>CUSTOM ATTACK (.js defining function attack(api))</label>
+      <div class="filewrap"><input type="file" id="customFile" accept=".js,text/javascript,text/plain"></div>
     </div>
   </div>
-  <label>CRIB / KNOWN PLAINTEXT (for crib &amp; KPA)</label>
-  <input type="text" id="cribText" value="the pier">
+  <div class="hint">Custom attack: your file must define <b>function attack(api)</b>. api gives only what an attacker holds:
+api.wire (file bytes), api.structures (4 readings: name, reading, parity, addrs), api.readAddrs(bytes,start), api.peel(bytes),
+api.crib / api.cribBytes, api.dictionary, api.allow / api.forbid, api.mode, api.log(text). May return a value or a Promise.
+It runs inside this page, so it could read the encoder panel too. An honest attack uses api only.</div>
+  <label>CRIB / KNOWN PLAINTEXT (for crib &amp; KPA; line breaks are kept)</label>
+  <textarea id="cribText" rows="3">the pier</textarea>
   <div class="row">
-    <div><label>EXPECTED FREQUENCY (optional)</label><input type="text" id="expFreq" placeholder="e.g. 2"></div>
     <div><label>ALLOWED POSITIONS (blank = all)</label><input type="text" id="allowPos" placeholder="0,5,11"></div>
     <div><label>FORBIDDEN POSITIONS</label><input type="text" id="forbidPos" placeholder="3,7"></div>
   </div>
   <div class="mode-row">
     <label><input type="checkbox" id="hasROM"> Attacker HAS the ROM (ground-truth / baseline only)</label>
+    <label><input type="checkbox" id="showTruth"> Show demo answer (off = zero clues)</label>
   </div>
   <div class="button-row">
     <button class="attack" id="runBtn">RUN ATTACK</button>
@@ -129,10 +138,22 @@ let truth=[];             // plaintext bytes (ground truth)
 let winOffset=0;          // window offset (unsignal)
 let fileBytes=[];         // assembled file (pre-brainless)
 let trueFrame=null;       // {msgStartByte, msgLenAddrs, prefixLen, suffixLen, brainless} — demo ground truth
-let attackFileText='';
+let attackFileText='', customSrc='', customName='';
 
 const $=id=>document.getElementById(id);
-function log(s){ const c=$('console'); c.value+=s+'\n'; c.scrollTop=c.scrollHeight; }
+function log(s){ if(s==='') return; const c=$('console'); c.value+=s+'\n'; c.scrollTop=c.scrollHeight; }
+function blank(){ const c=$('console'); c.value+='\n'; }
+function elog(s){ const c=$('encLog'); c.value+=s+'\n'; c.scrollTop=c.scrollHeight; }
+// P(X >= k) for X ~ Poisson(lam)
+function pTail(k,lam){
+  if(k<=0) return 1; if(lam<=0) return 0;
+  let lf=0; for(let i=2;i<=k;i++) lf+=Math.log(i);
+  let t=Math.exp(-lam+k*Math.log(lam)-lf), sum=0;
+  for(let i=k;i<k+2000;i++){ sum+=t; t*=lam/(i+1); if(t<sum*1e-15) break; }
+  return Math.min(1,sum);
+}
+function pStr(p){ return p<1e-300?'<1e-300':p.toExponential(1); }
+function show(b){ return b===10?'⏎':(b>=32&&b<127?String.fromCharCode(b):'?'); }
 function hex(n){ return (n&0xFFFF).toString(16).toUpperCase().padStart(4,'0'); }
 function b2(n){ return n.toString(16).toUpperCase().padStart(2,'0'); }
 function trunc(s){ return s.length>110?s.slice(0,110)+'…':s; }
@@ -155,7 +176,7 @@ function stats(){
 }
 function dropROM(e){ e.preventDefault(); canvas.style.borderColor='#444'; const f=e.dataTransfer.files[0]; if(!f) return;
   const r=new FileReader(); r.onload=ev=>{ const b=new Uint8Array(ev.target.result); actualSize=b.length;
-    for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; rebuild(); render(); stats(); log('[rom] loaded '+f.name+' ('+b.length+' B)'); };
+    for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; rebuild(); render(); stats(); elog('[rom] loaded '+f.name+' ('+b.length+' B)'); };
   r.readAsArrayBuffer(f); }
 
 // ---------- UNSIGNAL header ----------
@@ -184,7 +205,7 @@ function encode(){
     for(let i=0;i<WINDOW;i++){ const a=winOffset+i; if(a<actualSize) wlook[rom[a]].push(i); }
     for(const b of truth){ const c=wlook[b]; ciphertext.push(c&&c.length? c[Math.random()*c.length|0] : null); }
   }
-  if(ciphertext.some(a=>a===null)) log('[warn] some bytes absent from ROM/window → skipped in file (rare on full random ROM).');
+  if(ciphertext.some(a=>a===null)) elog('[warn] some bytes absent from ROM/window → skipped in file (rare on full random ROM).');
   // assemble file (little-endian addresses)
   fileBytes=[];
   if(mode==='unsignal'){ for(const a of [header.h1,header.h2,header.h3,header.h4]) fileBytes.push(a&0xFF,(a>>8)&0xFF); fileBytes.push(...header.pre); }
@@ -201,7 +222,7 @@ function encode(){
   $('sOff').textContent=mode==='zoscii'?'0':hex(winOffset);
   $('sLen').textContent=nAddr;
   render();
-  log('[encode] '+truth.length+' bytes → '+nAddr+' addresses, mode='+mode+(bl?' +BRAINLESS':'')+
+  elog('[encode] '+truth.length+' bytes → '+nAddr+' addresses, mode='+mode+(bl?' +BRAINLESS':'')+
       (mode==='unsignal'?'  (prefixLen='+header.pl+', suffixLen='+header.sl+', msg starts at byte '+msgStartByte+')':''));
 }
 
@@ -239,7 +260,7 @@ function getMasters(hyps){
 // demo ground truth: the real bytes (pre-BRAINLESS) — granted ONLY in KPA / ROM baseline
 function trueBytes(){ const w=wireBytes(); if(!w) return null; return trueFrame.brainless?peel(w):w; }
 function truthLine(){
-  if(!trueFrame) return '';
+  if(!trueFrame || !$('showTruth').checked) return '';
   let s='[demo ground truth] real message length '+trueFrame.msgLenAddrs+'. Real structure: '+(trueFrame.brainless?'PEELED':'RAW');
   if(mode==='unsignal'){ const rp=trueFrame.prefixLen; s+='/'+(rp%2?'ODD':'EVEN')+', message offset '+Math.floor(rp/2)+' (prefixLen='+rp+')'; }
   else s+='/start0';
@@ -260,7 +281,7 @@ function cribK(A,w,s){
   return k;
 }
 function scanCrib(A,word,opts){
-  const w=[...word.toLowerCase()], res=[]; const allow=opts.allow||[], forbid=opts.forbid||[];
+  const w=[...new TextEncoder().encode(word)], res=[]; const allow=opts.allow||[], forbid=opts.forbid||[];
   for(let s=0;s<=A.length-w.length;s++){
     if(forbid.length && forbid.includes(s)) continue;
     if(allow.length && !allow.includes(s)) continue;
@@ -271,8 +292,12 @@ function scanCrib(A,word,opts){
 function romDecode(addrs){ return addrs.map(x=>{ const abs=mode==='zoscii'?x:winOffset+x; return abs<actualSize?rom[abs]:null; }); }
 // crib pattern → which index-pairs MAY share an address (equal letters) vs MUST NOT (unequal letters)
 function cribProfile(word){
-  const w=[...word.toLowerCase()], m=w.length, same=[]; let adjForbidden=0;
-  for(let i=0;i<m;i++) for(let j=i+1;j<m;j++){ if(w[i]===w[j]) same.push([i,j]); else if(j-i===1) adjForbidden++; }
+  const w=[...new TextEncoder().encode(word)], m=w.length, same=[];
+  let adjForbidden=0;
+  for(let i=0;i<m;i++) for(let j=i+1;j<m;j++){
+    if(w[i]===w[j]) same.push([i,j]);
+    else if(j-i===1) adjForbidden++;
+  }
   return {w,m,same,adjForbidden,totalPairs:m*(m-1)/2};
 }
 
@@ -286,12 +311,11 @@ function run(){
   log('\n==================== ATTACK: '+type.toUpperCase()+' ====================');
   log('attacker holds '+hyps[0].bytes.length+' file bytes. No ROM. BRAINLESS state UNKNOWN (keyless XOR leaves no marker) → RAW and PEELED both carried.');
   // say which inputs this attack ignores, so an unused crib/file/position never looks tested
-  const uses={repeat:[],crib:['crib','pos'],dict:['file','pos'],kpa:['crib','pos'],brainless:[],rom:[]}[type]||[];
+  const uses={repeat:[],crib:['crib','pos'],dict:['file','pos'],kpa:['crib','pos'],brainless:[],rom:[],custom:['crib','file','pos']}[type]||[];
   const ign=[];
   if(!uses.includes('crib') && $('cribText').value.trim()) ign.push('CRIB "'+trunc($('cribText').value.trim()).slice(0,40)+'"');
   if(!uses.includes('file') && attackFileText) ign.push('ATTACK FILE');
   if(!uses.includes('pos') && ($('allowPos').value.trim()||$('forbidPos').value.trim())) ign.push('ALLOWED/FORBIDDEN POSITIONS');
-  if($('expFreq').value.trim()) ign.push('EXPECTED FREQUENCY');
   if(ign.length) log('NOTE: this attack does not use: '+ign.join(', ')+'. Those inputs were NOT tested.');
   // message length is never in the file: total = header + prefixLen + 2*msgLen + suffixLen
   if(mode==='unsignal'){ const body=hyps[0].bytes.length-8; const maxLen=Math.max(0,Math.floor((body-20)/2));
@@ -304,104 +328,164 @@ function run(){
       log('framing: UNKNOWN. Message starts at byte 8+prefixLen; prefixLen∈[0,255] is rom[h3] → not computable without ROM.');
       log('The 256 prefixLen values collapse to 2 byte alignments per reading (EVEN/ODD).');
     }
-    log('');
+    blank();
     const masters=getMasters(hyps); let anyPairs=0;
     for(const M of masters){ const S=skeleton(M.A); anyPairs+=S.pairs;
       log(M.align.padEnd(12)+': '+S.n+' addrs, '+S.distinct+' distinct, '+S.pairs+' equal-address pair(s)');
       log('  '+trunc(S.lbl));
     }
-    log('');
+    blank();
     log(masters.length+' distinct structures = 2 BRAINLESS readings × '+(mode==='zoscii'?1:2)+' alignment(s).');
     if(mode==='unsignal') log('within each: up to 128 candidate message-start offsets (prefixLen/2), all unknown.');
-    log(anyPairs===0 ? 'LEAK = NONE in any structure. All are indistinguishable from uniform random 16-bit values.'
-                     : 'Equal-address pairs prove only which positions share a byte, in whichever structure is real — never the value, and never which structure is real.');
+
+    // per-reading chance check: expected equal-address pairs = n(n-1)/2 / 65536
+    const leakyReadings=masters.filter(M=>{ const n=M.A.length; if(n<2) return false;
+      const exp=n*(n-1)/2/65536; const S=skeleton(M.A); return S.pairs>exp*4 && pTail(S.pairs,exp)<0.01; });
+    if(leakyReadings.length===1)
+      log('VERDICT: one reading stands out — '+leakyReadings[0].align+' has a pair count far above chance, which picks itself out of the '+(mode==='zoscii'?2:4)+' candidates. It says which reading is real. It still only reveals which positions share a byte, never the value.');
+    else if(leakyReadings.length>1)
+      log('VERDICT: more than one reading ('+leakyReadings.map(M=>M.align).join(', ')+') is far above chance — the leak does not pick a single reading. Pairs prove only which positions share a byte, never the value, and never which reading is real.');
+    else
+      log('VERDICT: no reading leaks. Pair counts are consistent with chance in every structure; nothing to align or read. Pairs could only prove which positions share a byte — never the value.');
     log(truthLine());
-    log('CONCLUSION: attacker cannot pick the reading, the alignment or the offset, and on a random ROM no structure leaks. Cannot align or read.');
   }
 
   else if(type==='crib'){
-    const raw=$('cribText').value; if(!raw.trim()){ log('[!] Empty crib.'); return; }
-    const prof=cribProfile(raw); const m=prof.m, w=prof.w, word=w.join('');
-    const masters=getMasters(hyps);
+    const raw=$('cribText').value.replace(/\r?\n+$/,'');   // drop trailing newlines
+    if(!raw.trim()){ log('[!] Empty crib.'); return; }
+    const w=[...new TextEncoder().encode(raw)];            // exact bytes
+    const m=w.length;
+    const allow=opts.allow, forbid=opts.forbid;            // honour positions
+
+    const hypsAll=hypotheses();
+    const masters=getMasters(hypsAll);
     const maxMaster=Math.max(...masters.map(M=>M.A.length));
-    log('crib="'+word+'"  length '+m+'  across '+masters.length+' structures.');
-    // GUARD 1: crib longer than every stream → no placement can exist
-    if(m>maxMaster){
-      log('[!] crib ('+m+' chars) is longer than the '+maxMaster+'-address stream — NO placement possible. Nothing to test.');
-      return;
-    }
-    const degenerate = (prof.totalPairs-prof.same.length)===0;   // GUARD 2: zero forbidden pairs
-    // GUARD 3: one-line profile
+    log('crib=("'+(raw.length>40?raw.slice(0,40)+'…':raw)+'")  length '+m+'  exact bytes across '+masters.length+' structures.');
+    if(m>maxMaster){ log('[!] crib ('+m+') longer than the '+maxMaster+'-address stream — NO placement possible.'); return; }
+
+    // degenerate-crib guard
+    const prof=cribProfile(raw);
+    const degenerate=(prof.totalPairs-prof.same.length)===0;
     log('constraint profile: '+prof.same.length+' may-share pair(s), '+(prof.totalPairs-prof.same.length)+' forbidden pair(s) (incl. '+prof.adjForbidden+' adjacent).');
-    if(degenerate) log('  DEGENERATE crib (single repeated symbol): 0 forbidden pairs → cannot eliminate ANY placement by construction, and its k-scores are meaningless (they count the crib\'s own redundancy, not a match to the plaintext).');
-    const allow=opts.allow, forbid=opts.forbid;
-    let scanned=0, eliminated=0, corrob=0, unconstrained=0; const elimList=[], corrobList=[];
-    let inWin=0; const gapTally={};   // equal-address pairs with gap ≤ m-1 that fall inside a SCANNED placement
-    for(const M of masters){
-      const A=M.A, tag=M.align;
-      const sc=new Uint8Array(Math.max(0,A.length-m+1));
+    if(degenerate) log('  DEGENERATE crib (single repeated symbol): 0 forbidden pairs → nothing can be eliminated by construction, and any repeat under it is chance, not support.');
+
+    const rich=[];
+    for(const H of hypsAll){
+      if(mode==='zoscii') rich.push({tag:H.tag, bytes:H.bytes, start:0, par:0});
+      else { rich.push({tag:H.tag, bytes:H.bytes, start:8, par:0});
+             rich.push({tag:H.tag, bytes:H.bytes, start:9, par:1}); }
+    }
+
+    let scanned=0, eliminated=0; const survivors=[];
+    for(const R of rich){
+      const A=readAddrs(R.bytes, R.start);
+      // precompute equal-byte index pairs of the crib
+      const eqPairs=[];
+      for(let i=0;i<m;i++) for(let j=i+1;j<m;j++) if(w[i]===w[j]) eqPairs.push([i,j]);
+
       for(let s=0;s+m<=A.length;s++){
-        if(forbid.length&&forbid.includes(s)) continue;
-        if(allow.length&&!allow.includes(s)) continue;
-        sc[s]=1; scanned++;
-        const k=cribK(A,w,s);
-        if(k===null){ eliminated++; if(elimList.length<24) elimList.push(tag+':pos'+s); }
-        else if(k>=1){ corrob++; if(corrobList.length<24) corrobList.push(tag+':pos'+s+'(k'+k+')'); }
-        else unconstrained++;
-      }
-      // count only collisions some scanned placement actually covers (keeps the tripwire valid under position filters)
-      for(let i=0;i<A.length;i++) for(let j=i+1;j<=Math.min(A.length-1,i+m-1);j++){
-        if(A[i]!==A[j]) continue;
-        let cov=false; for(let s=Math.max(0,j-m+1); s<=i && s<sc.length; s++) if(sc[s]){ cov=true; break; }
-        if(cov){ const g=j-i; inWin++; gapTally[g]=(gapTally[g]||0)+1; }
+        if(forbid.length && forbid.includes(s)) continue;
+        if(allow.length && !allow.includes(s)) continue;
+        scanned++;
+        // contradiction test: equal-address pairs must carry equal bytes
+        let ok=true, k=0;
+        for(const [i,j] of eqPairs){
+          if(A[s+i]===A[s+j]){ if(w[i]!==w[j]){ ok=false; break; } k++; }
+        }
+        if(!ok){ eliminated++; continue; }
+        // exact-byte contradiction sweep: equal addresses under different bytes
+        const seen=new Map(); let bad=false;
+        for(let i=0;i<m;i++){ const a=A[s+i]; if(seen.has(a)&&seen.get(a)!==w[i]){ bad=true; break; } seen.set(a,w[i]); }
+        if(bad){ eliminated++; continue; }
+        survivors.push({tag:R.tag+'/'+(mode==='zoscii'?'start0':(R.par?'ODD':'EVEN')), s, k, bytes:R.bytes, start:R.start});
       }
     }
-    const possible=scanned-eliminated;
-    log('scanned '+masters.length+' structure(s) → '+scanned+' real candidate placements (not echo-inflated across framings).');
-    log('  in-window collisions inside scanned placements (gap ≤ '+(m-1)+', the ones that CAN bite): '+inWin+'  by gap: '+JSON.stringify(gapTally));
-    log('  ELIMINATED by forced contradiction: '+eliminated+'  ('+(scanned?(100*eliminated/scanned).toFixed(3):0)+'%)');
-    log('  POSSIBLE: '+possible+'   [corroborated k≥1: '+corrob+(degenerate?' (meaningless — degenerate crib)':'')+'   unconstrained k=0: '+unconstrained+']');
-    // tripwire: every covered collision must either eliminate or corroborate its placement
-    if(scanned>0 && !degenerate && inWin>0 && eliminated===0 && corrob===0) log('  [!!! BUG] '+inWin+' covered collision(s) exist but 0 eliminated AND 0 corroborated — the eliminator is missing them. Not a scheme result.');
-    if(elimList.length) log('  eliminated e.g.: '+elimList.join(' ')+(eliminated>elimList.length?' …':''));
-    if(corrobList.length && !degenerate) log('  corroborated e.g.: '+corrobList.join(' ')+(corrob>corrobList.length?' …':''));
-    log('VERDICT: ciphertext eliminates '+(scanned?(100*eliminated/scanned).toFixed(3):0)+'% of placements, confirms 0%. '+possible+' survive → no localisation.');
-    log('WHY: "'+(word.length>40?word.slice(0,40)+'…':word)+'" has '+prof.same.length+' optional-equal pair(s) and 0 required-equal pairs, so a placement dies only when the stream happens to collide at a forbidden gap — vanishingly rare on a sparse random-ROM stream.');
+    const possible=survivors.length;
+    const expRepeatK=m*(m-1)/2/65536;   // expected equal-address pairs in a random window
+
+    log('scanned '+scanned+' placements across '+rich.length+' structure(s).');
+    log('  eliminated by exact-byte contradiction: '+eliminated+'  ('+(scanned?(100*eliminated/scanned).toFixed(4):0)+'%)');
+    log('  survivors (no contradiction): '+possible);
+    log('  chance: a random crib of length '+m+' expects ≈ '+expRepeatK.toFixed(4)+' equal-address pair(s) inside its window.');
+
+    if(possible===0){
+      log('VERDICT: DEFINITELY ISN\'T. Every placement at every structure contradicts the ciphertext. This crib is not in the message.');
+    } else if(degenerate){
+      log('VERDICT: MIGHT BE — DEGENERATE crib, no test performed. '+possible+' placement(s) survive, but nothing was excluded and k is meaningless.');
+    } else {
+      survivors.sort((a,b)=>b.k-a.k);
+      const best=survivors[0];
+      // multiple-testing: chance must be scaled by the number of placements scanned
+      const pBest = Math.min(1, pTail(best.k, expRepeatK) * scanned);
+      let support;
+      if(pBest<0.001) support='strong';
+      else if(pBest<0.05) support='weak';
+      else support='no';
+      const crowded = possible>scanned*0.01;
+      log('  best survivor: '+best.tag+' at position '+best.s+' (k='+best.k+
+          ' vs chance '+expRepeatK.toFixed(2)+' per placement; corrected P≈'+pStr(pBest)+' over '+scanned+' placements).');
+      log('  survivors vs scanned: '+possible+'/'+scanned+' ('+(scanned?(100*possible/scanned).toFixed(3):0)+'%)'+(crowded?' — field too crowded to localise':' — field narrow'));
+      log('VERDICT: '+(support==='strong'?'MIGHT BE — strong support':support==='weak'?'MIGHT BE — weak support':'MIGHT BE — no support above chance')+
+          '. '+possible+' placement(s) survive, 0 confirmed.');
+
+      // propagation: count only positions OUTSIDE the crib window
+      const A=readAddrs(best.bytes, best.start);
+      const known=new Map();
+      for(let i=0;i<m;i++){ const a=A[best.s+i]; if(!known.has(a)) known.set(a,w[i]); }
+      let outsideHit=0;
+      const rec=A.map((a,idx)=>{
+        const isCrib = idx>=best.s && idx<best.s+m;
+        if(known.has(a)){ if(!isCrib) outsideHit++; return known.get(a); }
+        return null;
+      });
+      const learnedInside=known.size;
+      log('propagation: '+learnedInside+' ROM cell(s) learned from crib; '+outsideHit+'/'+(A.length-m)+' position(s) outside the crib recovered = '+(A.length-m?(100*outsideHit/(A.length-m)).toFixed(2):0)+'%');
+      log('  '+rec.map(c=>c===null?'·':show(c)).join(''));
+    }
     log(truthLine());
   }
-
+  
   else if(type==='dict'){
     if(!attackFileText){ log('[!] Load a dictionary file first.'); return; }
-    const words=attackFileText.split(/\r?\n/).map(w=>w.trim().toLowerCase()).filter(w=>w.length>=2);
+    const words=attackFileText.split(/\r?\n/).map(w=>w.trim()).filter(w=>w.length>=2);
     const masters=getMasters(hyps);
     log('dictionary: '+words.length+' words × '+masters.length+' structure(s).');
-    let corrob=[], trivialPass=0;
-    for(const w of words){
-      let best=null;
-      for(const M of masters){
+    log('  each word tested as written, lowercase, Capitalised and UPPER (exact bytes, so each case form is a separate test).');
+    let corrob=[], trivialWords=0;
+    for(const word of words){
+      const lo=word.toLowerCase();
+      const forms=[...new Set([word, lo, lo.charAt(0).toUpperCase()+lo.slice(1), word.toUpperCase()])];
+      let best=null, sawTrivial=false;
+      for(const w of forms) for(const M of masters){
         const res=scanCrib(M.A,w,opts); if(!res.length) continue;
-        for(const r of res){ if(r.k===0){ trivialPass++; continue; } if(!best||r.k>best.k) best={w,k:r.k,s:r.s,a:M.align}; }
+        for(const r of res){ if(r.k===0){ sawTrivial=true; continue; } if(!best||r.k>best.k) best={w,k:r.k,s:r.s,a:M.align}; }
       }
-      if(best) corrob.push(best);
+      if(best) corrob.push(best); else if(sawTrivial) trivialWords++;
     }
     corrob.sort((a,b)=>b.k-a.k);
     log('words with structural corroboration (k≥1) somewhere: '+corrob.length);
-    log('word/position/structure combos passing only at chance (k=0): '+trivialPass+'  ← filter is near-powerless here');
+    log('words with no support but at least one chance pass (k=0): '+trivialWords+'  ← filter is near-powerless here');
     for(const h of corrob.slice(0,20)) log('  '+h.w.padEnd(16)+' '+h.a.padEnd(12)+' pos '+String(h.s).padStart(3)+'  k='+h.k);
     log(corrob.length? 'k≥1 is necessary, not sufficient — no word is localised, only "not impossible under some structure".'
                      : 'Nothing rises above chance in any structure. No dictionary word recoverable.');
   }
 
   else if(type==='kpa'){
-    const word=$('cribText').value.trim().toLowerCase(); if(!word){ log('[!] Empty crib.'); return; }
+    const word=$('cribText').value.replace(/\r?\n+$/,'').trim(); if(!word){ log('[!] Empty crib.'); return; }
+    const w=[...new TextEncoder().encode(word)];
     log('KPA models an attacker who has ALREADY guessed, correctly and separately:');
     log('  (1) BRAINLESS on/off  (2) prefixLen (1 of 256)  (3) message length  (4) the exact position  (5) the word.');
     log('This run grants all five (using demo ground truth) to show what ONE correct crib then propagates to.');
     const A=readAddrs(trueBytes(), trueFrame.msgStartByte).slice(0, trueFrame.msgLenAddrs);
-    const w=[...word];
-    const res=scanCrib(A,word,opts); if(!res.length){ log('[!] crib impossible at every position under true framing → wrong word.'); return; }
-    res.sort((a,b)=>b.k-a.k); const s=res[0].s;
-    log('placed "'+word+'" at position '+s+' (k='+res[0].k+').');
+    // granted (4): the crib's real position, taken from the demo plaintext
+    // only bytes that got an address are in the file; bytes missing from the ROM window were dropped
+    const kept=truth.filter((b,i)=>ciphertext[i]!==null);
+    if(kept.length!==truth.length) log('note: '+(truth.length-kept.length)+' message byte(s) had no address in this ROM and were dropped by the encoder.');
+    let s=-1;
+    for(let i=0;i+w.length<=kept.length && s<0;i++){ let hit=true; for(let j=0;j<w.length;j++) if(kept[i+j]!==w[j]){ hit=false; break; } if(hit) s=i; }
+    if(s<0){ log('[!] crib is not in the message, so there is no real position to grant. KPA needs a correct crib.'); return; }
+    if(s+w.length>A.length){ log('[!] crib runs past the message addresses.'); return; }
+    log('placed "'+word+'" at its real position '+s+' (granted).');
     const known=new Map();
     for(let i=0;i<w.length;i++){ const a=A[s+i]; if(known.has(a)&&known.get(a)!==w[i]){ log('[!] contradiction → crib wrong here.'); return; } known.set(a,w[i]); }
     log('learned '+known.size+' ROM cells from the crib.');
@@ -409,9 +493,9 @@ function run(){
     const got=rec.filter(c=>c!==null).length;
     log('propagation via address reuse across the '+A.length+' message addresses:');
     log('recovered '+got+' / '+A.length+' = '+(100*got/A.length).toFixed(1)+'%');
-    log('  '+rec.map(c=>c===null?'·':c).join(''));
+    log('  '+rec.map(c=>c===null?'·':show(c)).join(''));
     if($('hasROM').checked){ const t=romDecode(A); let ok=0,chk=0;
-      for(let i=0;i<rec.length;i++) if(rec[i]!==null){ chk++; if(t[i]===rec[i].charCodeAt(0)) ok++; }
+      for(let i=0;i<rec.length;i++) if(rec[i]!==null){ chk++; if(t[i]===rec[i]) ok++; }
       log('[ground truth] '+ok+'/'+chk+' recovered bytes correct → crib '+(ok===chk?'CORRECT':'partly WRONG')); }
     log('LAW: recovery ≈ address-reuse rate ≈ message_length / pool_size. Big random ROM + short msg → ~0%. Small/ reused ROM + long msg → climbs.');
   }
@@ -422,9 +506,31 @@ function run(){
     log('PEELED reading:');
     log('  '+trunc(o.map(b2).join(' ')));
     log('The peel always "succeeds" — on a non-BRAINLESS file it just produces different noise. Nothing in either reading says which is real.');
-    if(trueFrame.brainless) log('[demo ground truth] BRAINLESS was ON → PEELED matches assembled file: '+(fileBytes.length===n && fileBytes.every((b,i)=>b===o[i])));
+    if(!$('showTruth').checked){} else if(trueFrame.brainless) log('[demo ground truth] BRAINLESS was ON → PEELED matches assembled file: '+(fileBytes.length===n && fileBytes.every((b,i)=>b===o[i])));
     else log('[demo ground truth] BRAINLESS was OFF → RAW is the file; PEELED is garbage.');
     log('VERDICT: as a cipher layer BRAINLESS adds 0 bits (keyless, invertible). Because its presence is undetectable, it doubles the attacker\'s structures (×2 readings).');
+  }
+
+  else if(type==='custom'){
+    if(!customSrc){ log('[!] Load a custom attack .js file first.'); return; }
+    // only what an attacker holds: file bytes, the readings, crib, dictionary, positions. No ROM, no ground truth.
+    const api={
+      mode, wire:hyps[0].bytes.slice(),
+      structures:getMasters(hyps).map(M=>({name:M.align, reading:M.tag, parity:M.par, addrs:M.A.slice()})),
+      readAddrs, peel,
+      crib:$('cribText').value, cribBytes:[...new TextEncoder().encode($('cribText').value)],
+      dictionary:attackFileText, allow:opts.allow, forbid:opts.forbid,
+      log:t=>log('  '+String(t))
+    };
+    log('custom attack: '+customName);
+    let fn;
+    try{ fn=new Function('api','"use strict";\n'+customSrc+'\n;if(typeof attack!=="function") throw new Error("file must define function attack(api)"); return attack(api);'); }
+    catch(e){ log('[custom] compile error: '+e.message); return; }
+    try{
+      Promise.resolve(fn(api))
+        .then(r=>{ if(r!==undefined) log('result: '+(typeof r==='string'?r:JSON.stringify(r))); log('[custom] done.'); })
+        .catch(e=>log('[custom] error: '+e.message));
+    }catch(e){ log('[custom] error: '+e.message); }
   }
 
   else if(type==='rom'){
@@ -433,7 +539,9 @@ function run(){
     const t=romDecode(A);
     log('rom[addr] decode (BRAINLESS state + framing from ground truth):');
     log('  '+t.map(b=>b===null?'·':String.fromCharCode(b)).join(''));
-    log('exact recovery: '+(t.every((b,i)=>b===truth[i])?'100% — TOTAL BREAK':'partial'));
+    const kept=truth.filter((b,i)=>ciphertext[i]!==null), dropped=truth.length-kept.length;
+    const exact=t.length===kept.length && t.every((b,i)=>b===kept[i]);
+    log('exact recovery: '+(exact?(dropped?'100% of the '+kept.length+' encoded bytes — TOTAL BREAK ('+dropped+' byte(s) were never encoded: not in this ROM)':'100% — TOTAL BREAK'):'partial'));
     log('EXPECTED: possessing the ROM = possessing the codebook. Key compromise, not a weakness in the scheme.');
   }
 }
@@ -454,6 +562,8 @@ function init(){
   canvas.addEventListener('drop',dropROM);
   $('attackFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
     r.onload=ev=>{ attackFileText=ev.target.result; log('[file] loaded '+f.name+' ('+attackFileText.split(/\r?\n/).length+' lines)'); }; r.readAsText(f); });
+  $('customFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+    r.onload=ev=>{ customSrc=ev.target.result; customName=f.name; log('[custom] loaded '+f.name+' ('+customSrc.length+' chars)'); }; r.readAsText(f); });
   $('runBtn').addEventListener('click',run);
   $('clearConsole').addEventListener('click',()=>$('console').value='');
   randomROM();
