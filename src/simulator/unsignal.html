@@ -440,6 +440,10 @@ button.primary:hover {
                 <input type="radio" id="modeUNSIGNAL" name="encodingMode" value="unsignal" checked>
                 <label for="modeUNSIGNAL">🔶 UNSIGNAL (any ROM size • Regime 1 sliding window)</label>
             </div>
+            <div class="mode-option unsignal">
+                <input type="radio" id="modeBRICS" name="encodingMode" value="brics">
+                <label for="modeBRICS">🧱 BRICS (per-block offsets)</label>
+            </div>
             <div class="brainless-checkbox">
                 <input type="checkbox" id="brainlessMode">
                 <label for="brainlessMode">🐍 BRAINLESS (XOR entire file)</label>
@@ -615,6 +619,8 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 			let windowLookup = null;
 			let actualROMSize = ROM_SIZE;
 			let currentEffSize = 65536;   // Regime 1 effective size (y) of the current encode
+			let bricsPlan = [], bricsEmitted = [], currentBlockIdx = 0;
+			let bricsPrefix = [], bricsSuffix = [], bricsPrefixLen = 0, bricsSuffixLen = 0, bricsRawBytes = null;
             
             // ==================== INITIALIZATION ====================
             function init() {
@@ -624,6 +630,7 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
                 // Set up radio buttons
                 document.getElementById('modeZOSCII').addEventListener('change', switchMode);
                 document.getElementById('modeUNSIGNAL').addEventListener('change', switchMode);
+                document.getElementById('modeBRICS').addEventListener('change', switchMode);
                 
                 // Set up BRAINLESS checkbox
                 document.getElementById('brainlessMode').addEventListener('change', toggleBrainless);
@@ -720,7 +727,35 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 				// Build the full file as bytes (LITTLE ENDIAN for addresses)
 				let fullFileBytes = [];
 				
-				if (currentMode === 'unsignal') {
+				if (currentMode === 'brics' && isAnimating) return;   // wait until all blocks are emitted before assembling
+				if (currentMode === 'brics') {
+					if (!bricsRawBytes) {
+						const raw = [];
+						const push16 = a => { raw.push(a & 0xFF, (a >> 8) & 0xFF); };
+						const fhAddrs = [];
+						for (const a of hdrPair(bricsPlan[0].pointer)) fhAddrs.push(a);
+						for (const a of hdrPair(bricsEmitted[0].length)) fhAddrs.push(a);
+						fhAddrs.push(pickAddrByVal(bricsPrefixLen));
+						fhAddrs.push(pickAddrByVal(bricsSuffixLen));
+						for (const a of fhAddrs) push16(a);
+						document.getElementById('headerOutput').value = fhAddrs.map(addressOut).join(' ');
+						for (const b of bricsPrefix) raw.push(b);
+						for (let b = 0; b < bricsPlan.length; b++) {
+							const next = bricsPlan[b+1];
+							if (next) {
+								for (const a of hdrPair(next.pointer)) push16(a);
+								for (const a of hdrPair(bricsEmitted[b+1].length)) push16(a);
+							} else {
+								for (let j = 0; j < 4; j++) push16(pickAddrByVal(Math.floor(Math.random()*256)));
+							}
+							for (const rel of bricsEmitted[b]) push16(rel);
+						}
+						for (const b of bricsSuffix) raw.push(b);
+						bricsRawBytes = raw;
+					}
+					fullFileBytes = bricsRawBytes.slice();
+				}
+				else if (currentMode === 'unsignal') {
 					// Header addresses - split into low/high bytes (little-endian)
 					fullFileBytes.push(currentHeader.h1Addr & 0xFF);        // Low byte
 					fullFileBytes.push((currentHeader.h1Addr >> 8) & 0xFF); // High byte
@@ -735,8 +770,8 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 					fullFileBytes.push(...currentHeader.prefix);
 				}
 				
-				// Message addresses - split into low/high bytes (little-endian)
-				for (let addr of currentMessageAddresses) {
+				// Message addresses (ZOSCII / UNSIGNAL only — BRICS already assembled above)
+				if (currentMode !== 'brics') for (let addr of currentMessageAddresses) {
 					if (addr !== null) {
 						fullFileBytes.push(addr & 0xFF);        // Low byte
 						fullFileBytes.push((addr >> 8) & 0xFF); // High byte
@@ -775,27 +810,24 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
             
             // ==================== MODE SWITCHING ====================
             function switchMode() {
-                let zosciiRadio = document.getElementById('modeZOSCII');
-                let unsignalRadio = document.getElementById('modeUNSIGNAL');
+                currentMode = document.querySelector('input[name=encodingMode]:checked').value;
+                const isFlat = (currentMode !== 'zoscii');
                 
-                currentMode = zosciiRadio.checked ? 'zoscii' : 'unsignal';
+                document.body.classList.toggle('unsignal-mode', isFlat);
                 
-                // Update body class for styling
-                document.body.classList.toggle('unsignal-mode', currentMode === 'unsignal');
-                
-                // Update UI elements based on mode
                 document.getElementById('zosciiInfo').style.display = currentMode === 'zoscii' ? 'block' : 'none';
-                document.getElementById('unsignalInfo').style.display = currentMode === 'unsignal' ? 'block' : 'none';
+                document.getElementById('unsignalInfo').style.display = isFlat ? 'block' : 'none';
                 document.getElementById('zosciiOutput').style.display = currentMode === 'zoscii' ? 'block' : 'none';
-                document.getElementById('unsignalOutput').style.display = currentMode === 'unsignal' ? 'block' : 'none';
+                document.getElementById('unsignalOutput').style.display = isFlat ? 'block' : 'none';
                 document.getElementById('headerDetails').style.display = currentMode === 'unsignal' ? 'block' : 'none';
                 
-                // Update labels and titles
-                document.getElementById('mainTitle').innerHTML = currentMode === 'zoscii' ? 
-                    '🔷 ZOSCII VISUAL DEMONSTRATION' : '🔶 UNSIGNAL PROTOCOL VISUAL DEMONSTRATION';
+                document.getElementById('mainTitle').innerHTML = currentMode === 'zoscii' ?
+                    '🔷 ZOSCII VISUAL DEMONSTRATION' : currentMode === 'brics' ?
+                    '🧱 BRICS PROTOCOL VISUAL DEMONSTRATION' : '🔶 UNSIGNAL PROTOCOL VISUAL DEMONSTRATION';
                 
                 document.getElementById('canvasLabel').innerHTML = currentMode === 'zoscii' ?
-                    '🔷 ROM VISUALIZATION (512x256 • 128KB) - First 64KB highlighted (green box)' : 
+                    '🔷 ROM VISUALIZATION (512x256 • 128KB) - First 64KB highlighted (green box)' : currentMode === 'brics' ?
+                    '🧱 ROM VISUALIZATION - window JUMPS to a new offset each block (orange box)' :
                     '🔶 ROM VISUALIZATION (512x256 • 128KB) - Sliding 64KB window (orange box)';
                 
                 document.getElementById('windowLabel').innerText = currentMode === 'zoscii' ? 
@@ -956,6 +988,16 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 			}
             
             // ==================== UNSIGNAL HEADER GENERATION ====================
+			function pickAddrByVal(v){ const c=lookup[v]; return (c&&c.length)? c[Math.floor(Math.random()*c.length)] : 0; }
+			function hdrPair(V){ return [pickAddrByVal(V&0xFF), pickAddrByVal((V>>8)&0xFF)]; }
+			function buildWindowLookupAt(off){ const wl=new Array(256); for(let i=0;i<256;i++) wl[i]=[]; for(let i=0;i<currentEffSize;i++){ const a=off+i; if(a<actualROMSize) wl[rom[a]].push(i); } return wl; }
+			function buildBricsPlan(nChars){
+				const reg=regime1(actualROMSize); currentEffSize=reg.y;
+				const plan=[]; let i=0;
+				while(i<nChars){ let z=128+Math.floor(Math.random()*385); z=Math.min(z,nChars-i); const P=Math.floor(Math.random()*65536); plan.push({pointer:P, off:windowOffsetFor(P,actualROMSize), startChar:i, cumEnd:i+z}); i+=z; }
+				if(!plan.length) plan.push({pointer:0, off:windowOffsetFor(0,actualROMSize), startChar:0, cumEnd:0});
+				return plan;
+			}
 			function generateUNSIGNALHeader() {
 				let offsetLow = 0;
 				let offsetHigh = 0;
@@ -1041,6 +1083,7 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
                 currentMessage = Array.from(encoder.encode(message));
                 currentMessageAddresses = [];
                 currentCharIndex = 0;
+                bricsRawBytes = null;
                 
                 // Clear file output
                 document.getElementById('fileOutput').value = '';
@@ -1051,6 +1094,24 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
                     document.getElementById('zosciiAddresses').value = '';
                     document.getElementById('outputBytes').innerText = '0';
                     document.getElementById('windowOffset').innerText = '0';
+                    renderROM();
+                } else if (currentMode === 'brics') {
+                    bricsPlan = buildBricsPlan(currentMessage.length);
+                    bricsEmitted = bricsPlan.map(()=>[]);
+                    currentBlockIdx = 0;
+                    bricsPrefixLen = 10 + Math.floor(Math.random()*246);
+                    bricsSuffixLen = 10 + Math.floor(Math.random()*246);
+                    bricsPrefix = []; for (let i=0;i<bricsPrefixLen;i++) bricsPrefix.push(Math.floor(Math.random()*256));
+                    bricsSuffix = []; for (let i=0;i<bricsSuffixLen;i++) bricsSuffix.push(Math.floor(Math.random()*256));
+                    currentWindowOffset = bricsPlan[0].off;
+                    document.getElementById('windowOffset').innerText = addressOut(currentWindowOffset);
+                    document.getElementById('unsignalInfo').innerHTML =
+                        `<span class="window-label">🧱 BRICS:</span> ${bricsPlan.length} block(s) planned • block 1 offset ${currentWindowOffset} • prefix ${bricsPrefixLen}, suffix ${bricsSuffixLen} • effective size ${currentEffSize} (window jumps each block)`;
+                    document.getElementById('headerOutput').value = '(built when encoding finishes)';
+                    document.getElementById('prefixOutput').value = bricsPrefix.map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                    document.getElementById('suffixOutput').value = bricsSuffix.map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                    document.getElementById('messageOutput').value = '';
+                    document.getElementById('outputBytes').innerText = '0';
                     renderROM();
                 } else {
                     currentHeader = generateUNSIGNALHeader();
@@ -1206,6 +1267,9 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 					if (currentMode === 'unsignal') {
 						document.getElementById('outputBytes').innerText = 
 							8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
+					} else if (currentMode === 'brics') {
+						document.getElementById('outputBytes').innerText =
+							12 + bricsPrefixLen + bricsSuffixLen + bricsPlan.length*8 + (currentMessageAddresses.length * 2);
 					} else {
 						document.getElementById('outputBytes').innerText = currentMessageAddresses.length * 2;
 					}
@@ -1281,9 +1345,18 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 						currentCharIndex++;
 						animationTimer = setTimeout(animateNextChar, 200/20);
 					}
-				} else {
-					// UNSIGNAL mode - similar approach but with windowLookup
-					if (windowLookup[byte] && windowLookup[byte].length > 0) {
+					} else {
+						// UNSIGNAL / BRICS mode - windowLookup for the current offset
+						if (currentMode === 'brics') {
+							while (currentBlockIdx < bricsPlan.length-1 && currentCharIndex >= bricsPlan[currentBlockIdx].cumEnd) {
+								currentBlockIdx++;
+								currentWindowOffset = bricsPlan[currentBlockIdx].off;
+								windowLookup = buildWindowLookupAt(currentWindowOffset);
+								document.getElementById('windowOffset').innerText = addressOut(currentWindowOffset);
+								renderROM();
+							}
+						}
+						if (windowLookup[byte] && windowLookup[byte].length > 0) {
 						let possibleAddresses = windowLookup[byte];
 						
 						// Store and draw YELLOW for all possible addresses
@@ -1332,9 +1405,11 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
 							
 							// Update output
 							currentMessageAddresses.push(selectedRelAddr);
+							if (currentMode === 'brics') bricsEmitted[currentBlockIdx].push(selectedRelAddr);
 							document.getElementById('messageOutput').value = currentMessageAddresses.map(addressOut).join(' ');
-							document.getElementById('outputBytes').innerText = 
-								8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2);
+							document.getElementById('outputBytes').innerText = (currentMode === 'brics')
+								? (12 + bricsPrefixLen + bricsSuffixLen + bricsPlan.length*8 + currentMessageAddresses.length*2)
+								: (8 + currentHeader.prefixLen + currentHeader.suffixLen + (currentMessageAddresses.length * 2));
 							
 							// Clear highlighted cells
 							highlightedCells = [];
@@ -1454,6 +1529,8 @@ function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer 
                 currentMessageAddresses = [];
                 currentMessage = [];
                 currentCharIndex = 0;
+                bricsPlan = []; bricsEmitted = []; currentBlockIdx = 0;
+                bricsPrefix = []; bricsSuffix = []; bricsRawBytes = null;
                 
                 if (currentMode === 'zoscii') {
                     document.getElementById('windowOffset').innerText = '0';
