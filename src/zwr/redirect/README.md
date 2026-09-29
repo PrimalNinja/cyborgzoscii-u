@@ -96,7 +96,7 @@ To change or expand the allowed streaming ports, open `redirect.php` and update 
 `$allowed_ports` array:
 
 ```php
-$allowed_ports = array(8000, 8002, 8500, 9000);
+$allowed_ports = array(80000);
 ```
 
 ## Future Enhancements
