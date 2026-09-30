@@ -8,7 +8,7 @@
 // playing and who is connected.
 //
 // Usage:
-//   zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <url> [-c <seconds>]]
+//   zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log]
 //
 //   -i  ICY protocol: listen on <port>, pull from <queue> at <mqurl>
 //   -z  unZOSCII each message with <romfile>
@@ -20,12 +20,18 @@
 //   -p  seconds between polls when waiting for new messages (default 10)
 //   -e  local MP3 played from the top, looped, while waiting for new messages
 //       (default: silence)
-//   -a  post the current public IP address to <url> whenever it changes, so a
+//   -a  inserts (ads, host talk): after every <y> normal tracks, <x>% of the time,
+//       play a random MP3 from <folder> before carrying on with the queue
+//   -ip post the current public IP address to <url> whenever it changes, so a
 //       website that redirects home can be kept pointing at the right address
 //       (default: disabled)
-//   -c  seconds between IP checks - only used with -a (default 300 = 5 minutes;
+//   -c  seconds between IP checks - only used with -ip (default 300 = 5 minutes;
 //       the check is a real HTTP call to a public "what's my IP" service, not a
 //       free local lookup, so anything much below 60s risks getting rate-limited)
+//   -log  write everything to <exename>log.csv next to the exe: every console line, plus
+//       every MQ fetch - when it started, when the response began, bytes received,
+//       how long it took, and how it ended (OK, end of queue, timeout, network error,
+//       HTTP error, server error) with the reason where one is known
 //
 // Working files in <exepath>/t/<port>/  (one folder per port, so several instances can share the exe)
 //   <session#>_<yyyyMMddHHmmss>.ptr   line 1 = MQ pointer (last completed message)
@@ -91,7 +97,11 @@ public static class ZWRServe
 	internal static List<MP3Frame> g_objElevator = null;
 	internal static string g_strElevatorTitle = "";
 
-	internal static string g_strIpAnnounceURL = "";     // -a: empty means the feature is off
+	internal static string g_strIpAnnounceURL = "";     // -ip: empty means the feature is off
+
+	internal static string g_strInsertFolder = "";      // -a: empty means no inserts
+	internal static int g_intInsertPercent = 0;         // -a <x>: chance an insert slot is filled
+	internal static int g_intInsertEvery = 0;           // -a <y>: normal tracks between insert slots
 	internal static int g_intIpCheckSeconds = IP_CHECK_DEFAULT_SECONDS;  // -c
 
 	internal static volatile bool g_blnStopping = false;
@@ -133,7 +143,7 @@ public static class ZWRServe
 
 	private static void printUsage()
 	{
-		Console.WriteLine("Usage: zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <url> [-c <seconds>]]");
+		Console.WriteLine("Usage: zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log]");
 		Console.WriteLine();
 		Console.WriteLine("  -i  ICY (Icecast/SHOUTcast) server on <port>, streaming <queue> from <mqurl>");
 		Console.WriteLine("  -z  unZOSCII messages with <romfile>");
@@ -142,8 +152,10 @@ public static class ZWRServe
 		Console.WriteLine("  -w  wait for new messages at the end of the queue - default is loop to the start");
 		Console.WriteLine("  -p  poll interval in seconds while waiting (default 10)");
 		Console.WriteLine("  -e  MP3 looped from the top while waiting (default silence)");
-		Console.WriteLine("  -a  post the current public IP to <url> whenever it changes");
-		Console.WriteLine("  -c  seconds between IP checks - only used with -a (default 300)");
+		Console.WriteLine("  -a  inserts: after every <y> normal tracks, <x>% of the time, play a random MP3 from <folder>");
+		Console.WriteLine("  -ip post the current public IP to <url> whenever it changes");
+		Console.WriteLine("  -c  seconds between IP checks - only used with -ip (default 300)");
+		Console.WriteLine("  -log  log console output and every MQ fetch (timing, result, reason) to <exename>log.csv");
 		Console.WriteLine();
 		Console.WriteLine("Example: zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom");
 		Console.WriteLine("Listen:  http://localhost:8000/        new session");
@@ -184,7 +196,14 @@ public static class ZWRServe
 				g_strElevatorFile = arrArgs_a[intI + 1];
 				intI += 2;
 			}
-			else if (strArg == "-a" && intI + 1 < arrArgs_a.Length)
+			else if (strArg == "-a" && intI + 3 < arrArgs_a.Length)
+			{
+				g_strInsertFolder = arrArgs_a[intI + 1];
+				blnResult = int.TryParse(arrArgs_a[intI + 2], out g_intInsertPercent) && g_intInsertPercent >= 0 && g_intInsertPercent <= 100 &&
+					int.TryParse(arrArgs_a[intI + 3], out g_intInsertEvery) && g_intInsertEvery >= 1;
+				intI += 4;
+			}
+			else if (strArg == "-ip" && intI + 1 < arrArgs_a.Length)
 			{
 				g_strIpAnnounceURL = arrArgs_a[intI + 1];
 				intI += 2;
@@ -202,6 +221,11 @@ public static class ZWRServe
 			else if (strArg == "-w")
 			{
 				g_blnLoop = false;
+				intI++;
+			}
+			else if (strArg == "-log")
+			{
+				CsvLog.Enabled = true;
 				intI++;
 			}
 			else
@@ -222,6 +246,11 @@ public static class ZWRServe
 	private static bool initialise()
 	{
 		bool blnResult = true;
+
+		if (CsvLog.Enabled)
+		{
+			CsvLog.Start();
+		}
 
 		try
 		{
@@ -248,6 +277,12 @@ public static class ZWRServe
 		if (blnResult && g_strElevatorFile.Length > 0)
 		{
 			blnResult = loadElevator();
+		}
+
+		if (blnResult && g_strInsertFolder.Length > 0 && !Directory.Exists(g_strInsertFolder))
+		{
+			Console.WriteLine("Error: insert folder not found " + g_strInsertFolder);
+			blnResult = false;
 		}
 
 		if (blnResult)
@@ -383,14 +418,18 @@ public static class ZWRServe
 
 					Thread.Sleep(250);
 				}
+
+				CsvLog.Flush(2000);
 			};
 
 			Log("Queue:     " + g_strQueue + " @ " + g_strMQURL);
 			Log("Decode:    " + (g_intDecodeMode == DECODE_ZOSCII ? "ZOSCII (" + g_strROMFile + ")" : (g_intDecodeMode == DECODE_UNSIGNAL ? "UNSIGNAL (" + g_strROMFile + ")" : "none")));
 			Log("Mode:      " + (g_blnShared ? "shared pointer (session 0)" : "session per listener") + (g_blnLoop ? ", loop" : ", wait at end"));
 			Log("Waiting:   " + ((g_objElevator != null) ? "elevator " + g_strElevatorFile + " (" + g_objElevator[0].SampleRate + "Hz/" + g_objElevator[0].Channels + "ch, " + g_objElevator.Count + " frames)" : "silence"));
+			Log("Inserts:   " + (g_strInsertFolder.Length > 0 ? g_strInsertFolder + " (" + Inserts.ListFiles().Length + " MP3s), " + g_intInsertPercent + "% chance after every " + g_intInsertEvery + " track" + (g_intInsertEvery == 1 ? "" : "s") : "none"));
 			Log("Work dir:  " + g_strTempFolder);
 			Log("IP announce: " + (g_strIpAnnounceURL.Length > 0 ? g_strIpAnnounceURL + " (checked every " + g_intIpCheckSeconds + "s)" : "disabled"));
+			Log("Log file:  " + (CsvLog.Enabled ? CsvLog.FilePath : "disabled"));
 
 			if (g_strIpAnnounceURL.Length > 0 && g_intIpCheckSeconds < IP_CHECK_WARN_SECONDS)
 			{
@@ -444,17 +483,19 @@ public static class ZWRServe
 
 			Log("Stopped.");
 		}
+
+		CsvLog.Flush(3000);
 	}
 
 	// -------------------------------------------------------------------------
-	// Optional IP announce (-a / -c)
+	// Optional IP announce (-ip / -c)
 	// -------------------------------------------------------------------------
 	//
 	// Periodically fetches this machine's public-facing IP from an external
 	// "what's my IP" service (IP_LOOKUP_URL) - there's no free local way to learn
 	// the WAN address a home router is currently using, so this is a real network
 	// call each time, not a free lookup. Only when the address actually changes
-	// does it POST the new value to -a <url>, so a website doing a home-IP
+	// does it POST the new value to -ip <url>, so a website doing a home-IP
 	// redirect can be kept up to date without polling anything itself.
 
 	private static void IpAnnounceLoop()
@@ -1038,6 +1079,8 @@ public static class ZWRServe
 		{
 			Console.WriteLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + strText_a);
 		}
+
+		CsvLog.Line(strText_a);
 	}
 }
 
@@ -1155,7 +1198,6 @@ internal class TrackSource : IDisposable
 	private string m_strCurrent;        // message currently in the .bin ("" if none)
 	private long m_lngResumeOffset;     // byte offset to resume at in the .bin
 	private MP3Reader m_objReader;
-	private MQClient m_objMQ;
 	private string m_strTitle;
 	private bool m_blnWaiting;
 	private bool m_blnPlayedSinceLoop;
@@ -1165,6 +1207,9 @@ internal class TrackSource : IDisposable
 	private Stopwatch m_objPollClock;
 	private long m_lngNextPollMs;
 	private int m_intElevatorIndex;
+	private MP3Reader m_objInsertReader;  // -a insert playing between tracks (null if none)
+	private int m_intTracksSinceSlot;     // normal tracks finished since the last insert slot
+	private string m_strLastInsert;       // so the same insert isn't picked twice running
 	private Func<bool> m_fnIsCurrent;   // false once another connection has taken this session over
 	private bool m_blnNewSession;       // no .ptr existed when the session started
 	private Func<bool> m_fnSettled;     // false for the first few seconds of a connection
@@ -1180,7 +1225,6 @@ internal class TrackSource : IDisposable
 		m_strCurrent = "";
 		m_lngResumeOffset = 0;
 		m_objReader = null;
-		m_objMQ = new MQClient(60);
 		m_strTitle = "";
 		m_blnWaiting = false;
 		m_blnPlayedSinceLoop = false;
@@ -1190,6 +1234,9 @@ internal class TrackSource : IDisposable
 		m_objPollClock = Stopwatch.StartNew();
 		m_lngNextPollMs = 0;
 		m_intElevatorIndex = 0;
+		m_objInsertReader = null;
+		m_intTracksSinceSlot = 0;
+		m_strLastInsert = "";
 		m_fnIsCurrent = fnIsCurrent_a;
 		m_fnSettled = fnSettled_a;
 		m_blnNewSession = true;
@@ -1218,6 +1265,12 @@ internal class TrackSource : IDisposable
 			m_objReader = null;
 		}
 
+		if (m_objInsertReader != null)
+		{
+			m_objInsertReader.Dispose();
+			m_objInsertReader = null;
+		}
+
 		deletePointers("");
 
 		try { File.Delete(m_strBinPath); } catch { }
@@ -1235,7 +1288,22 @@ internal class TrackSource : IDisposable
 
 		while (!blnDone)
 		{
-			if (m_objReader != null)
+			if (m_objInsertReader != null)
+			{
+				// An insert between tracks. It isn't part of the queue, so it never touches the pointer.
+				objResult = m_objInsertReader.ReadFrame();
+
+				if (objResult != null)
+				{
+					blnDone = true;
+				}
+				else
+				{
+					m_objInsertReader.Dispose();
+					m_objInsertReader = null;
+				}
+			}
+			else if (m_objReader != null)
 			{
 				objResult = m_objReader.ReadFrame();
 
@@ -1282,6 +1350,39 @@ internal class TrackSource : IDisposable
 		m_strCurrent = "";
 		m_lngResumeOffset = 0;
 		savePointer();
+
+		maybeStartInsert();
+	}
+
+	// -a: every g_intInsertEvery normal tracks there's a slot, filled g_intInsertPercent% of the time
+	// with a random MP3 from the insert folder that matches the stream's sample rate and channels.
+	private void maybeStartInsert()
+	{
+		if (ZWRServe.g_strInsertFolder.Length > 0 && m_fnIsCurrent())
+		{
+			m_intTracksSinceSlot++;
+
+			if (m_intTracksSinceSlot >= ZWRServe.g_intInsertEvery)
+			{
+				m_intTracksSinceSlot = 0;
+
+				if (Inserts.Roll(ZWRServe.g_intInsertPercent))
+				{
+					string strFile = "";
+
+					m_objInsertReader = Inserts.Open(m_intLastSampleRate, m_intLastChannels, m_strLastInsert, m_strPrefix, out strFile);
+
+					if (m_objInsertReader != null)
+					{
+						string strTitle = (m_objInsertReader.Title.Length > 0) ? m_objInsertReader.Title : Path.GetFileNameWithoutExtension(strFile);
+
+						m_strLastInsert = strFile;
+						m_strTitle = strTitle;
+						ZWRServe.Log(m_strPrefix + "insert  " + strTitle + "  (" + Path.GetFileName(strFile) + ")");
+					}
+				}
+			}
+		}
 	}
 
 	private void openNextTrack(Func<bool> fnAbort_a)
@@ -1306,15 +1407,27 @@ internal class TrackSource : IDisposable
 		}
 		else
 		{
-			MQFetchResult objFetch = m_objMQ.FetchNext(ZWRServe.g_strMQURL, ZWRServe.g_strQueue, m_strPointer);
+			FetchOutcome objOutcome = MQFetch.Fetch(m_intSession, "FETCH", m_strPointer);
 
-			if (objFetch.HasMessage)
+			if (objOutcome.HasMessage)
 			{
+				MQFetchResult objFetch = new MQFetchResult();
+
+				objFetch.HasMessage = true;
+				objFetch.Filename = objOutcome.Filename;
+				objFetch.Pointer = objOutcome.Filename;
+				objFetch.EncodedBytes = objOutcome.Data;
+
 				m_blnWaiting = false;
 				acceptMessage(objFetch);
 			}
 			else
 			{
+				if (objOutcome.Status != MQFetch.STATUS_EMPTY)
+				{
+					ZWRServe.Log(m_strPrefix + "fetch failed " + objOutcome.Status + " after " + (objOutcome.TotalMs / 1000.0).ToString("0.0") + "s, " + objOutcome.BytesReceived + " bytes received" + (objOutcome.Reason.Length > 0 ? " - " + objOutcome.Reason : ""));
+				}
+
 				endOfQueue();
 			}
 		}
@@ -1403,7 +1516,7 @@ internal class TrackSource : IDisposable
 		{
 			if (!m_blnWaiting)
 			{
-				MQCheckStatus objStatus = m_objMQ.Check(ZWRServe.g_strMQURL, ZWRServe.g_strQueue, m_strPointer);
+				MQCheckStatus objStatus = MQFetch.Check(m_intSession, m_strPointer);
 				string strFiller = (ZWRServe.g_objElevator != null) ? "elevator" : "silence";
 
 				if (objStatus == MQCheckStatus.Error)
@@ -1644,6 +1757,12 @@ internal class TrackSource : IDisposable
 			{
 				m_objReader.Dispose();
 				m_objReader = null;
+			}
+
+			if (m_objInsertReader != null)
+			{
+				m_objInsertReader.Dispose();
+				m_objInsertReader = null;
 			}
 
 			m_blnDisposed = true;
@@ -2257,5 +2376,660 @@ internal class MP3Reader : IDisposable
 			m_objStream.Dispose();
 			m_objStream = null;
 		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Inserts (-a) - ads / host talk between tracks. The folder is re-read every time
+// an insert is due, so files can be added or removed while zwrserve is running.
+// -----------------------------------------------------------------------------
+
+internal static class Inserts
+{
+	private static readonly Random s_objRandom = new Random();
+	private static readonly object s_objLock = new object();
+
+	internal static string[] ListFiles()
+	{
+		List<string> objResult = new List<string>();
+
+		try
+		{
+			string[] arrAll = Directory.GetFiles(ZWRServe.g_strInsertFolder);
+			int intI = 0;
+
+			for (intI = 0; intI < arrAll.Length; intI++)
+			{
+				if (arrAll[intI].EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+				{
+					objResult.Add(arrAll[intI]);
+				}
+			}
+		}
+		catch { }
+
+		return objResult.ToArray();
+	}
+
+	// True intPercent_a% of the time.
+	internal static bool Roll(int intPercent_a)
+	{
+		bool blnResult = false;
+
+		lock (s_objLock)
+		{
+			blnResult = s_objRandom.Next(100) < intPercent_a;
+		}
+
+		return blnResult;
+	}
+
+	// Opens a random insert, avoiding strAvoid_a (the last one played) when there's a choice.
+	// With a known stream format, an insert at a different sample rate or channel count is
+	// skipped, because Chrome stops the stream at a format change. Returns null if none fits.
+	internal static MP3Reader Open(int intSampleRate_a, int intChannels_a, string strAvoid_a, string strPrefix_a, out string strFile_a)
+	{
+		MP3Reader objResult = null;
+		List<string> objFiles = new List<string>(ListFiles());
+
+		strFile_a = "";
+
+		if (objFiles.Count > 1)
+		{
+			objFiles.Remove(strAvoid_a);
+		}
+
+		// Shuffle, then take the first that fits.
+		lock (s_objLock)
+		{
+			int intI = 0;
+
+			for (intI = objFiles.Count - 1; intI > 0; intI--)
+			{
+				int intJ = s_objRandom.Next(intI + 1);
+				string strTemp = objFiles[intI];
+				objFiles[intI] = objFiles[intJ];
+				objFiles[intJ] = strTemp;
+			}
+		}
+
+		{
+			int intI = 0;
+
+			while (objResult == null && intI < objFiles.Count)
+			{
+				MP3Reader objReader = null;
+
+				try
+				{
+					objReader = new MP3Reader(objFiles[intI], 0);
+				}
+				catch (Exception objEx)
+				{
+					ZWRServe.Log(strPrefix_a + "insert  skipped " + Path.GetFileName(objFiles[intI]) + " - cannot read: " + objEx.Message);
+				}
+
+				if (objReader != null)
+				{
+					if (!objReader.IsMP3)
+					{
+						ZWRServe.Log(strPrefix_a + "insert  skipped " + Path.GetFileName(objFiles[intI]) + " - not an MP3");
+						objReader.Dispose();
+					}
+					else
+					{
+						MP3Frame objFirst = objReader.ReadFrame();
+
+						objReader.Dispose();
+						objReader = null;
+
+						if (objFirst != null && intSampleRate_a != 0 && (objFirst.SampleRate != intSampleRate_a || objFirst.Channels != intChannels_a))
+						{
+							ZWRServe.Log(strPrefix_a + "insert  skipped " + Path.GetFileName(objFiles[intI]) + " - " + objFirst.SampleRate + "Hz/" + objFirst.Channels + "ch, stream is " + intSampleRate_a + "Hz/" + intChannels_a + "ch");
+						}
+						else if (objFirst != null)
+						{
+							objResult = new MP3Reader(objFiles[intI], 0);
+							strFile_a = objFiles[intI];
+						}
+					}
+				}
+
+				intI++;
+			}
+		}
+
+		return objResult;
+	}
+}
+
+// -----------------------------------------------------------------------------
+// MQFetch - the same request as MQClient.FetchNext (POST action=fetch, q, after,
+// random GUID User-Agent, 60 second limit), but it reports how each fetch ended
+// instead of just "no message": end of queue, timeout, network error, HTTP error,
+// server error. Every fetch is written to the CSV log when -log is on.
+// -----------------------------------------------------------------------------
+
+internal class FetchOutcome
+{
+	public bool HasMessage = false;
+	public string Filename = "";
+	public byte[] Data = null;
+	public string Status = "";
+	public string Reason = "";
+	public int HttpStatus = -1;
+	public long BytesReceived = 0;
+	public long BytesExpected = -1;     // Content-Length, when the server sends one
+	public long FirstByteMs = -1;       // time until the response headers arrived
+	public long TotalMs = 0;
+}
+
+internal static class MQFetch
+{
+	internal const int TIMEOUT_SECONDS = 60;                 // same as MQClient(60) used before
+
+	internal const string STATUS_OK = "OK";                  // message received
+	internal const string STATUS_EMPTY = "EMPTY";            // server says nothing after this pointer (end of queue)
+	internal const string STATUS_TIMEOUT = "TIMEOUT";        // no complete response within TIMEOUT_SECONDS
+	internal const string STATUS_NETWORK = "NETWORK";        // connect failed, DNS, reset, dropped mid-download
+	internal const string STATUS_HTTP_ERROR = "HTTP_ERROR";  // non-2xx status from the web server
+	internal const string STATUS_SERVER_ERROR = "SERVER_ERROR"; // MQ answered with an error message
+	internal const string STATUS_UNKNOWN = "UNKNOWN";        // answered, but not in a form we recognise
+
+	private static readonly HttpClient s_objClient = createClient();
+
+	private static HttpClient createClient()
+	{
+		HttpClient objClient = new HttpClient();
+		objClient.Timeout = Timeout.InfiniteTimeSpan;   // the per-request token below does the timing
+		return objClient;
+	}
+
+	internal static MQCheckStatus Check(int intSession_a, string strAfter_a)
+	{
+		MQCheckStatus objResult = MQCheckStatus.Error;
+		FetchOutcome objOutcome = Fetch(intSession_a, "CHECK", strAfter_a);
+
+		if (objOutcome.Status == STATUS_OK)
+		{
+			objResult = MQCheckStatus.New;
+		}
+		else if (objOutcome.Status == STATUS_EMPTY)
+		{
+			objResult = MQCheckStatus.UpToDate;
+		}
+
+		return objResult;
+	}
+
+	// strKind_a is "FETCH" or "CHECK" - only used for the log.
+	internal static FetchOutcome Fetch(int intSession_a, string strKind_a, string strAfter_a)
+	{
+		FetchOutcome objResult = new FetchOutcome();
+		Stopwatch objClock = Stopwatch.StartNew();
+
+		CsvLog.Event(intSession_a, strKind_a + "_START", "", strAfter_a, "", null, "");
+
+		using (CancellationTokenSource objCts = new CancellationTokenSource(TimeSpan.FromSeconds(TIMEOUT_SECONDS)))
+		{
+			try
+			{
+				using (HttpRequestMessage objRequest = new HttpRequestMessage(HttpMethod.Post, ZWRServe.g_strMQURL))
+				{
+					Dictionary<string, string> arrFields = new Dictionary<string, string>
+					{
+						{ "action", "fetch" },
+						{ "q", ZWRServe.g_strQueue },
+						{ "after", strAfter_a }
+					};
+
+					objRequest.Headers.TryAddWithoutValidation("User-Agent", Guid.NewGuid().ToString());
+					objRequest.Content = new FormUrlEncodedContent(arrFields);
+
+					using (HttpResponseMessage objResponse = s_objClient.SendAsync(objRequest, HttpCompletionOption.ResponseHeadersRead, objCts.Token).GetAwaiter().GetResult())
+					{
+						string strDisposition = "";
+						byte[] arrBody = null;
+
+						objResult.FirstByteMs = objClock.ElapsedMilliseconds;
+						objResult.HttpStatus = (int)objResponse.StatusCode;
+
+						if (objResponse.Content.Headers.ContentLength.HasValue)
+						{
+							objResult.BytesExpected = objResponse.Content.Headers.ContentLength.Value;
+						}
+
+						if (objResponse.Content.Headers.Contains("Content-Disposition"))
+						{
+							IEnumerator<string> objEnum = objResponse.Content.Headers.GetValues("Content-Disposition").GetEnumerator();
+							if (objEnum.MoveNext())
+							{
+								strDisposition = objEnum.Current ?? "";
+							}
+						}
+
+						arrBody = readBody(objResponse, objCts.Token, objResult);
+						classify(objResponse, strDisposition, arrBody, objResult);
+					}
+				}
+			}
+			catch (OperationCanceledException)
+			{
+				objResult.Status = STATUS_TIMEOUT;
+				objResult.Reason = (objResult.FirstByteMs < 0)
+					? "no response within " + TIMEOUT_SECONDS + "s"
+					: "response started after " + (objResult.FirstByteMs / 1000.0).ToString("0.0") + "s but did not finish within " + TIMEOUT_SECONDS + "s";
+			}
+			catch (HttpRequestException objEx)
+			{
+				objResult.Status = STATUS_NETWORK;
+				objResult.Reason = describe(objEx);
+			}
+			catch (IOException objEx)
+			{
+				objResult.Status = STATUS_NETWORK;
+				objResult.Reason = "connection dropped during download - " + describe(objEx);
+			}
+			catch (Exception objEx)
+			{
+				objResult.Status = STATUS_UNKNOWN;
+				objResult.Reason = describe(objEx);
+			}
+		}
+
+		objResult.TotalMs = objClock.ElapsedMilliseconds;
+		CsvLog.Event(intSession_a, strKind_a + "_END", objResult.Status, strAfter_a, objResult.Filename, objResult, objResult.Reason);
+
+		return objResult;
+	}
+
+	// Reads the whole body, counting bytes as they arrive so a timeout or drop shows how far it got.
+	private static byte[] readBody(HttpResponseMessage objResponse_a, CancellationToken objToken_a, FetchOutcome objResult_a)
+	{
+		byte[] arrResult = null;
+		byte[] arrBuffer = new byte[65536];
+
+		using (Stream objStream = objResponse_a.Content.ReadAsStreamAsync(objToken_a).GetAwaiter().GetResult())
+		using (MemoryStream objMemory = new MemoryStream())
+		{
+			bool blnDone = false;
+
+			while (!blnDone)
+			{
+				int intRead = objStream.ReadAsync(arrBuffer, 0, arrBuffer.Length, objToken_a).GetAwaiter().GetResult();
+
+				if (intRead <= 0)
+				{
+					blnDone = true;
+				}
+				else
+				{
+					objMemory.Write(arrBuffer, 0, intRead);
+					objResult_a.BytesReceived += intRead;
+				}
+			}
+
+			arrResult = objMemory.ToArray();
+		}
+
+		return arrResult;
+	}
+
+	private static void classify(HttpResponseMessage objResponse_a, string strDisposition_a, byte[] arrBody_a, FetchOutcome objResult_a)
+	{
+		if (!objResponse_a.IsSuccessStatusCode)
+		{
+			objResult_a.Status = STATUS_HTTP_ERROR;
+			objResult_a.Reason = objResult_a.HttpStatus + " " + (objResponse_a.ReasonPhrase ?? "") + snippet(arrBody_a);
+		}
+		else if (strDisposition_a.Length > 0)
+		{
+			objResult_a.HasMessage = true;
+			objResult_a.Status = STATUS_OK;
+			objResult_a.Filename = parseFilename(strDisposition_a);
+			objResult_a.Data = arrBody_a;
+
+			if (objResult_a.BytesExpected >= 0 && objResult_a.BytesReceived != objResult_a.BytesExpected)
+			{
+				objResult_a.Reason = "received " + objResult_a.BytesReceived + " of " + objResult_a.BytesExpected + " bytes";
+			}
+		}
+		else
+		{
+			string strBody = Encoding.UTF8.GetString(arrBody_a);
+			string strError = jsonString(strBody, "error");
+			string strMessage = jsonString(strBody, "message");
+
+			if (strError.Length > 0)
+			{
+				objResult_a.Status = STATUS_SERVER_ERROR;
+				objResult_a.Reason = strError;
+			}
+			else if (strMessage.IndexOf("No new messages", StringComparison.OrdinalIgnoreCase) >= 0 || strMessage.IndexOf("empty", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				objResult_a.Status = STATUS_EMPTY;
+				objResult_a.Reason = strMessage;
+			}
+			else
+			{
+				objResult_a.Status = STATUS_UNKNOWN;
+				objResult_a.Reason = (strMessage.Length > 0) ? strMessage : "no Content-Disposition and no MQ message" + snippet(arrBody_a);
+			}
+		}
+	}
+
+	private static string parseFilename(string strDisposition_a)
+	{
+		string strResult = "";
+		int intPos = strDisposition_a.IndexOf("filename=\"");
+
+		if (intPos >= 0)
+		{
+			int intStart = intPos + 10;
+			int intEnd = strDisposition_a.IndexOf("\"", intStart);
+
+			if (intEnd > intStart)
+			{
+				strResult = strDisposition_a.Substring(intStart, intEnd - intStart);
+			}
+		}
+
+		return strResult;
+	}
+
+	// Value of a simple "key":"value" pair in the MQ's JSON reply, or "".
+	private static string jsonString(string strBody_a, string strKey_a)
+	{
+		string strResult = "";
+		string strSearch = "\"" + strKey_a + "\"";
+		int intPos = strBody_a.IndexOf(strSearch);
+
+		if (intPos >= 0)
+		{
+			int intColon = strBody_a.IndexOf(':', intPos + strSearch.Length);
+			int intStart = (intColon >= 0) ? strBody_a.IndexOf('"', intColon + 1) : -1;
+
+			if (intStart >= 0)
+			{
+				StringBuilder objSB = new StringBuilder();
+				int intI = intStart + 1;
+				bool blnDone = false;
+
+				while (!blnDone && intI < strBody_a.Length)
+				{
+					char chr = strBody_a[intI];
+
+					if (chr == '\\' && intI + 1 < strBody_a.Length)
+					{
+						objSB.Append(strBody_a[intI + 1]);
+						intI += 2;
+					}
+					else if (chr == '"')
+					{
+						blnDone = true;
+					}
+					else
+					{
+						objSB.Append(chr);
+						intI++;
+					}
+				}
+
+				strResult = objSB.ToString();
+			}
+		}
+
+		return strResult;
+	}
+
+	// First part of a body as text, for the reason column (web server error pages etc).
+	private static string snippet(byte[] arrBody_a)
+	{
+		string strResult = "";
+
+		if (arrBody_a != null && arrBody_a.Length > 0)
+		{
+			string strText = Encoding.UTF8.GetString(arrBody_a, 0, Math.Min(arrBody_a.Length, 300));
+			strText = strText.Replace("\r", " ").Replace("\n", " ").Trim();
+			strResult = " - " + strText;
+		}
+
+		return strResult;
+	}
+
+	// Exception type and message, including the underlying socket error where there is one.
+	private static string describe(Exception objEx_a)
+	{
+		StringBuilder objSB = new StringBuilder();
+		Exception objEx = objEx_a;
+		int intDepth = 0;
+
+		while (objEx != null && intDepth < 4)
+		{
+			if (objSB.Length > 0)
+			{
+				objSB.Append(" <- ");
+			}
+
+			objSB.Append(objEx.GetType().Name);
+
+			if (objEx is SocketException)
+			{
+				objSB.Append(" (" + ((SocketException)objEx).SocketErrorCode + ")");
+			}
+
+			objSB.Append(": " + objEx.Message);
+			objEx = objEx.InnerException;
+			intDepth++;
+		}
+
+		return objSB.ToString();
+	}
+}
+
+// -----------------------------------------------------------------------------
+// CsvLog - -log: every console line and every MQ fetch to <exename>log.csv next
+// to the exe. Lines are queued and written by a background thread, so a slow
+// disk, or the file being open in Excel, never holds up streaming. If the file
+// is locked the lines wait in memory and are written once it's free. Several
+// instances (one per port) can share one file - each line carries its port.
+// -----------------------------------------------------------------------------
+
+internal static class CsvLog
+{
+	internal static bool Enabled = false;
+	internal static string FilePath = "";
+
+	private const string HEADER = "Time,Port,Session,Event,Status,After,Message,HttpStatus,BytesReceived,BytesExpected,FirstByteMs,TotalMs,Reason,Text";
+	private const int MAX_PENDING = 200000;
+
+	private static readonly object s_objLock = new object();
+	private static readonly List<string> s_objPending = new List<string>();
+	private static readonly AutoResetEvent s_objSignal = new AutoResetEvent(false);
+	private static int s_intDropped = 0;
+
+	internal static void Start()
+	{
+		string strName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
+
+		// Run as "dotnet zwrserve.dll" the process is dotnet - use the app's own name instead.
+		if (strName.Length == 0 || strName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+		{
+			strName = AppDomain.CurrentDomain.FriendlyName;
+		}
+
+		FilePath = Path.Combine(AppContext.BaseDirectory, strName + "log.csv");
+
+		{
+			Thread objWriter = new Thread(writerLoop);
+			objWriter.IsBackground = true;
+			objWriter.Start();
+		}
+
+		Event(-1, "START", "", "", "", null, "ZOSCII Web Radio Serve " + ZWRServe.VERSION + "  " + string.Join(" ", Environment.GetCommandLineArgs(), 1, Environment.GetCommandLineArgs().Length - 1));
+	}
+
+	// A console line. The session comes from its "[n] " or "[shared] " prefix, if it has one.
+	internal static void Line(string strText_a)
+	{
+		if (Enabled)
+		{
+			int intSession = -1;
+
+			if (strText_a.StartsWith("[shared]"))
+			{
+				intSession = 0;
+			}
+			else if (strText_a.StartsWith("["))
+			{
+				int intEnd = strText_a.IndexOf(']');
+				int intParsed = 0;
+
+				if (intEnd > 1 && int.TryParse(strText_a.Substring(1, intEnd - 1), out intParsed))
+				{
+					intSession = intParsed;
+				}
+			}
+
+			Event(intSession, "LOG", "", "", "", null, strText_a);
+		}
+	}
+
+	internal static void Event(int intSession_a, string strEvent_a, string strStatus_a, string strAfter_a, string strMessage_a, FetchOutcome objFetch_a, string strText_a)
+	{
+		if (Enabled)
+		{
+			StringBuilder objSB = new StringBuilder();
+			bool blnFetch = (objFetch_a != null);
+
+			objSB.Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")).Append(',');
+			objSB.Append(ZWRServe.g_intPort).Append(',');
+			objSB.Append(intSession_a >= 0 ? intSession_a.ToString() : "").Append(',');
+			objSB.Append(field(strEvent_a)).Append(',');
+			objSB.Append(field(strStatus_a)).Append(',');
+			objSB.Append(field(strAfter_a)).Append(',');
+			objSB.Append(field(strMessage_a)).Append(',');
+			objSB.Append(blnFetch && objFetch_a.HttpStatus >= 0 ? objFetch_a.HttpStatus.ToString() : "").Append(',');
+			objSB.Append(blnFetch ? objFetch_a.BytesReceived.ToString() : "").Append(',');
+			objSB.Append(blnFetch && objFetch_a.BytesExpected >= 0 ? objFetch_a.BytesExpected.ToString() : "").Append(',');
+			objSB.Append(blnFetch && objFetch_a.FirstByteMs >= 0 ? objFetch_a.FirstByteMs.ToString() : "").Append(',');
+			objSB.Append(blnFetch ? objFetch_a.TotalMs.ToString() : "").Append(',');
+			objSB.Append(field(blnFetch ? objFetch_a.Reason : "")).Append(',');
+			objSB.Append(field(blnFetch ? "" : strText_a));
+
+			lock (s_objLock)
+			{
+				if (s_objPending.Count < MAX_PENDING)
+				{
+					s_objPending.Add(objSB.ToString());
+				}
+				else
+				{
+					s_intDropped++;
+				}
+			}
+
+			s_objSignal.Set();
+		}
+	}
+
+	// Waits up to intWaitMs_a for queued lines to reach the file.
+	internal static void Flush(int intWaitMs_a)
+	{
+		if (Enabled)
+		{
+			Stopwatch objWait = Stopwatch.StartNew();
+			bool blnEmpty = false;
+
+			while (!blnEmpty && objWait.ElapsedMilliseconds < intWaitMs_a)
+			{
+				s_objSignal.Set();
+				Thread.Sleep(50);
+
+				lock (s_objLock)
+				{
+					blnEmpty = (s_objPending.Count == 0);
+				}
+			}
+		}
+	}
+
+	private static void writerLoop()
+	{
+		while (true)
+		{
+			s_objSignal.WaitOne(500);
+			writePending();
+		}
+	}
+
+	private static void writePending()
+	{
+		string[] arrLines = null;
+		int intDropped = 0;
+
+		lock (s_objLock)
+		{
+			arrLines = s_objPending.ToArray();
+			intDropped = s_intDropped;
+		}
+
+		if (arrLines.Length > 0 || intDropped > 0)
+		{
+			try
+			{
+				// FileShare.Read: readers (Excel, notepad) are fine, but only one writer at a time,
+				// so instances sharing the file take turns instead of overwriting each other.
+				using (FileStream objFile = new FileStream(FilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+				using (StreamWriter objWriter = new StreamWriter(objFile, new UTF8Encoding(false)))
+				{
+					int intI = 0;
+
+					if (objFile.Length == 0)
+					{
+						objFile.Write(new byte[] { 0xEF, 0xBB, 0xBF }, 0, 3);   // BOM so Excel reads UTF-8 (Korean titles etc)
+						objWriter.WriteLine(HEADER);
+					}
+
+					if (intDropped > 0)
+					{
+						objWriter.WriteLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + "," + ZWRServe.g_intPort + ",,DROPPED,,,,,,,,,," + intDropped + " log lines dropped while the file was unavailable");
+					}
+
+					for (intI = 0; intI < arrLines.Length; intI++)
+					{
+						objWriter.WriteLine(arrLines[intI]);
+					}
+				}
+
+				lock (s_objLock)
+				{
+					s_objPending.RemoveRange(0, arrLines.Length);
+					s_intDropped -= intDropped;
+				}
+			}
+			catch
+			{
+				// Locked by another instance or open for editing - keep the lines, try again shortly.
+			}
+		}
+	}
+
+	// CSV field: quoted when needed; a leading = + - @ gets a ' so Excel shows it as text, not a formula.
+	private static string field(string strValue_a)
+	{
+		string strResult = strValue_a ?? "";
+
+		if (strResult.Length > 0 && (strResult[0] == '=' || strResult[0] == '+' || strResult[0] == '-' || strResult[0] == '@'))
+		{
+			strResult = "'" + strResult;
+		}
+
+		if (strResult.IndexOf(',') >= 0 || strResult.IndexOf('"') >= 0 || strResult.IndexOf('\r') >= 0 || strResult.IndexOf('\n') >= 0)
+		{
+			strResult = "\"" + strResult.Replace("\"", "\"\"") + "\"";
+		}
+
+		return strResult;
 	}
 }

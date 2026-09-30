@@ -14,9 +14,10 @@ namespace CyborgUnicorn.ZOSCII
     /// microZOSCII bootstrap encoding.
     ///
     /// The microROM is a string of hex nibbles (0-F), up to 256 characters.
-    /// Each nibble of the full ROM hex is encoded as a 1-byte address: the position
+    /// Each nibble of the full ROM is encoded as a 1-byte address: the position
     /// inside the microROM where that nibble value appears (chosen randomly from all
     /// matching positions). Decoding is a simple lookup: microROM[address].
+    /// Nibble order is little-endian: low nibble first, then high nibble.
     ///
     /// microROM sizes:
     ///   FromBytes   - exactly 240 nibbles (clamped), derived from any byte array(s)
@@ -235,8 +236,9 @@ namespace CyborgUnicorn.ZOSCII
 
         /// <summary>
         /// Encode a ROM byte array using the microROM.
-        /// Each byte of arrROM_a is hex-expanded to 2 nibbles; each nibble is encoded
-        /// as a randomly selected 1-byte address into the microROM where that nibble appears.
+        /// Each byte of arrROM_a is split into 2 nibbles, low nibble first (little-endian);
+        /// each nibble is encoded as a randomly selected 1-byte address into the microROM
+        /// where that nibble appears.
         /// strMicroROM_a - microROM string from FromBytes or FromBase62.
         /// arrROM_a      - the full ROM bytes to encode.
         /// Returns a byte[] of addresses (2x the ROM size), or null on error.
@@ -266,8 +268,8 @@ namespace CyborgUnicorn.ZOSCII
 
                         if (arrHighPos.Count > 0 && arrLowPos.Count > 0)
                         {
-                            arrAddresses[intOut]     = arrHighPos[objRandom.Next(arrHighPos.Count)];
-                            arrAddresses[intOut + 1] = arrLowPos [objRandom.Next(arrLowPos.Count)];
+                            arrAddresses[intOut]     = arrLowPos [objRandom.Next(arrLowPos.Count)];
+                            arrAddresses[intOut + 1] = arrHighPos[objRandom.Next(arrHighPos.Count)];
                             intOut += 2;
                         }
                     }
@@ -285,7 +287,8 @@ namespace CyborgUnicorn.ZOSCII
 
         /// <summary>
         /// Decode an address array back to ROM bytes using the microROM.
-        /// Each address is a 1-byte index into strMicroROM_a; pairs of nibbles reassemble bytes.
+        /// Each address is a 1-byte index into strMicroROM_a; each pair of addresses is
+        /// low nibble then high nibble (little-endian) and reassembles one byte.
         /// strMicroROM_a  - microROM string from FromBytes or FromBase62.
         /// arrAddresses_a - address array from Encode or received from peer.
         /// Returns the decoded ROM byte array, or null on error.
@@ -317,8 +320,8 @@ namespace CyborgUnicorn.ZOSCII
 
                         for (intI = 0; intI < arrBytes.Length; intI++)
                         {
-                            int intHigh = hexNibbleValue(strMicroROM_a[arrAddresses_a[intI * 2]]);
-                            int intLow  = hexNibbleValue(strMicroROM_a[arrAddresses_a[intI * 2 + 1]]);
+                            int intLow  = hexNibbleValue(strMicroROM_a[arrAddresses_a[intI * 2]]);
+                            int intHigh = hexNibbleValue(strMicroROM_a[arrAddresses_a[intI * 2 + 1]]);
 
                             if (intHigh >= 0 && intLow >= 0)
                             {

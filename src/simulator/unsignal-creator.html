@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Create a ZOSCII Protocol Alpha 0.1</title>
+<title>Create a ZOSCII Protocol</title>
 <style>
 * { box-sizing: border-box; font-family: 'Courier New', monospace; }
 body { margin:0; padding:20px; background:#1a1a1a; color:#e0e0e0; overflow-x:hidden; }
@@ -57,7 +57,7 @@ pre { background:#050505; color:#cfe8cf; border:1px solid #333; border-radius:5p
 </style>
 </head>
 <body>
-<h1>⚙ CREATE A ZOSCII PROTOCOL Alpha 0.1</h1>
+<h1>⚙ CREATE A ZOSCII PROTOCOL</h1>
 <div class="subtitle">Pick your options → get encode(arrROM_a, arrMessage_a, objArgs_a) / decode(arrROM_a, arrEncoded_a, objArgs_a) in every language. The options build an <span class="args">args</span> object; the code is one general implementation driven by it.</div>
 
 <div id="left">
@@ -174,15 +174,31 @@ const $=id=>document.getElementById(id);
 // ==================================================================
 // Build the args object from the UI
 // ==================================================================
+// largest value a header field of intSlots addresses can carry (a slot carries elemBits/2 bits)
+function slotCap(intElemBits, intSlots){ return Math.pow(2, (intElemBits/2)*intSlots) - 1; }
+function clampNum(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+// keep min/max inputs inside what the header can hold (nibble byte-width prefix = 10..15, nibble block size <= 255)
+function clampFields(){
+  var e=parseInt($('elemBits').value,10);
+  [['pfxW','pfxMin','pfxMax'],['sfxW','sfxMin','sfxMax']].forEach(function(f){
+    var cap=slotCap(e, parseInt($(f[0]).value,10)); var mx=parseInt($(f[2]).value,10)||0;
+    if(mx===15 && cap>15){ mx=255; }
+    mx=clampNum(mx,0,cap); $(f[2]).value=mx;
+    $(f[1]).value=clampNum(parseInt($(f[1]).value,10)||0,0,mx);
+  });
+  var bcap=slotCap(e,2); var bmx=parseInt($('blkMax').value,10)||0;
+  if(e===16 && bmx===255){ bmx=512; }
+  bmx=clampNum(bmx,1,bcap); $('blkMax').value=bmx; $('blkMin').value=clampNum(parseInt($('blkMin').value,10)||1,1,bmx);
+}
 function readArgs(){
   return {
     elemBits: parseInt($('elemBits').value,10),
     sliding: $('sliding').value==='true',
     blocks: ($('blocks').value==='multi') ? 1 : 0,
-    blockMin: parseInt($('blkMin').value,10)||128,
-    blockMax: parseInt($('blkMax').value,10)||512,
-    prefix: { on:$('pfxOn').checked, width:parseInt($('pfxW').value,10), min:parseInt($('pfxMin').value,10)||0, max:parseInt($('pfxMax').value,10)||0 },
-    suffix: { on:$('sfxOn').checked, width:parseInt($('sfxW').value,10), min:parseInt($('sfxMin').value,10)||0, max:parseInt($('sfxMax').value,10)||0 },
+    blockMin: clampNum(parseInt($('blkMin').value,10)||128, 1, slotCap(parseInt($('elemBits').value,10),2)),
+    blockMax: clampNum(parseInt($('blkMax').value,10)||512, 1, slotCap(parseInt($('elemBits').value,10),2)),
+    prefix: { on:$('pfxOn').checked, width:parseInt($('pfxW').value,10), min:clampNum(parseInt($('pfxMin').value,10)||0, 0, slotCap(parseInt($('elemBits').value,10),parseInt($('pfxW').value,10))), max:clampNum(parseInt($('pfxMax').value,10)||0, 0, slotCap(parseInt($('elemBits').value,10),parseInt($('pfxW').value,10))) },
+    suffix: { on:$('sfxOn').checked, width:parseInt($('sfxW').value,10), min:clampNum(parseInt($('sfxMin').value,10)||0, 0, slotCap(parseInt($('elemBits').value,10),parseInt($('sfxW').value,10))), max:clampNum(parseInt($('sfxMax').value,10)||0, 0, slotCap(parseInt($('elemBits').value,10),parseInt($('sfxW').value,10))) },
     rollingHash: ({none:0, presegment:1, prefix:2})[$('roll').value],
     crc32: $('crc').checked,
     brainless: ({none:0, forward:1, backward:2})[$('brain').value],
@@ -212,12 +228,12 @@ function @@buildWindow(arrROM_a, intOffset_a, intSize_a) { var arrWindow = []; v
 function @@crc32Std(arrBytes_a) { var lngCrc = 0xFFFFFFFF; var lngX = 0; var intI = 0; var intJ = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = ((lngX >>> 1) ^ 0xEDB88320) >>> 0; } else { lngX = lngX >>> 1; } } lngCrc = ((lngCrc >>> 8) ^ lngX) >>> 0; } return (lngCrc ^ 0xFFFFFFFF) >>> 0; }
 function @@djb2(arrBytes_a) { var lngHash = 0; var intI = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
 function @@effSize(intROMLen_a, intCap_a, blnSliding_a) { var intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
-function @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a) { var intI = 0; var byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (8 * intI)) & 0xFF; @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), 2); } }
+function @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a, intAddrBytes_a, intValueBits_a) { var intI = 0; var byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
 function @@nextRand() { var lngState = m_lngRandState; lngState = (lngState ^ (lngState << 13)) >>> 0; lngState = (lngState ^ (lngState >>> 17)) >>> 0; lngState = (lngState ^ (lngState << 5)) >>> 0; m_lngRandState = lngState; return lngState; }
-function @@offset(intPtr_a, intROMLen_a, intCap_a, blnSliding_a) { var intOffset = 0; var objSpan = null; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % objSpan.wrap; } } return intOffset; }
+function @@offset(intPtr_a, intROMLen_a, intCap_a, blnSliding_a) { var intOffset = 0; var objSpan = null; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % (objSpan.wrap + 1); } } return intOffset; }
 function @@pick(arrWindow_a, intValue_a) { var intAddr = 0; var intLen = arrWindow_a[intValue_a].length; if (intLen > 0) { intAddr = arrWindow_a[intValue_a][@@nextRand() % intLen]; } return intAddr; }
 function @@pushLE(arrOut_a, lngValue_a, intBytes_a) { var intI = 0; for (intI = 0; intI < intBytes_a; intI++) { arrOut_a.push((lngValue_a >>> (8 * intI)) & 0xFF); } }
-function @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a) { var intValue = 0; var intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * 2, 2)] << (8 * intI)); } return intValue; }
+function @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a, intAddrBytes_a, intValueBits_a) { var intValue = 0; var intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
 function @@readLE(arrBytes_a, intPos_a, intBytes_a) { var lngValue = 0; var intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = (lngValue | (arrBytes_a[intPos_a + intI] << (8 * intI))) >>> 0; } return lngValue; }
 function @@regime(intROMLen_a, intCap_a) { var intPct = Math.floor(intROMLen_a * 2 / 100); var intLimit = intCap_a + Math.floor(intCap_a * 2 / 100); var objSpan = { size: intCap_a, wrap: intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
 function @@seed(arrROM_a, lngExtra_a) { var lngSeed = @@djb2(arrROM_a); lngSeed = (lngSeed ^ @@timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
@@ -228,9 +244,12 @@ function @@zacLen(objArgs_a) { var intLen = 0; if (objArgs_a.zac.on) { intLen = 
 
 function @@encode(arrROM_a, arrMessage_a, objArgs_a)
 {
-    var ADDRESS_SPACE = 65536;
+    var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    var intAddrBytes = objArgs_a.elemBits / 8;
+    var intValueBits = objArgs_a.elemBits / 2;
     var arrOut = [];
     var arrPayload = [];
+    var arrElems = [];
     var arrZac = [];
     var arrPrefix = [];
     var arrSuffix = [];
@@ -284,6 +303,24 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         arrPayload.push(arrMessage_a[intI]);
     }
 
+    // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI < arrPayload.length; intI++)
+        {
+            arrElems.push(arrPayload[intI] & 0x0F);
+            arrElems.push((arrPayload[intI] >> 4) & 0x0F);
+        }
+        intHeadLen = intHeadLen * 2;
+    }
+    else
+    {
+        for (intI = 0; intI < arrPayload.length; intI++)
+        {
+            arrElems.push(arrPayload[intI]);
+        }
+    }
+
     // random prefix / suffix
     if (objArgs_a.prefix.on)
     {
@@ -320,12 +357,12 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
             arrBlocks.push({ start: 0, len: intHeadLen, ptr: 0, addrs: [] });
             intI = intHeadLen;
         }
-        while (intI < arrPayload.length)
+        while (intI < arrElems.length)
         {
             intBlockLen = objArgs_a.blockMin + (@@nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1));
-            if (intBlockLen > arrPayload.length - intI)
+            if (intBlockLen > arrElems.length - intI)
             {
-                intBlockLen = arrPayload.length - intI;
+                intBlockLen = arrElems.length - intI;
             }
             arrBlocks.push({ start: intI, len: intBlockLen, ptr: 0, addrs: [] });
             intI = intI + intBlockLen;
@@ -337,7 +374,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     }
     else
     {
-        arrBlocks.push({ start: 0, len: arrPayload.length, ptr: 0, addrs: [] });
+        arrBlocks.push({ start: 0, len: arrElems.length, ptr: 0, addrs: [] });
     }
 
     // encode each block at its own offset
@@ -354,7 +391,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         arrBlocks[intK].ptr = intPtr;
         for (intI = 0; intI < arrBlocks[intK].len; intI++)
         {
-            intValue = arrPayload[arrBlocks[intK].start + intI];
+            intValue = arrElems[arrBlocks[intK].start + intI];
             if (arrWindow[intValue].length > 0)
             {
                 arrBlocks[intK].addrs.push(@@pick(arrWindow, intValue));
@@ -371,19 +408,19 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if (objArgs_a.sliding)
         {
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2);
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits);
         }
         if (blnMulti)
         {
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length, 2);
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length, 2, intAddrBytes, intValueBits);
         }
         if (objArgs_a.prefix.on)
         {
-            @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width);
+            @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits);
         }
         if (objArgs_a.suffix.on)
         {
-            @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width);
+            @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         }
         for (intI = 0; intI < intPrefixLen; intI++)
         {
@@ -395,18 +432,18 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
             {
                 if (intK + 1 < arrBlocks.length)
                 {
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2);
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length, 2);
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
-                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2);
-                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2);
+                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
                 }
             }
             for (intI = 0; intI < arrBlocks[intK].addrs.length; intI++)
             {
-                @@pushLE(arrOut, arrBlocks[intK].addrs[intI], 2);
+                @@pushLE(arrOut, arrBlocks[intK].addrs[intI], intAddrBytes);
             }
         }
         for (intI = 0; intI < intSuffixLen; intI++)
@@ -421,9 +458,12 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
 
 function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
 {
-    var ADDRESS_SPACE = 65536;
+    var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    var intAddrBytes = objArgs_a.elemBits / 8;
+    var intValueBits = objArgs_a.elemBits / 2;
     var arrBytes = [];
     var arrPayload = [];
+    var arrElems = [];
     var arrMessage = [];
     var intI = 0;
     var intPos = 0;
@@ -449,23 +489,23 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if (objArgs_a.sliding)
     {
-        intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-        intPos = intPos + 4;
+        intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if (blnMulti)
     {
-        intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-        intPos = intPos + 4;
+        intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if (objArgs_a.prefix.on)
     {
-        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width);
-        intPos = intPos + objArgs_a.prefix.width * 2;
+        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.prefix.width * intAddrBytes;
     }
     if (objArgs_a.suffix.on)
     {
-        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width);
-        intPos = intPos + objArgs_a.suffix.width * 2;
+        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
@@ -475,13 +515,13 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     {
         while (intPos < intEnd)
         {
-            intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-            intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 4, 2);
-            intPos = intPos + 8;
+            intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 4 * intAddrBytes;
             for (intI = 0; intI < intSize; intI++)
             {
-                arrPayload.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, 2)]);
-                intPos = intPos + 2;
+                arrElems.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)]);
+                intPos = intPos + intAddrBytes;
             }
             intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
             intSize = intNextSize;
@@ -491,8 +531,24 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     {
         while (intPos < intEnd)
         {
-            arrPayload.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, 2)]);
-            intPos = intPos + 2;
+            arrElems.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)]);
+            intPos = intPos + intAddrBytes;
+        }
+    }
+
+    // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI + 1 < arrElems.length; intI = intI + 2)
+        {
+            arrPayload.push(arrElems[intI] | (arrElems[intI + 1] << 4));
+        }
+    }
+    else
+    {
+        for (intI = 0; intI < arrElems.length; intI++)
+        {
+            arrPayload.push(arrElems[intI]);
         }
     }
 
@@ -528,12 +584,12 @@ function @@buildWindow(arrROM_a, intOffset_a, intSize_a) { let arrWindow = []; l
 function @@crc32Std(arrBytes_a) { let lngCrc = 0xFFFFFFFF; let lngX = 0; let intI = 0; let intJ = 0; let intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = ((lngX >>> 1) ^ 0xEDB88320) >>> 0; } else { lngX = lngX >>> 1; } } lngCrc = ((lngCrc >>> 8) ^ lngX) >>> 0; } return (lngCrc ^ 0xFFFFFFFF) >>> 0; }
 function @@djb2(arrBytes_a) { let lngHash = 0; let intI = 0; let intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
 function @@effSize(intROMLen_a, intCap_a, blnSliding_a) { let intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
-function @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a) { let intI = 0; let byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (8 * intI)) & 0xFF; @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), 2); } }
+function @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a, intAddrBytes_a, intValueBits_a) { let intI = 0; let byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
 function @@nextRand() { let lngState = m_lngRandState; lngState = (lngState ^ (lngState << 13)) >>> 0; lngState = (lngState ^ (lngState >>> 17)) >>> 0; lngState = (lngState ^ (lngState << 5)) >>> 0; m_lngRandState = lngState; return lngState; }
-function @@offset(intPtr_a, intROMLen_a, intCap_a, blnSliding_a) { let intOffset = 0; let objSpan = null; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % objSpan.wrap; } } return intOffset; }
+function @@offset(intPtr_a, intROMLen_a, intCap_a, blnSliding_a) { let intOffset = 0; let objSpan = null; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % (objSpan.wrap + 1); } } return intOffset; }
 function @@pick(arrWindow_a, intValue_a) { let intAddr = 0; let intLen = arrWindow_a[intValue_a].length; if (intLen > 0) { intAddr = arrWindow_a[intValue_a][@@nextRand() % intLen]; } return intAddr; }
 function @@pushLE(arrOut_a, lngValue_a, intBytes_a) { let intI = 0; for (intI = 0; intI < intBytes_a; intI++) { arrOut_a.push((lngValue_a >>> (8 * intI)) & 0xFF); } }
-function @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a) { let intValue = 0; let intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * 2, 2)] << (8 * intI)); } return intValue; }
+function @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a, intAddrBytes_a, intValueBits_a) { let intValue = 0; let intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
 function @@readLE(arrBytes_a, intPos_a, intBytes_a) { let lngValue = 0; let intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = (lngValue | (arrBytes_a[intPos_a + intI] << (8 * intI))) >>> 0; } return lngValue; }
 function @@regime(intROMLen_a, intCap_a) { let intPct = Math.floor(intROMLen_a * 2 / 100); let intLimit = intCap_a + Math.floor(intCap_a * 2 / 100); let objSpan = { size: intCap_a, wrap: intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
 function @@seed(arrROM_a, lngExtra_a) { let lngSeed = @@djb2(arrROM_a); lngSeed = (lngSeed ^ @@timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
@@ -544,9 +600,12 @@ function @@zacLen(objArgs_a) { let intLen = 0; if (objArgs_a.zac.on) { intLen = 
 
 function @@encode(arrROM_a, arrMessage_a, objArgs_a)
 {
-    const ADDRESS_SPACE = 65536;
+    const ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    let intAddrBytes = objArgs_a.elemBits / 8;
+    let intValueBits = objArgs_a.elemBits / 2;
     let arrOut = [];
     let arrPayload = [];
+    let arrElems = [];
     let arrZac = [];
     let arrPrefix = [];
     let arrSuffix = [];
@@ -600,6 +659,24 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         arrPayload.push(arrMessage_a[intI]);
     }
 
+    // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI < arrPayload.length; intI++)
+        {
+            arrElems.push(arrPayload[intI] & 0x0F);
+            arrElems.push((arrPayload[intI] >> 4) & 0x0F);
+        }
+        intHeadLen = intHeadLen * 2;
+    }
+    else
+    {
+        for (intI = 0; intI < arrPayload.length; intI++)
+        {
+            arrElems.push(arrPayload[intI]);
+        }
+    }
+
     // random prefix / suffix
     if (objArgs_a.prefix.on)
     {
@@ -636,12 +713,12 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
             arrBlocks.push({ start: 0, len: intHeadLen, ptr: 0, addrs: [] });
             intI = intHeadLen;
         }
-        while (intI < arrPayload.length)
+        while (intI < arrElems.length)
         {
             intBlockLen = objArgs_a.blockMin + (@@nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1));
-            if (intBlockLen > arrPayload.length - intI)
+            if (intBlockLen > arrElems.length - intI)
             {
-                intBlockLen = arrPayload.length - intI;
+                intBlockLen = arrElems.length - intI;
             }
             arrBlocks.push({ start: intI, len: intBlockLen, ptr: 0, addrs: [] });
             intI = intI + intBlockLen;
@@ -653,7 +730,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     }
     else
     {
-        arrBlocks.push({ start: 0, len: arrPayload.length, ptr: 0, addrs: [] });
+        arrBlocks.push({ start: 0, len: arrElems.length, ptr: 0, addrs: [] });
     }
 
     // encode each block at its own offset
@@ -670,7 +747,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         arrBlocks[intK].ptr = intPtr;
         for (intI = 0; intI < arrBlocks[intK].len; intI++)
         {
-            intValue = arrPayload[arrBlocks[intK].start + intI];
+            intValue = arrElems[arrBlocks[intK].start + intI];
             if (arrWindow[intValue].length > 0)
             {
                 arrBlocks[intK].addrs.push(@@pick(arrWindow, intValue));
@@ -687,19 +764,19 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if (objArgs_a.sliding)
         {
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2);
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits);
         }
         if (blnMulti)
         {
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length, 2);
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length, 2, intAddrBytes, intValueBits);
         }
         if (objArgs_a.prefix.on)
         {
-            @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width);
+            @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits);
         }
         if (objArgs_a.suffix.on)
         {
-            @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width);
+            @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         }
         for (intI = 0; intI < intPrefixLen; intI++)
         {
@@ -711,18 +788,18 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
             {
                 if (intK + 1 < arrBlocks.length)
                 {
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2);
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length, 2);
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
-                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2);
-                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2);
+                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
                 }
             }
             for (intI = 0; intI < arrBlocks[intK].addrs.length; intI++)
             {
-                @@pushLE(arrOut, arrBlocks[intK].addrs[intI], 2);
+                @@pushLE(arrOut, arrBlocks[intK].addrs[intI], intAddrBytes);
             }
         }
         for (intI = 0; intI < intSuffixLen; intI++)
@@ -737,9 +814,12 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
 
 function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
 {
-    const ADDRESS_SPACE = 65536;
+    const ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    let intAddrBytes = objArgs_a.elemBits / 8;
+    let intValueBits = objArgs_a.elemBits / 2;
     let arrBytes = [];
     let arrPayload = [];
+    let arrElems = [];
     let arrMessage = [];
     let intI = 0;
     let intPos = 0;
@@ -765,23 +845,23 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if (objArgs_a.sliding)
     {
-        intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-        intPos = intPos + 4;
+        intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if (blnMulti)
     {
-        intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-        intPos = intPos + 4;
+        intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if (objArgs_a.prefix.on)
     {
-        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width);
-        intPos = intPos + objArgs_a.prefix.width * 2;
+        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.prefix.width * intAddrBytes;
     }
     if (objArgs_a.suffix.on)
     {
-        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width);
-        intPos = intPos + objArgs_a.suffix.width * 2;
+        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
@@ -791,13 +871,13 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     {
         while (intPos < intEnd)
         {
-            intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-            intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 4, 2);
-            intPos = intPos + 8;
+            intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 4 * intAddrBytes;
             for (intI = 0; intI < intSize; intI++)
             {
-                arrPayload.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, 2)]);
-                intPos = intPos + 2;
+                arrElems.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)]);
+                intPos = intPos + intAddrBytes;
             }
             intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
             intSize = intNextSize;
@@ -807,8 +887,24 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     {
         while (intPos < intEnd)
         {
-            arrPayload.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, 2)]);
-            intPos = intPos + 2;
+            arrElems.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)]);
+            intPos = intPos + intAddrBytes;
+        }
+    }
+
+    // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI + 1 < arrElems.length; intI = intI + 2)
+        {
+            arrPayload.push(arrElems[intI] | (arrElems[intI + 1] << 4));
+        }
+    }
+    else
+    {
+        for (intI = 0; intI < arrElems.length; intI++)
+        {
+            arrPayload.push(arrElems[intI]);
         }
     }
 
@@ -845,12 +941,12 @@ function @@buildWindow($arrROM_a, $intOffset_a, $intSize_a) { $arrWindow = array
 function @@crc32Std($arrBytes_a) { $lngCrc = 0xFFFFFFFF; $lngX = 0; $intI = 0; $intJ = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngX = ($lngCrc ^ $arrBytes_a[$intI]) & 0xFF; for ($intJ = 0; $intJ < 8; $intJ++) { if (($lngX & 1) != 0) { $lngX = (($lngX >> 1) ^ 0xEDB88320) & 0xFFFFFFFF; } else { $lngX = $lngX >> 1; } } $lngCrc = (($lngCrc >> 8) ^ $lngX) & 0xFFFFFFFF; } return ($lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF; }
 function @@djb2($arrBytes_a) { $lngHash = 0; $intI = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a[$intI]) & 0xFFFFFFFF; } return $lngHash; }
 function @@effSize($intROMLen_a, $intCap_a, $blnSliding_a) { $intSize = $intCap_a; if ($intROMLen_a < $intCap_a) { $intSize = $intROMLen_a; } if ($blnSliding_a) { $intSize = @@regime($intROMLen_a, $intCap_a)['size']; } return $intSize; }
-function @@hdrValue(&$arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a) { $intI = 0; $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> (8 * $intI)) & 0xFF; @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), 2); } }
+function @@hdrValue(&$arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intI = 0; $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> ($intValueBits_a * $intI)) & ((1 << $intValueBits_a) - 1); @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), $intAddrBytes_a); } }
 function @@nextRand() { global $m_lngRandState; $lngState = $m_lngRandState; $lngState = ($lngState ^ ($lngState << 13)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState >> 17)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState << 5)) & 0xFFFFFFFF; $m_lngRandState = $lngState; return $lngState; }
-function @@offset($intPtr_a, $intROMLen_a, $intCap_a, $blnSliding_a) { $intOffset = 0; $objSpan = null; if ($blnSliding_a) { $objSpan = @@regime($intROMLen_a, $intCap_a); if ($objSpan['wrap'] > 0) { $intOffset = $intPtr_a % $objSpan['wrap']; } } return $intOffset; }
+function @@offset($intPtr_a, $intROMLen_a, $intCap_a, $blnSliding_a) { $intOffset = 0; $objSpan = null; if ($blnSliding_a) { $objSpan = @@regime($intROMLen_a, $intCap_a); if ($objSpan['wrap'] > 0) { $intOffset = $intPtr_a % ($objSpan['wrap'] + 1); } } return $intOffset; }
 function @@pick($arrWindow_a, $intValue_a) { $intAddr = 0; $intLen = count($arrWindow_a[$intValue_a]); if ($intLen > 0) { $intAddr = $arrWindow_a[$intValue_a][@@nextRand() % $intLen]; } return $intAddr; }
 function @@pushLE(&$arrOut_a, $lngValue_a, $intBytes_a) { $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $arrOut_a[] = ($lngValue_a >> (8 * $intI)) & 0xFF; } }
-function @@readHdrValue($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a) { $intValue = 0; $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a[@@readLE($arrBytes_a, $intPos_a + $intI * 2, 2)] << (8 * $intI)); } return $intValue; }
+function @@readHdrValue($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intValue = 0; $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a[@@readLE($arrBytes_a, $intPos_a + $intI * $intAddrBytes_a, $intAddrBytes_a)] << ($intValueBits_a * $intI)); } return $intValue; }
 function @@readLE($arrBytes_a, $intPos_a, $intBytes_a) { $lngValue = 0; $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $lngValue = ($lngValue | ($arrBytes_a[$intPos_a + $intI] << (8 * $intI))) & 0xFFFFFFFF; } return $lngValue; }
 function @@regime($intROMLen_a, $intCap_a) { $intPct = (int)($intROMLen_a * 2 / 100); $intLimit = $intCap_a + (int)($intCap_a * 2 / 100); $objSpan = array('size' => $intCap_a, 'wrap' => $intCap_a); if ($intROMLen_a < $intLimit) { $objSpan['size'] = $intROMLen_a - $intPct; $objSpan['wrap'] = $intPct; } else if ($intROMLen_a < 2 * $intCap_a) { $objSpan['size'] = $intCap_a; $objSpan['wrap'] = $intROMLen_a - $intCap_a; } return $objSpan; }
 function @@seed($arrROM_a, $lngExtra_a) { $lngSeed = @@djb2($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
@@ -862,9 +958,12 @@ function @@zacLen($objArgs_a) { $intLen = 0; if ($objArgs_a['zac']['on']) { $int
 function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
 {
     global $m_lngRandState;
-    $ADDRESS_SPACE = 65536;
+    $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
+    $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
+    $intValueBits = (int)($objArgs_a['elemBits'] / 2);
     $arrOut = array();
     $arrPayload = array();
+    $arrElems = array();
     $arrZac = array();
     $arrPrefix = array();
     $arrSuffix = array();
@@ -918,6 +1017,24 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
         $arrPayload[] = $arrMessage_a[$intI];
     }
 
+    // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if ($objArgs_a['elemBits'] == 8)
+    {
+        for ($intI = 0; $intI < count($arrPayload); $intI++)
+        {
+            $arrElems[] = $arrPayload[$intI] & 0x0F;
+            $arrElems[] = ($arrPayload[$intI] >> 4) & 0x0F;
+        }
+        $intHeadLen = $intHeadLen * 2;
+    }
+    else
+    {
+        for ($intI = 0; $intI < count($arrPayload); $intI++)
+        {
+            $arrElems[] = $arrPayload[$intI];
+        }
+    }
+
     // random prefix / suffix
     if ($objArgs_a['prefix']['on'])
     {
@@ -954,12 +1071,12 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
             $arrBlocks[] = array('start' => 0, 'len' => $intHeadLen, 'ptr' => 0, 'addrs' => array());
             $intI = $intHeadLen;
         }
-        while ($intI < count($arrPayload))
+        while ($intI < count($arrElems))
         {
             $intBlockLen = $objArgs_a['blockMin'] + (@@nextRand() % ($objArgs_a['blockMax'] - $objArgs_a['blockMin'] + 1));
-            if ($intBlockLen > count($arrPayload) - $intI)
+            if ($intBlockLen > count($arrElems) - $intI)
             {
-                $intBlockLen = count($arrPayload) - $intI;
+                $intBlockLen = count($arrElems) - $intI;
             }
             $arrBlocks[] = array('start' => $intI, 'len' => $intBlockLen, 'ptr' => 0, 'addrs' => array());
             $intI = $intI + $intBlockLen;
@@ -971,7 +1088,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
     }
     else
     {
-        $arrBlocks[] = array('start' => 0, 'len' => count($arrPayload), 'ptr' => 0, 'addrs' => array());
+        $arrBlocks[] = array('start' => 0, 'len' => count($arrElems), 'ptr' => 0, 'addrs' => array());
     }
 
     // encode each block at its own offset
@@ -988,7 +1105,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
         $arrBlocks[$intK]['ptr'] = $intPtr;
         for ($intI = 0; $intI < $arrBlocks[$intK]['len']; $intI++)
         {
-            $intValue = $arrPayload[$arrBlocks[$intK]['start'] + $intI];
+            $intValue = $arrElems[$arrBlocks[$intK]['start'] + $intI];
             if (count($arrWindow[$intValue]) > 0)
             {
                 $arrBlocks[$intK]['addrs'][] = @@pick($arrWindow, $intValue);
@@ -1005,19 +1122,19 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
         // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if ($objArgs_a['sliding'])
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[0]['ptr'], 2);
+            @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[0]['ptr'], 2, $intAddrBytes, $intValueBits);
         }
         if ($blnMulti)
         {
-            @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[0]['addrs']), 2);
+            @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[0]['addrs']), 2, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a['prefix']['on'])
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $intPrefixLen, $objArgs_a['prefix']['width']);
+            @@hdrValue($arrOut, $arrHdrWindow, $intPrefixLen, $objArgs_a['prefix']['width'], $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a['suffix']['on'])
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $intSuffixLen, $objArgs_a['suffix']['width']);
+            @@hdrValue($arrOut, $arrHdrWindow, $intSuffixLen, $objArgs_a['suffix']['width'], $intAddrBytes, $intValueBits);
         }
         for ($intI = 0; $intI < $intPrefixLen; $intI++)
         {
@@ -1029,18 +1146,18 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
             {
                 if ($intK + 1 < count($arrBlocks))
                 {
-                    @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[$intK + 1]['ptr'], 2);
-                    @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[$intK + 1]['addrs']), 2);
+                    @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[$intK + 1]['ptr'], 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[$intK + 1]['addrs']), 2, $intAddrBytes, $intValueBits);
                 }
                 else
                 {
-                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2);
-                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2);
+                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2, $intAddrBytes, $intValueBits);
                 }
             }
             for ($intI = 0; $intI < count($arrBlocks[$intK]['addrs']); $intI++)
             {
-                @@pushLE($arrOut, $arrBlocks[$intK]['addrs'][$intI], 2);
+                @@pushLE($arrOut, $arrBlocks[$intK]['addrs'][$intI], $intAddrBytes);
             }
         }
         for ($intI = 0; $intI < $intSuffixLen; $intI++)
@@ -1055,9 +1172,12 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
 
 function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
 {
-    $ADDRESS_SPACE = 65536;
+    $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
+    $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
+    $intValueBits = (int)($objArgs_a['elemBits'] / 2);
     $arrBytes = array();
     $arrPayload = array();
+    $arrElems = array();
     $arrMessage = array();
     $intI = 0;
     $intPos = 0;
@@ -1083,23 +1203,23 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
     // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if ($objArgs_a['sliding'])
     {
-        $intPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-        $intPos = $intPos + 4;
+        $intPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + 2 * $intAddrBytes;
     }
     if ($blnMulti)
     {
-        $intSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-        $intPos = $intPos + 4;
+        $intSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + 2 * $intAddrBytes;
     }
     if ($objArgs_a['prefix']['on'])
     {
-        $intPrefixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['prefix']['width']);
-        $intPos = $intPos + $objArgs_a['prefix']['width'] * 2;
+        $intPrefixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['prefix']['width'], $intAddrBytes, $intValueBits);
+        $intPos = $intPos + $objArgs_a['prefix']['width'] * $intAddrBytes;
     }
     if ($objArgs_a['suffix']['on'])
     {
-        $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['suffix']['width']);
-        $intPos = $intPos + $objArgs_a['suffix']['width'] * 2;
+        $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['suffix']['width'], $intAddrBytes, $intValueBits);
+        $intPos = $intPos + $objArgs_a['suffix']['width'] * $intAddrBytes;
     }
     $intPos = $intPos + $intPrefixLen;
     $intEnd = $intEncodedLen - $intSuffixLen;
@@ -1109,13 +1229,13 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
     {
         while ($intPos < $intEnd)
         {
-            $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-            $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 4, 2);
-            $intPos = $intPos + 8;
+            $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+            $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 2 * $intAddrBytes, 2, $intAddrBytes, $intValueBits);
+            $intPos = $intPos + 4 * $intAddrBytes;
             for ($intI = 0; $intI < $intSize; $intI++)
             {
-                $arrPayload[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, 2)];
-                $intPos = $intPos + 2;
+                $arrElems[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)];
+                $intPos = $intPos + $intAddrBytes;
             }
             $intOffset = @@offset($intNextPtr, $intROMLen, $ADDRESS_SPACE, $objArgs_a['sliding']);
             $intSize = $intNextSize;
@@ -1125,8 +1245,24 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
     {
         while ($intPos < $intEnd)
         {
-            $arrPayload[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, 2)];
-            $intPos = $intPos + 2;
+            $arrElems[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)];
+            $intPos = $intPos + $intAddrBytes;
+        }
+    }
+
+    // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if ($objArgs_a['elemBits'] == 8)
+    {
+        for ($intI = 0; $intI + 1 < count($arrElems); $intI = $intI + 2)
+        {
+            $arrPayload[] = $arrElems[$intI] | ($arrElems[$intI + 1] << 4);
+        }
+    }
+    else
+    {
+        for ($intI = 0; $intI < count($arrElems); $intI++)
+        {
+            $arrPayload[] = $arrElems[$intI];
         }
     }
 
@@ -1163,12 +1299,12 @@ function @@buildWindow($arrROM_a, $intOffset_a, $intSize_a) { $arrWindow = []; $
 function @@crc32Std($arrBytes_a) { $lngCrc = 0xFFFFFFFF; $lngX = 0; $intI = 0; $intJ = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngX = ($lngCrc ^ $arrBytes_a[$intI]) & 0xFF; for ($intJ = 0; $intJ < 8; $intJ++) { if (($lngX & 1) != 0) { $lngX = (($lngX >> 1) ^ 0xEDB88320) & 0xFFFFFFFF; } else { $lngX = $lngX >> 1; } } $lngCrc = (($lngCrc >> 8) ^ $lngX) & 0xFFFFFFFF; } return ($lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF; }
 function @@djb2($arrBytes_a) { $lngHash = 0; $intI = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a[$intI]) & 0xFFFFFFFF; } return $lngHash; }
 function @@effSize($intROMLen_a, $intCap_a, $blnSliding_a) { $intSize = $intCap_a; if ($intROMLen_a < $intCap_a) { $intSize = $intROMLen_a; } if ($blnSliding_a) { $intSize = @@regime($intROMLen_a, $intCap_a)['size']; } return $intSize; }
-function @@hdrValue(&$arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a) { $intI = 0; $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> (8 * $intI)) & 0xFF; @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), 2); } }
+function @@hdrValue(&$arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intI = 0; $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> ($intValueBits_a * $intI)) & ((1 << $intValueBits_a) - 1); @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), $intAddrBytes_a); } }
 function @@nextRand() { global $m_lngRandState; $lngState = $m_lngRandState; $lngState = ($lngState ^ ($lngState << 13)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState >> 17)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState << 5)) & 0xFFFFFFFF; $m_lngRandState = $lngState; return $lngState; }
-function @@offset($intPtr_a, $intROMLen_a, $intCap_a, $blnSliding_a) { $intOffset = 0; $objSpan = null; if ($blnSliding_a) { $objSpan = @@regime($intROMLen_a, $intCap_a); if ($objSpan['wrap'] > 0) { $intOffset = $intPtr_a % $objSpan['wrap']; } } return $intOffset; }
+function @@offset($intPtr_a, $intROMLen_a, $intCap_a, $blnSliding_a) { $intOffset = 0; $objSpan = null; if ($blnSliding_a) { $objSpan = @@regime($intROMLen_a, $intCap_a); if ($objSpan['wrap'] > 0) { $intOffset = $intPtr_a % ($objSpan['wrap'] + 1); } } return $intOffset; }
 function @@pick($arrWindow_a, $intValue_a) { $intAddr = 0; $intLen = count($arrWindow_a[$intValue_a]); if ($intLen > 0) { $intAddr = $arrWindow_a[$intValue_a][@@nextRand() % $intLen]; } return $intAddr; }
 function @@pushLE(&$arrOut_a, $lngValue_a, $intBytes_a) { $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $arrOut_a[] = ($lngValue_a >> (8 * $intI)) & 0xFF; } }
-function @@readHdrValue($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a) { $intValue = 0; $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a[@@readLE($arrBytes_a, $intPos_a + $intI * 2, 2)] << (8 * $intI)); } return $intValue; }
+function @@readHdrValue($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intValue = 0; $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a[@@readLE($arrBytes_a, $intPos_a + $intI * $intAddrBytes_a, $intAddrBytes_a)] << ($intValueBits_a * $intI)); } return $intValue; }
 function @@readLE($arrBytes_a, $intPos_a, $intBytes_a) { $lngValue = 0; $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $lngValue = ($lngValue | ($arrBytes_a[$intPos_a + $intI] << (8 * $intI))) & 0xFFFFFFFF; } return $lngValue; }
 function @@regime($intROMLen_a, $intCap_a) { $intPct = intdiv($intROMLen_a * 2, 100); $intLimit = $intCap_a + intdiv($intCap_a * 2, 100); $objSpan = ['size' => $intCap_a, 'wrap' => $intCap_a]; if ($intROMLen_a < $intLimit) { $objSpan['size'] = $intROMLen_a - $intPct; $objSpan['wrap'] = $intPct; } else if ($intROMLen_a < 2 * $intCap_a) { $objSpan['size'] = $intCap_a; $objSpan['wrap'] = $intROMLen_a - $intCap_a; } return $objSpan; }
 function @@seed($arrROM_a, $lngExtra_a) { $lngSeed = @@djb2($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
@@ -1180,9 +1316,12 @@ function @@zacLen($objArgs_a) { $intLen = 0; if ($objArgs_a['zac']['on']) { $int
 function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
 {
     global $m_lngRandState;
-    $ADDRESS_SPACE = 65536;
+    $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
+    $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
+    $intValueBits = (int)($objArgs_a['elemBits'] / 2);
     $arrOut = [];
     $arrPayload = [];
+    $arrElems = [];
     $arrZac = [];
     $arrPrefix = [];
     $arrSuffix = [];
@@ -1236,6 +1375,24 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
         $arrPayload[] = $arrMessage_a[$intI];
     }
 
+    // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if ($objArgs_a['elemBits'] == 8)
+    {
+        for ($intI = 0; $intI < count($arrPayload); $intI++)
+        {
+            $arrElems[] = $arrPayload[$intI] & 0x0F;
+            $arrElems[] = ($arrPayload[$intI] >> 4) & 0x0F;
+        }
+        $intHeadLen = $intHeadLen * 2;
+    }
+    else
+    {
+        for ($intI = 0; $intI < count($arrPayload); $intI++)
+        {
+            $arrElems[] = $arrPayload[$intI];
+        }
+    }
+
     // random prefix / suffix
     if ($objArgs_a['prefix']['on'])
     {
@@ -1272,12 +1429,12 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
             $arrBlocks[] = ['start' => 0, 'len' => $intHeadLen, 'ptr' => 0, 'addrs' => []];
             $intI = $intHeadLen;
         }
-        while ($intI < count($arrPayload))
+        while ($intI < count($arrElems))
         {
             $intBlockLen = $objArgs_a['blockMin'] + (@@nextRand() % ($objArgs_a['blockMax'] - $objArgs_a['blockMin'] + 1));
-            if ($intBlockLen > count($arrPayload) - $intI)
+            if ($intBlockLen > count($arrElems) - $intI)
             {
-                $intBlockLen = count($arrPayload) - $intI;
+                $intBlockLen = count($arrElems) - $intI;
             }
             $arrBlocks[] = ['start' => $intI, 'len' => $intBlockLen, 'ptr' => 0, 'addrs' => []];
             $intI = $intI + $intBlockLen;
@@ -1289,7 +1446,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
     }
     else
     {
-        $arrBlocks[] = ['start' => 0, 'len' => count($arrPayload), 'ptr' => 0, 'addrs' => []];
+        $arrBlocks[] = ['start' => 0, 'len' => count($arrElems), 'ptr' => 0, 'addrs' => []];
     }
 
     // encode each block at its own offset
@@ -1306,7 +1463,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
         $arrBlocks[$intK]['ptr'] = $intPtr;
         for ($intI = 0; $intI < $arrBlocks[$intK]['len']; $intI++)
         {
-            $intValue = $arrPayload[$arrBlocks[$intK]['start'] + $intI];
+            $intValue = $arrElems[$arrBlocks[$intK]['start'] + $intI];
             if (count($arrWindow[$intValue]) > 0)
             {
                 $arrBlocks[$intK]['addrs'][] = @@pick($arrWindow, $intValue);
@@ -1323,19 +1480,19 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
         // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if ($objArgs_a['sliding'])
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[0]['ptr'], 2);
+            @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[0]['ptr'], 2, $intAddrBytes, $intValueBits);
         }
         if ($blnMulti)
         {
-            @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[0]['addrs']), 2);
+            @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[0]['addrs']), 2, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a['prefix']['on'])
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $intPrefixLen, $objArgs_a['prefix']['width']);
+            @@hdrValue($arrOut, $arrHdrWindow, $intPrefixLen, $objArgs_a['prefix']['width'], $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a['suffix']['on'])
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $intSuffixLen, $objArgs_a['suffix']['width']);
+            @@hdrValue($arrOut, $arrHdrWindow, $intSuffixLen, $objArgs_a['suffix']['width'], $intAddrBytes, $intValueBits);
         }
         for ($intI = 0; $intI < $intPrefixLen; $intI++)
         {
@@ -1347,18 +1504,18 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
             {
                 if ($intK + 1 < count($arrBlocks))
                 {
-                    @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[$intK + 1]['ptr'], 2);
-                    @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[$intK + 1]['addrs']), 2);
+                    @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[$intK + 1]['ptr'], 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[$intK + 1]['addrs']), 2, $intAddrBytes, $intValueBits);
                 }
                 else
                 {
-                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2);
-                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2);
+                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2, $intAddrBytes, $intValueBits);
                 }
             }
             for ($intI = 0; $intI < count($arrBlocks[$intK]['addrs']); $intI++)
             {
-                @@pushLE($arrOut, $arrBlocks[$intK]['addrs'][$intI], 2);
+                @@pushLE($arrOut, $arrBlocks[$intK]['addrs'][$intI], $intAddrBytes);
             }
         }
         for ($intI = 0; $intI < $intSuffixLen; $intI++)
@@ -1373,9 +1530,12 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
 
 function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
 {
-    $ADDRESS_SPACE = 65536;
+    $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
+    $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
+    $intValueBits = (int)($objArgs_a['elemBits'] / 2);
     $arrBytes = [];
     $arrPayload = [];
+    $arrElems = [];
     $arrMessage = [];
     $intI = 0;
     $intPos = 0;
@@ -1401,23 +1561,23 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
     // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if ($objArgs_a['sliding'])
     {
-        $intPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-        $intPos = $intPos + 4;
+        $intPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + 2 * $intAddrBytes;
     }
     if ($blnMulti)
     {
-        $intSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-        $intPos = $intPos + 4;
+        $intSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + 2 * $intAddrBytes;
     }
     if ($objArgs_a['prefix']['on'])
     {
-        $intPrefixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['prefix']['width']);
-        $intPos = $intPos + $objArgs_a['prefix']['width'] * 2;
+        $intPrefixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['prefix']['width'], $intAddrBytes, $intValueBits);
+        $intPos = $intPos + $objArgs_a['prefix']['width'] * $intAddrBytes;
     }
     if ($objArgs_a['suffix']['on'])
     {
-        $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['suffix']['width']);
-        $intPos = $intPos + $objArgs_a['suffix']['width'] * 2;
+        $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['suffix']['width'], $intAddrBytes, $intValueBits);
+        $intPos = $intPos + $objArgs_a['suffix']['width'] * $intAddrBytes;
     }
     $intPos = $intPos + $intPrefixLen;
     $intEnd = $intEncodedLen - $intSuffixLen;
@@ -1427,13 +1587,13 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
     {
         while ($intPos < $intEnd)
         {
-            $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-            $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 4, 2);
-            $intPos = $intPos + 8;
+            $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+            $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 2 * $intAddrBytes, 2, $intAddrBytes, $intValueBits);
+            $intPos = $intPos + 4 * $intAddrBytes;
             for ($intI = 0; $intI < $intSize; $intI++)
             {
-                $arrPayload[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, 2)];
-                $intPos = $intPos + 2;
+                $arrElems[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)];
+                $intPos = $intPos + $intAddrBytes;
             }
             $intOffset = @@offset($intNextPtr, $intROMLen, $ADDRESS_SPACE, $objArgs_a['sliding']);
             $intSize = $intNextSize;
@@ -1443,8 +1603,24 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
     {
         while ($intPos < $intEnd)
         {
-            $arrPayload[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, 2)];
-            $intPos = $intPos + 2;
+            $arrElems[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)];
+            $intPos = $intPos + $intAddrBytes;
+        }
+    }
+
+    // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if ($objArgs_a['elemBits'] == 8)
+    {
+        for ($intI = 0; $intI + 1 < count($arrElems); $intI = $intI + 2)
+        {
+            $arrPayload[] = $arrElems[$intI] | ($arrElems[$intI + 1] << 4);
+        }
+    }
+    else
+    {
+        for ($intI = 0; $intI < count($arrElems); $intI++)
+        {
+            $arrPayload[] = $arrElems[$intI];
         }
     }
 
@@ -1498,13 +1674,13 @@ uint32_t @@crc32Std(const unsigned char* arrBytes_a, long intLen_a);
 uint32_t @@djb2(const unsigned char* arrBytes_a, long intLen_a);
 long @@effSize(long intROMLen_a, long intCap_a, int blnSliding_a);
 void @@freeWindow(@@List* arrWindow_a);
-void @@hdrValue(@@Buf* parrOut_a, @@List* arrHdrWindow_a, long intValue_a, int intWidth_a);
+void @@hdrValue(@@Buf* parrOut_a, @@List* arrHdrWindow_a, long intValue_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a);
 void @@listPush(@@List* parrOut_a, long intValue_a);
 uint32_t @@nextRand(void);
 long @@offset(long intPtr_a, long intROMLen_a, long intCap_a, int blnSliding_a);
 long @@pick(@@List* arrWindow_a, long intValue_a);
 void @@pushLE(@@Buf* parrOut_a, uint32_t lngValue_a, int intBytes_a);
-long @@readHdrValue(const unsigned char* arrROM_a, const unsigned char* arrBytes_a, long intPos_a, int intWidth_a);
+long @@readHdrValue(const unsigned char* arrROM_a, const unsigned char* arrBytes_a, long intPos_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a);
 uint32_t @@readLE(const unsigned char* arrBytes_a, long intPos_a, int intBytes_a);
 @@Span @@regime(long intROMLen_a, long intCap_a);
 uint32_t @@seed(const unsigned char* arrROM_a, long intROMLen_a, uint32_t lngExtra_a);
@@ -1523,13 +1699,13 @@ uint32_t @@crc32Std(const unsigned char* arrBytes_a, long intLen_a) { uint32_t l
 uint32_t @@djb2(const unsigned char* arrBytes_a, long intLen_a) { uint32_t lngHash = 0; long intI = 0; long intLen = intLen_a; for (intI = 0; intI < intLen; intI++) { lngHash = (lngHash * 33u) + arrBytes_a[intI]; } return lngHash; }
 long @@effSize(long intROMLen_a, long intCap_a, int blnSliding_a) { long intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
 void @@freeWindow(@@List* arrWindow_a) { int intI = 0; for (intI = 0; intI < 256; intI++) { free(arrWindow_a[intI].items); } free(arrWindow_a); }
-void @@hdrValue(@@Buf* parrOut_a, @@List* arrHdrWindow_a, long intValue_a, int intWidth_a) { int intI = 0; long byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >> (8 * intI)) & 0xFF; @@pushLE(parrOut_a, (uint32_t)@@pick(arrHdrWindow_a, byValue), 2); } }
+void @@hdrValue(@@Buf* parrOut_a, @@List* arrHdrWindow_a, long intValue_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { int intI = 0; long byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(parrOut_a, (uint32_t)@@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
 void @@listPush(@@List* parrOut_a, long intValue_a) { if (parrOut_a->count >= parrOut_a->cap) { parrOut_a->cap = parrOut_a->cap * 2 + 16; parrOut_a->items = (long*)realloc(parrOut_a->items, sizeof(long) * (size_t)parrOut_a->cap); } parrOut_a->items[parrOut_a->count] = intValue_a; parrOut_a->count = parrOut_a->count + 1; }
 uint32_t @@nextRand(void) { uint32_t lngState = m_lngRandState; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); m_lngRandState = lngState; return lngState; }
-long @@offset(long intPtr_a, long intROMLen_a, long intCap_a, int blnSliding_a) { long intOffset = 0; @@Span objSpan = { 0, 0 }; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % objSpan.wrap; } } return intOffset; }
+long @@offset(long intPtr_a, long intROMLen_a, long intCap_a, int blnSliding_a) { long intOffset = 0; @@Span objSpan = { 0, 0 }; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % (objSpan.wrap + 1); } } return intOffset; }
 long @@pick(@@List* arrWindow_a, long intValue_a) { long intAddr = 0; long intLen = arrWindow_a[intValue_a].count; if (intLen > 0) { intAddr = arrWindow_a[intValue_a].items[@@nextRand() % (uint32_t)intLen]; } return intAddr; }
 void @@pushLE(@@Buf* parrOut_a, uint32_t lngValue_a, int intBytes_a) { int intI = 0; for (intI = 0; intI < intBytes_a; intI++) { @@bufPush(parrOut_a, (long)((lngValue_a >> (8 * intI)) & 0xFFu)); } }
-long @@readHdrValue(const unsigned char* arrROM_a, const unsigned char* arrBytes_a, long intPos_a, int intWidth_a) { long intValue = 0; int intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | ((long)arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * 2, 2)] << (8 * intI)); } return intValue; }
+long @@readHdrValue(const unsigned char* arrROM_a, const unsigned char* arrBytes_a, long intPos_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { long intValue = 0; int intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | ((long)arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
 uint32_t @@readLE(const unsigned char* arrBytes_a, long intPos_a, int intBytes_a) { uint32_t lngValue = 0; int intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = lngValue | ((uint32_t)arrBytes_a[intPos_a + intI] << (8 * intI)); } return lngValue; }
 @@Span @@regime(long intROMLen_a, long intCap_a) { long intPct = (intROMLen_a * 2) / 100; long intLimit = intCap_a + (intCap_a * 2) / 100; @@Span objSpan = { 0, 0 }; objSpan.size = intCap_a; objSpan.wrap = intCap_a; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
 uint32_t @@seed(const unsigned char* arrROM_a, long intROMLen_a, uint32_t lngExtra_a) { uint32_t lngSeed = @@djb2(arrROM_a, intROMLen_a); lngSeed = lngSeed ^ @@timer(); if (lngExtra_a != 0) { lngSeed = lngSeed ^ lngExtra_a; } if (lngSeed == 0) { lngSeed = 0x9E3779B9u; } return lngSeed; }
@@ -1540,9 +1716,12 @@ long @@zacLen(@@Args objArgs_a) { long intLen = 0; if (objArgs_a.zac.on) { intLe
 
 unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const unsigned char* arrMessage_a, long intMessageLen_a, @@Args objArgs_a, long* pintOutLen_a)
 {
-    long ADDRESS_SPACE = 65536;
+    long ADDRESS_SPACE = 1L << objArgs_a.elemBits;
+    int intAddrBytes = objArgs_a.elemBits / 8;
+    int intValueBits = objArgs_a.elemBits / 2;
     @@Buf arrOut = { NULL, 0, 0 };
     @@Buf arrPayload = { NULL, 0, 0 };
+    @@Buf arrElems = { NULL, 0, 0 };
     @@Buf arrZac = { NULL, 0, 0 };
     @@Buf arrPrefix = { NULL, 0, 0 };
     @@Buf arrSuffix = { NULL, 0, 0 };
@@ -1596,6 +1775,24 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
         @@bufPush(&arrPayload, arrMessage_a[intI]);
     }
 
+    /* payload bytes -> address elements (nibble mode: low nibble first, then high nibble) */
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI < arrPayload.count; intI++)
+        {
+            @@bufPush(&arrElems, arrPayload.items[intI] & 0x0F);
+            @@bufPush(&arrElems, (arrPayload.items[intI] >> 4) & 0x0F);
+        }
+        intHeadLen = intHeadLen * 2;
+    }
+    else
+    {
+        for (intI = 0; intI < arrPayload.count; intI++)
+        {
+            @@bufPush(&arrElems, arrPayload.items[intI]);
+        }
+    }
+
     /* random prefix / suffix */
     if (objArgs_a.prefix.on)
     {
@@ -1632,12 +1829,12 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
             @@blockPush(&arrBlocks, 0, intHeadLen);
             intI = intHeadLen;
         }
-        while (intI < arrPayload.count)
+        while (intI < arrElems.count)
         {
             intBlockLen = objArgs_a.blockMin + (long)(@@nextRand() % (uint32_t)(objArgs_a.blockMax - objArgs_a.blockMin + 1));
-            if (intBlockLen > arrPayload.count - intI)
+            if (intBlockLen > arrElems.count - intI)
             {
-                intBlockLen = arrPayload.count - intI;
+                intBlockLen = arrElems.count - intI;
             }
             @@blockPush(&arrBlocks, intI, intBlockLen);
             intI = intI + intBlockLen;
@@ -1649,7 +1846,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
     }
     else
     {
-        @@blockPush(&arrBlocks, 0, arrPayload.count);
+        @@blockPush(&arrBlocks, 0, arrElems.count);
     }
 
     /* encode each block at its own offset */
@@ -1666,7 +1863,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
         arrBlocks.items[intK].ptr = intPtr;
         for (intI = 0; intI < arrBlocks.items[intK].len; intI++)
         {
-            intValue = arrPayload.items[arrBlocks.items[intK].start + intI];
+            intValue = arrElems.items[arrBlocks.items[intK].start + intI];
             if (arrWindow[intValue].count > 0)
             {
                 @@listPush(&arrBlocks.items[intK].addrs, @@pick(arrWindow, intValue));
@@ -1684,19 +1881,19 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
         /* FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len] */
         if (objArgs_a.sliding)
         {
-            @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[0].ptr, 2);
+            @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[0].ptr, 2, intAddrBytes, intValueBits);
         }
         if (blnMulti)
         {
-            @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[0].addrs.count, 2);
+            @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[0].addrs.count, 2, intAddrBytes, intValueBits);
         }
         if (objArgs_a.prefix.on)
         {
-            @@hdrValue(&arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width);
+            @@hdrValue(&arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits);
         }
         if (objArgs_a.suffix.on)
         {
-            @@hdrValue(&arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width);
+            @@hdrValue(&arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         }
         for (intI = 0; intI < intPrefixLen; intI++)
         {
@@ -1708,18 +1905,18 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
             {
                 if (intK + 1 < arrBlocks.count)
                 {
-                    @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].ptr, 2);
-                    @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].addrs.count, 2);
+                    @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].ptr, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].addrs.count, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
-                    @@hdrValue(&arrOut, arrHdrWindow, (long)(@@nextRand() % (uint32_t)ADDRESS_SPACE), 2);
-                    @@hdrValue(&arrOut, arrHdrWindow, (long)(@@nextRand() % (uint32_t)ADDRESS_SPACE), 2);
+                    @@hdrValue(&arrOut, arrHdrWindow, (long)(@@nextRand() % (uint32_t)ADDRESS_SPACE), 2, intAddrBytes, intValueBits);
+                    @@hdrValue(&arrOut, arrHdrWindow, (long)(@@nextRand() % (uint32_t)ADDRESS_SPACE), 2, intAddrBytes, intValueBits);
                 }
             }
             for (intI = 0; intI < arrBlocks.items[intK].addrs.count; intI++)
             {
-                @@pushLE(&arrOut, (uint32_t)arrBlocks.items[intK].addrs.items[intI], 2);
+                @@pushLE(&arrOut, (uint32_t)arrBlocks.items[intK].addrs.items[intI], intAddrBytes);
             }
         }
         for (intI = 0; intI < intSuffixLen; intI++)
@@ -1736,6 +1933,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
     }
     free(arrBlocks.items);
     free(arrPayload.items);
+    free(arrElems.items);
     free(arrZac.items);
     free(arrPrefix.items);
     free(arrSuffix.items);
@@ -1745,9 +1943,12 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
 
 unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const unsigned char* arrEncoded_a, long intEncodedLen_a, @@Args objArgs_a, long* pintOutLen_a)
 {
-    long ADDRESS_SPACE = 65536;
+    long ADDRESS_SPACE = 1L << objArgs_a.elemBits;
+    int intAddrBytes = objArgs_a.elemBits / 8;
+    int intValueBits = objArgs_a.elemBits / 2;
     @@Buf arrBytes = { NULL, 0, 0 };
     @@Buf arrPayload = { NULL, 0, 0 };
+    @@Buf arrElems = { NULL, 0, 0 };
     @@Buf arrMessage = { NULL, 0, 0 };
     long intI = 0;
     long intPos = 0;
@@ -1773,23 +1974,23 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
     /* FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len] */
     if (objArgs_a.sliding)
     {
-        intPtr = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2);
-        intPos = intPos + 4;
+        intPtr = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if (blnMulti)
     {
-        intSize = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2);
-        intPos = intPos + 4;
+        intSize = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if (objArgs_a.prefix.on)
     {
-        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes.items, intPos, objArgs_a.prefix.width);
-        intPos = intPos + objArgs_a.prefix.width * 2;
+        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes.items, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.prefix.width * intAddrBytes;
     }
     if (objArgs_a.suffix.on)
     {
-        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes.items, intPos, objArgs_a.suffix.width);
-        intPos = intPos + objArgs_a.suffix.width * 2;
+        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes.items, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
@@ -1799,13 +2000,13 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
     {
         while (intPos < intEnd)
         {
-            intNextPtr = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2);
-            intNextSize = @@readHdrValue(arrROM_a, arrBytes.items, intPos + 4, 2);
-            intPos = intPos + 8;
+            intNextPtr = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2, intAddrBytes, intValueBits);
+            intNextSize = @@readHdrValue(arrROM_a, arrBytes.items, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 4 * intAddrBytes;
             for (intI = 0; intI < intSize; intI++)
             {
-                @@bufPush(&arrPayload, arrROM_a[intOffset + (long)@@readLE(arrBytes.items, intPos, 2)]);
-                intPos = intPos + 2;
+                @@bufPush(&arrElems, arrROM_a[intOffset + (long)@@readLE(arrBytes.items, intPos, intAddrBytes)]);
+                intPos = intPos + intAddrBytes;
             }
             intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
             intSize = intNextSize;
@@ -1815,8 +2016,24 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
     {
         while (intPos < intEnd)
         {
-            @@bufPush(&arrPayload, arrROM_a[intOffset + (long)@@readLE(arrBytes.items, intPos, 2)]);
-            intPos = intPos + 2;
+            @@bufPush(&arrElems, arrROM_a[intOffset + (long)@@readLE(arrBytes.items, intPos, intAddrBytes)]);
+            intPos = intPos + intAddrBytes;
+        }
+    }
+
+    /* address elements -> payload bytes (nibble mode: low nibble first, then high nibble) */
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI + 1 < arrElems.count; intI = intI + 2)
+        {
+            @@bufPush(&arrPayload, arrElems.items[intI] | (arrElems.items[intI + 1] << 4));
+        }
+    }
+    else
+    {
+        for (intI = 0; intI < arrElems.count; intI++)
+        {
+            @@bufPush(&arrPayload, arrElems.items[intI]);
         }
     }
 
@@ -1837,6 +2054,7 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
 
     free(arrBytes.items);
     free(arrPayload.items);
+    free(arrElems.items);
     *pintOutLen_a = arrMessage.count;
     return arrMessage.items;
 }
@@ -1867,12 +2085,12 @@ func @@buildWindow(arrROM_a []byte, intOffset_a int, intSize_a int) [][]int { va
 func @@crc32Std(arrBytes_a []byte) uint32 { var lngCrc uint32 = 0xFFFFFFFF; var lngX uint32 = 0; var intI int = 0; var intJ int = 0; var intLen int = len(arrBytes_a); for intI = 0; intI < intLen; intI++ { lngX = (lngCrc ^ uint32(arrBytes_a[intI])) & 0xFF; for intJ = 0; intJ < 8; intJ++ { if (lngX & 1) != 0 { lngX = (lngX >> 1) ^ 0xEDB88320 } else { lngX = lngX >> 1 } }; lngCrc = (lngCrc >> 8) ^ lngX }; return lngCrc ^ 0xFFFFFFFF }
 func @@djb2(arrBytes_a []byte) uint32 { var lngHash uint32 = 0; var intI int = 0; var intLen int = len(arrBytes_a); for intI = 0; intI < intLen; intI++ { lngHash = (lngHash * 33) + uint32(arrBytes_a[intI]) }; return lngHash }
 func @@effSize(intROMLen_a int, intCap_a int, blnSliding_a bool) int { var intSize int = intCap_a; if intROMLen_a < intCap_a { intSize = intROMLen_a }; if blnSliding_a { intSize = @@regime(intROMLen_a, intCap_a).size }; return intSize }
-func @@hdrValue(arrOut_a *[]byte, arrHdrWindow_a [][]int, intValue_a int, intWidth_a int) { var intI int = 0; var byValue int = 0; for intI = 0; intI < intWidth_a; intI++ { byValue = (intValue_a >> (8 * intI)) & 0xFF; @@pushLE(arrOut_a, uint32(@@pick(arrHdrWindow_a, byValue)), 2) } }
+func @@hdrValue(arrOut_a *[]byte, arrHdrWindow_a [][]int, intValue_a int, intWidth_a int, intAddrBytes_a int, intValueBits_a int) { var intI int = 0; var byValue int = 0; for intI = 0; intI < intWidth_a; intI++ { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, uint32(@@pick(arrHdrWindow_a, byValue)), intAddrBytes_a) } }
 func @@nextRand() uint32 { var lngState uint32 = m_lngRandState; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); m_lngRandState = lngState; return lngState }
-func @@offset(intPtr_a int, intROMLen_a int, intCap_a int, blnSliding_a bool) int { var intOffset int = 0; var objSpan @@Span = @@Span{size: 0, wrap: 0}; if blnSliding_a { objSpan = @@regime(intROMLen_a, intCap_a); if objSpan.wrap > 0 { intOffset = intPtr_a % objSpan.wrap } }; return intOffset }
+func @@offset(intPtr_a int, intROMLen_a int, intCap_a int, blnSliding_a bool) int { var intOffset int = 0; var objSpan @@Span = @@Span{size: 0, wrap: 0}; if blnSliding_a { objSpan = @@regime(intROMLen_a, intCap_a); if objSpan.wrap > 0 { intOffset = intPtr_a % (objSpan.wrap + 1) } }; return intOffset }
 func @@pick(arrWindow_a [][]int, intValue_a int) int { var intAddr int = 0; var intLen int = len(arrWindow_a[intValue_a]); if intLen > 0 { intAddr = arrWindow_a[intValue_a][int(@@nextRand()%uint32(intLen))] }; return intAddr }
 func @@pushLE(arrOut_a *[]byte, lngValue_a uint32, intBytes_a int) { var intI int = 0; for intI = 0; intI < intBytes_a; intI++ { *arrOut_a = append(*arrOut_a, byte((lngValue_a>>(8*intI))&0xFF)) } }
-func @@readHdrValue(arrROM_a []byte, arrBytes_a []byte, intPos_a int, intWidth_a int) int { var intValue int = 0; var intI int = 0; for intI = 0; intI < intWidth_a; intI++ { intValue = intValue | (int(arrROM_a[@@readLE(arrBytes_a, intPos_a+intI*2, 2)]) << (8 * intI)) }; return intValue }
+func @@readHdrValue(arrROM_a []byte, arrBytes_a []byte, intPos_a int, intWidth_a int, intAddrBytes_a int, intValueBits_a int) int { var intValue int = 0; var intI int = 0; for intI = 0; intI < intWidth_a; intI++ { intValue = intValue | (int(arrROM_a[@@readLE(arrBytes_a, intPos_a+intI * intAddrBytes_a, intAddrBytes_a)]) << (intValueBits_a * intI)) }; return intValue }
 func @@readLE(arrBytes_a []byte, intPos_a int, intBytes_a int) uint32 { var lngValue uint32 = 0; var intI int = 0; for intI = 0; intI < intBytes_a; intI++ { lngValue = lngValue | (uint32(arrBytes_a[intPos_a+intI]) << (8 * intI)) }; return lngValue }
 func @@regime(intROMLen_a int, intCap_a int) @@Span { var intPct int = (intROMLen_a * 2) / 100; var intLimit int = intCap_a + (intCap_a*2)/100; var objSpan @@Span = @@Span{size: intCap_a, wrap: intCap_a}; if intROMLen_a < intLimit { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct } else if intROMLen_a < 2*intCap_a { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a }; return objSpan }
 func @@seed(arrROM_a []byte, lngExtra_a uint32) uint32 { var lngSeed uint32 = @@djb2(arrROM_a); lngSeed = lngSeed ^ @@timer(); if lngExtra_a != 0 { lngSeed = lngSeed ^ lngExtra_a }; if lngSeed == 0 { lngSeed = 0x9E3779B9 }; return lngSeed }
@@ -1882,9 +2100,12 @@ func @@zacBytes(objArgs_a @@Args) []byte { var arrZac []byte = []byte{}; var int
 func @@zacLen(objArgs_a @@Args) int { var intLen int = 0; if objArgs_a.zac.on { intLen = len(objArgs_a.zac.value); if intLen == 0 { intLen = objArgs_a.zac.bytes } }; return intLen }
 
 func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
-	var ADDRESS_SPACE int = 65536
+	var ADDRESS_SPACE int = 1 << objArgs_a.elemBits
+	var intAddrBytes int = objArgs_a.elemBits / 8
+	var intValueBits int = objArgs_a.elemBits / 2
 	var arrOut []byte = []byte{}
 	var arrPayload []byte = []byte{}
+	var arrElems []byte = []byte{}
 	var arrZac []byte = []byte{}
 	var arrPrefix []byte = []byte{}
 	var arrSuffix []byte = []byte{}
@@ -1932,6 +2153,19 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 		arrPayload = append(arrPayload, arrMessage_a[intI])
 	}
 
+	// payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+	if objArgs_a.elemBits == 8 {
+		for intI = 0; intI < len(arrPayload); intI++ {
+			arrElems = append(arrElems, arrPayload[intI]&0x0F)
+			arrElems = append(arrElems, (arrPayload[intI]>>4)&0x0F)
+		}
+		intHeadLen = intHeadLen * 2
+	} else {
+		for intI = 0; intI < len(arrPayload); intI++ {
+			arrElems = append(arrElems, arrPayload[intI])
+		}
+	}
+
 	// random prefix / suffix
 	if objArgs_a.prefix.on {
 		intPrefixLen = objArgs_a.prefix.min + int(@@nextRand()%uint32(objArgs_a.prefix.max-objArgs_a.prefix.min+1))
@@ -1960,10 +2194,10 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 			arrBlocks = append(arrBlocks, @@Block{start: 0, len: intHeadLen, ptr: 0, addrs: []int{}})
 			intI = intHeadLen
 		}
-		for intI < len(arrPayload) {
+		for intI < len(arrElems) {
 			intBlockLen = objArgs_a.blockMin + int(@@nextRand()%uint32(objArgs_a.blockMax-objArgs_a.blockMin+1))
-			if intBlockLen > len(arrPayload)-intI {
-				intBlockLen = len(arrPayload) - intI
+			if intBlockLen > len(arrElems)-intI {
+				intBlockLen = len(arrElems) - intI
 			}
 			arrBlocks = append(arrBlocks, @@Block{start: intI, len: intBlockLen, ptr: 0, addrs: []int{}})
 			intI = intI + intBlockLen
@@ -1972,7 +2206,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 			arrBlocks = append(arrBlocks, @@Block{start: 0, len: 0, ptr: 0, addrs: []int{}})
 		}
 	} else {
-		arrBlocks = append(arrBlocks, @@Block{start: 0, len: len(arrPayload), ptr: 0, addrs: []int{}})
+		arrBlocks = append(arrBlocks, @@Block{start: 0, len: len(arrElems), ptr: 0, addrs: []int{}})
 	}
 
 	// encode each block at its own offset
@@ -1986,7 +2220,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 		arrWindow = @@buildWindow(arrROM_a, intOffset, intSize)
 		arrBlocks[intK].ptr = intPtr
 		for intI = 0; intI < arrBlocks[intK].len; intI++ {
-			intValue = int(arrPayload[arrBlocks[intK].start+intI])
+			intValue = int(arrElems[arrBlocks[intK].start+intI])
 			if len(arrWindow[intValue]) > 0 {
 				arrBlocks[intK].addrs = append(arrBlocks[intK].addrs, @@pick(arrWindow, intValue))
 			} else {
@@ -1998,16 +2232,16 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 	if blnOk {
 		// FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
 		if objArgs_a.sliding {
-			@@hdrValue(&arrOut, arrHdrWindow, arrBlocks[0].ptr, 2)
+			@@hdrValue(&arrOut, arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits)
 		}
 		if blnMulti {
-			@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[0].addrs), 2)
+			@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[0].addrs), 2, intAddrBytes, intValueBits)
 		}
 		if objArgs_a.prefix.on {
-			@@hdrValue(&arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width)
+			@@hdrValue(&arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits)
 		}
 		if objArgs_a.suffix.on {
-			@@hdrValue(&arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width)
+			@@hdrValue(&arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits)
 		}
 		for intI = 0; intI < intPrefixLen; intI++ {
 			arrOut = append(arrOut, arrPrefix[intI])
@@ -2015,15 +2249,15 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 		for intK = 0; intK < len(arrBlocks); intK++ {
 			if blnMulti {
 				if intK+1 < len(arrBlocks) {
-					@@hdrValue(&arrOut, arrHdrWindow, arrBlocks[intK+1].ptr, 2)
-					@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[intK+1].addrs), 2)
+					@@hdrValue(&arrOut, arrHdrWindow, arrBlocks[intK+1].ptr, 2, intAddrBytes, intValueBits)
+					@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[intK+1].addrs), 2, intAddrBytes, intValueBits)
 				} else {
-					@@hdrValue(&arrOut, arrHdrWindow, int(@@nextRand()%uint32(ADDRESS_SPACE)), 2)
-					@@hdrValue(&arrOut, arrHdrWindow, int(@@nextRand()%uint32(ADDRESS_SPACE)), 2)
+					@@hdrValue(&arrOut, arrHdrWindow, int(@@nextRand()%uint32(ADDRESS_SPACE)), 2, intAddrBytes, intValueBits)
+					@@hdrValue(&arrOut, arrHdrWindow, int(@@nextRand()%uint32(ADDRESS_SPACE)), 2, intAddrBytes, intValueBits)
 				}
 			}
 			for intI = 0; intI < len(arrBlocks[intK].addrs); intI++ {
-				@@pushLE(&arrOut, uint32(arrBlocks[intK].addrs[intI]), 2)
+				@@pushLE(&arrOut, uint32(arrBlocks[intK].addrs[intI]), intAddrBytes)
 			}
 		}
 		for intI = 0; intI < intSuffixLen; intI++ {
@@ -2036,9 +2270,12 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 }
 
 func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
-	var ADDRESS_SPACE int = 65536
+	var ADDRESS_SPACE int = 1 << objArgs_a.elemBits
+	var intAddrBytes int = objArgs_a.elemBits / 8
+	var intValueBits int = objArgs_a.elemBits / 2
 	var arrBytes []byte = []byte{}
 	var arrPayload []byte = []byte{}
+	var arrElems []byte = []byte{}
 	var arrMessage []byte = []byte{}
 	var intI int = 0
 	var intPos int = 0
@@ -2062,20 +2299,20 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 
 	// FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
 	if objArgs_a.sliding {
-		intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2)
-		intPos = intPos + 4
+		intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
+		intPos = intPos + 2 * intAddrBytes
 	}
 	if blnMulti {
-		intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2)
-		intPos = intPos + 4
+		intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
+		intPos = intPos + 2 * intAddrBytes
 	}
 	if objArgs_a.prefix.on {
-		intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width)
-		intPos = intPos + objArgs_a.prefix.width*2
+		intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits)
+		intPos = intPos + objArgs_a.prefix.width * intAddrBytes
 	}
 	if objArgs_a.suffix.on {
-		intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width)
-		intPos = intPos + objArgs_a.suffix.width*2
+		intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits)
+		intPos = intPos + objArgs_a.suffix.width * intAddrBytes
 	}
 	intPos = intPos + intPrefixLen
 	intEnd = intEncodedLen - intSuffixLen
@@ -2083,20 +2320,31 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 	intOffset = @@offset(intPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding)
 	if blnMulti {
 		for intPos < intEnd {
-			intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2)
-			intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos+4, 2)
-			intPos = intPos + 8
+			intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
+			intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits)
+			intPos = intPos + 4 * intAddrBytes
 			for intI = 0; intI < intSize; intI++ {
-				arrPayload = append(arrPayload, arrROM_a[intOffset+int(@@readLE(arrBytes, intPos, 2))])
-				intPos = intPos + 2
+				arrElems = append(arrElems, arrROM_a[intOffset+int(@@readLE(arrBytes, intPos, intAddrBytes))])
+				intPos = intPos + intAddrBytes
 			}
 			intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding)
 			intSize = intNextSize
 		}
 	} else {
 		for intPos < intEnd {
-			arrPayload = append(arrPayload, arrROM_a[intOffset+int(@@readLE(arrBytes, intPos, 2))])
-			intPos = intPos + 2
+			arrElems = append(arrElems, arrROM_a[intOffset+int(@@readLE(arrBytes, intPos, intAddrBytes))])
+			intPos = intPos + intAddrBytes
+		}
+	}
+
+	// address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+	if objArgs_a.elemBits == 8 {
+		for intI = 0; intI+1 < len(arrElems); intI = intI + 2 {
+			arrPayload = append(arrPayload, arrElems[intI]|(arrElems[intI+1]<<4))
+		}
+	} else {
+		for intI = 0; intI < len(arrElems); intI++ {
+			arrPayload = append(arrPayload, arrElems[intI])
 		}
 	}
 
@@ -2139,12 +2387,12 @@ pub fn @@buildWindow(arrROM_a: &[u8], intOffset_a: i64, intSize_a: i64) -> Vec<V
 pub fn @@crc32Std(arrBytes_a: &[u8]) -> u32 { let mut lngCrc: u32 = 0xFFFFFFFF; let mut lngX: u32 = 0; let mut intI: i64 = 0; let mut intJ: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; intI = 0; while intI < intLen { lngX = (lngCrc ^ arrBytes_a[intI as usize] as u32) & 0xFF; intJ = 0; while intJ < 8 { if (lngX & 1) != 0 { lngX = (lngX >> 1) ^ 0xEDB88320; } else { lngX = lngX >> 1; } intJ = intJ + 1; } lngCrc = (lngCrc >> 8) ^ lngX; intI = intI + 1; } return lngCrc ^ 0xFFFFFFFF; }
 pub fn @@djb2(arrBytes_a: &[u8]) -> u32 { let mut lngHash: u32 = 0; let mut intI: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; intI = 0; while intI < intLen { lngHash = lngHash.wrapping_mul(33).wrapping_add(arrBytes_a[intI as usize] as u32); intI = intI + 1; } return lngHash; }
 pub fn @@effSize(intROMLen_a: i64, intCap_a: i64, blnSliding_a: bool) -> i64 { let mut intSize: i64 = intCap_a; if intROMLen_a < intCap_a { intSize = intROMLen_a; } if blnSliding_a { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
-pub fn @@hdrValue(arrOut_a: &mut Vec<u8>, arrHdrWindow_a: &Vec<Vec<i64>>, intValue_a: i64, intWidth_a: i64) { let mut intI: i64 = 0; let mut byValue: i64 = 0; intI = 0; while intI < intWidth_a { byValue = (intValue_a >> (8 * intI)) & 0xFF; @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue) as u32, 2); intI = intI + 1; } }
+pub fn @@hdrValue(arrOut_a: &mut Vec<u8>, arrHdrWindow_a: &Vec<Vec<i64>>, intValue_a: i64, intWidth_a: i64, intAddrBytes_a: i64, intValueBits_a: i64) { let mut intI: i64 = 0; let mut byValue: i64 = 0; intI = 0; while intI < intWidth_a { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue) as u32, intAddrBytes_a); intI = intI + 1; } }
 pub fn @@nextRand() -> u32 { let mut lngState: u32 = unsafe { m_lngRandState }; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); unsafe { m_lngRandState = lngState; } return lngState; }
-pub fn @@offset(intPtr_a: i64, intROMLen_a: i64, intCap_a: i64, blnSliding_a: bool) -> i64 { let mut intOffset: i64 = 0; let mut objSpan: @@Span = @@Span { size: 0, wrap: 0 }; if blnSliding_a { objSpan = @@regime(intROMLen_a, intCap_a); if objSpan.wrap > 0 { intOffset = intPtr_a % objSpan.wrap; } } return intOffset; }
+pub fn @@offset(intPtr_a: i64, intROMLen_a: i64, intCap_a: i64, blnSliding_a: bool) -> i64 { let mut intOffset: i64 = 0; let mut objSpan: @@Span = @@Span { size: 0, wrap: 0 }; if blnSliding_a { objSpan = @@regime(intROMLen_a, intCap_a); if objSpan.wrap > 0 { intOffset = intPtr_a % (objSpan.wrap + 1); } } return intOffset; }
 pub fn @@pick(arrWindow_a: &Vec<Vec<i64>>, intValue_a: i64) -> i64 { let mut intAddr: i64 = 0; let mut intLen: i64 = arrWindow_a[intValue_a as usize].len() as i64; if intLen > 0 { intAddr = arrWindow_a[intValue_a as usize][(@@nextRand() % (intLen as u32)) as usize]; } return intAddr; }
 pub fn @@pushLE(arrOut_a: &mut Vec<u8>, lngValue_a: u32, intBytes_a: i64) { let mut intI: i64 = 0; intI = 0; while intI < intBytes_a { arrOut_a.push(((lngValue_a >> (8 * intI)) & 0xFF) as u8); intI = intI + 1; } }
-pub fn @@readHdrValue(arrROM_a: &[u8], arrBytes_a: &[u8], intPos_a: i64, intWidth_a: i64) -> i64 { let mut intValue: i64 = 0; let mut intI: i64 = 0; intI = 0; while intI < intWidth_a { intValue = intValue | ((arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * 2, 2) as usize] as i64) << (8 * intI)); intI = intI + 1; } return intValue; }
+pub fn @@readHdrValue(arrROM_a: &[u8], arrBytes_a: &[u8], intPos_a: i64, intWidth_a: i64, intAddrBytes_a: i64, intValueBits_a: i64) -> i64 { let mut intValue: i64 = 0; let mut intI: i64 = 0; intI = 0; while intI < intWidth_a { intValue = intValue | ((arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a) as usize] as i64) << (intValueBits_a * intI)); intI = intI + 1; } return intValue; }
 pub fn @@readLE(arrBytes_a: &[u8], intPos_a: i64, intBytes_a: i64) -> u32 { let mut lngValue: u32 = 0; let mut intI: i64 = 0; intI = 0; while intI < intBytes_a { lngValue = lngValue | ((arrBytes_a[(intPos_a + intI) as usize] as u32) << (8 * intI)); intI = intI + 1; } return lngValue; }
 pub fn @@regime(intROMLen_a: i64, intCap_a: i64) -> @@Span { let mut intPct: i64 = (intROMLen_a * 2) / 100; let mut intLimit: i64 = intCap_a + (intCap_a * 2) / 100; let mut objSpan: @@Span = @@Span { size: intCap_a, wrap: intCap_a }; if intROMLen_a < intLimit { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if intROMLen_a < 2 * intCap_a { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
 pub fn @@seed(arrROM_a: &[u8], lngExtra_a: u32) -> u32 { let mut lngSeed: u32 = @@djb2(arrROM_a); lngSeed = lngSeed ^ @@timer(); if lngExtra_a != 0 { lngSeed = lngSeed ^ lngExtra_a; } if lngSeed == 0 { lngSeed = 0x9E3779B9; } return lngSeed; }
@@ -2155,9 +2403,12 @@ pub fn @@zacLen(objArgs_a: &@@Args) -> i64 { let mut intLen: i64 = 0; if objArgs
 
 pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec<u8>
 {
-    let mut ADDRESS_SPACE: i64 = 65536;
+    let mut ADDRESS_SPACE: i64 = 1 << objArgs_a.elemBits;
+    let mut intAddrBytes: i64 = objArgs_a.elemBits / 8;
+    let mut intValueBits: i64 = objArgs_a.elemBits / 2;
     let mut arrOut: Vec<u8> = Vec::new();
     let mut arrPayload: Vec<u8> = Vec::new();
+    let mut arrElems: Vec<u8> = Vec::new();
     let mut arrZac: Vec<u8> = Vec::new();
     let mut arrPrefix: Vec<u8> = Vec::new();
     let mut arrSuffix: Vec<u8> = Vec::new();
@@ -2215,6 +2466,28 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
         intI = intI + 1;
     }
 
+    // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if objArgs_a.elemBits == 8
+    {
+        intI = 0;
+        while intI < arrPayload.len() as i64
+        {
+            arrElems.push(arrPayload[intI as usize] & 0x0F);
+            arrElems.push((arrPayload[intI as usize] >> 4) & 0x0F);
+            intI = intI + 1;
+        }
+        intHeadLen = intHeadLen * 2;
+    }
+    else
+    {
+        intI = 0;
+        while intI < arrPayload.len() as i64
+        {
+            arrElems.push(arrPayload[intI as usize]);
+            intI = intI + 1;
+        }
+    }
+
     // random prefix / suffix
     if objArgs_a.prefix.on
     {
@@ -2257,12 +2530,12 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
             arrBlocks.push(@@Block { start: 0, len: intHeadLen, ptr: 0, addrs: Vec::new() });
             intI = intHeadLen;
         }
-        while intI < arrPayload.len() as i64
+        while intI < arrElems.len() as i64
         {
             intBlockLen = objArgs_a.blockMin + (@@nextRand() as i64 % (objArgs_a.blockMax - objArgs_a.blockMin + 1));
-            if intBlockLen > arrPayload.len() as i64 - intI
+            if intBlockLen > arrElems.len() as i64 - intI
             {
-                intBlockLen = arrPayload.len() as i64 - intI;
+                intBlockLen = arrElems.len() as i64 - intI;
             }
             arrBlocks.push(@@Block { start: intI, len: intBlockLen, ptr: 0, addrs: Vec::new() });
             intI = intI + intBlockLen;
@@ -2274,7 +2547,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
     }
     else
     {
-        arrBlocks.push(@@Block { start: 0, len: arrPayload.len() as i64, ptr: 0, addrs: Vec::new() });
+        arrBlocks.push(@@Block { start: 0, len: arrElems.len() as i64, ptr: 0, addrs: Vec::new() });
     }
 
     // encode each block at its own offset
@@ -2293,7 +2566,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
         intI = 0;
         while intI < arrBlocks[intK as usize].len
         {
-            intValue = arrPayload[(arrBlocks[intK as usize].start + intI) as usize] as i64;
+            intValue = arrElems[(arrBlocks[intK as usize].start + intI) as usize] as i64;
             if arrWindow[intValue as usize].len() > 0
             {
                 arrBlocks[intK as usize].addrs.push(@@pick(&arrWindow, intValue));
@@ -2312,19 +2585,19 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
         // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if objArgs_a.sliding
         {
-            @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[0].ptr, 2);
+            @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits);
         }
         if blnMulti
         {
-            @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[0].addrs.len() as i64, 2);
+            @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[0].addrs.len() as i64, 2, intAddrBytes, intValueBits);
         }
         if objArgs_a.prefix.on
         {
-            @@hdrValue(&mut arrOut, &arrHdrWindow, intPrefixLen, objArgs_a.prefix.width);
+            @@hdrValue(&mut arrOut, &arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits);
         }
         if objArgs_a.suffix.on
         {
-            @@hdrValue(&mut arrOut, &arrHdrWindow, intSuffixLen, objArgs_a.suffix.width);
+            @@hdrValue(&mut arrOut, &arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         }
         intI = 0;
         while intI < intPrefixLen
@@ -2339,19 +2612,19 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
             {
                 if intK + 1 < arrBlocks.len() as i64
                 {
-                    @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].ptr, 2);
-                    @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].addrs.len() as i64, 2);
+                    @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].ptr, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].addrs.len() as i64, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
-                    @@hdrValue(&mut arrOut, &arrHdrWindow, @@nextRand() as i64 % ADDRESS_SPACE, 2);
-                    @@hdrValue(&mut arrOut, &arrHdrWindow, @@nextRand() as i64 % ADDRESS_SPACE, 2);
+                    @@hdrValue(&mut arrOut, &arrHdrWindow, @@nextRand() as i64 % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(&mut arrOut, &arrHdrWindow, @@nextRand() as i64 % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
                 }
             }
             intI = 0;
             while intI < arrBlocks[intK as usize].addrs.len() as i64
             {
-                @@pushLE(&mut arrOut, arrBlocks[intK as usize].addrs[intI as usize] as u32, 2);
+                @@pushLE(&mut arrOut, arrBlocks[intK as usize].addrs[intI as usize] as u32, intAddrBytes);
                 intI = intI + 1;
             }
             intK = intK + 1;
@@ -2370,9 +2643,12 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
 
 pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec<u8>
 {
-    let mut ADDRESS_SPACE: i64 = 65536;
+    let mut ADDRESS_SPACE: i64 = 1 << objArgs_a.elemBits;
+    let mut intAddrBytes: i64 = objArgs_a.elemBits / 8;
+    let mut intValueBits: i64 = objArgs_a.elemBits / 2;
     let mut arrBytes: Vec<u8> = Vec::new();
     let mut arrPayload: Vec<u8> = Vec::new();
+    let mut arrElems: Vec<u8> = Vec::new();
     let mut arrMessage: Vec<u8> = Vec::new();
     let mut intI: i64 = 0;
     let mut intPos: i64 = 0;
@@ -2400,23 +2676,23 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
     // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if objArgs_a.sliding
     {
-        intPtr = @@readHdrValue(arrROM_a, &arrBytes, intPos, 2);
-        intPos = intPos + 4;
+        intPtr = @@readHdrValue(arrROM_a, &arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if blnMulti
     {
-        intSize = @@readHdrValue(arrROM_a, &arrBytes, intPos, 2);
-        intPos = intPos + 4;
+        intSize = @@readHdrValue(arrROM_a, &arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
     }
     if objArgs_a.prefix.on
     {
-        intPrefixLen = @@readHdrValue(arrROM_a, &arrBytes, intPos, objArgs_a.prefix.width);
-        intPos = intPos + objArgs_a.prefix.width * 2;
+        intPrefixLen = @@readHdrValue(arrROM_a, &arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.prefix.width * intAddrBytes;
     }
     if objArgs_a.suffix.on
     {
-        intSuffixLen = @@readHdrValue(arrROM_a, &arrBytes, intPos, objArgs_a.suffix.width);
-        intPos = intPos + objArgs_a.suffix.width * 2;
+        intSuffixLen = @@readHdrValue(arrROM_a, &arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
@@ -2426,14 +2702,14 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
     {
         while intPos < intEnd
         {
-            intNextPtr = @@readHdrValue(arrROM_a, &arrBytes, intPos, 2);
-            intNextSize = @@readHdrValue(arrROM_a, &arrBytes, intPos + 4, 2);
-            intPos = intPos + 8;
+            intNextPtr = @@readHdrValue(arrROM_a, &arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intNextSize = @@readHdrValue(arrROM_a, &arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 4 * intAddrBytes;
             intI = 0;
             while intI < intSize
             {
-                arrPayload.push(arrROM_a[(intOffset + @@readLE(&arrBytes, intPos, 2) as i64) as usize]);
-                intPos = intPos + 2;
+                arrElems.push(arrROM_a[(intOffset + @@readLE(&arrBytes, intPos, intAddrBytes) as i64) as usize]);
+                intPos = intPos + intAddrBytes;
                 intI = intI + 1;
             }
             intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
@@ -2444,8 +2720,28 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
     {
         while intPos < intEnd
         {
-            arrPayload.push(arrROM_a[(intOffset + @@readLE(&arrBytes, intPos, 2) as i64) as usize]);
-            intPos = intPos + 2;
+            arrElems.push(arrROM_a[(intOffset + @@readLE(&arrBytes, intPos, intAddrBytes) as i64) as usize]);
+            intPos = intPos + intAddrBytes;
+        }
+    }
+
+    // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if objArgs_a.elemBits == 8
+    {
+        intI = 0;
+        while intI + 1 < arrElems.len() as i64
+        {
+            arrPayload.push(arrElems[intI as usize] | (arrElems[(intI + 1) as usize] << 4));
+            intI = intI + 2;
+        }
+    }
+    else
+    {
+        intI = 0;
+        while intI < arrElems.len() as i64
+        {
+            arrPayload.push(arrElems[intI as usize]);
+            intI = intI + 1;
         }
     }
 
@@ -2487,12 +2783,12 @@ sub @@buildWindow { my ($arrROM_a, $intOffset_a, $intSize_a) = @_; my $arrWindow
 sub @@crc32Std { my ($arrBytes_a) = @_; my $lngCrc = 0xFFFFFFFF; my $lngX = 0; my $intI = 0; my $intJ = 0; my $intLen = scalar(@$arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngX = ($lngCrc ^ $arrBytes_a->[$intI]) & 0xFF; for ($intJ = 0; $intJ < 8; $intJ++) { if (($lngX & 1) != 0) { $lngX = (($lngX >> 1) ^ 0xEDB88320) & 0xFFFFFFFF; } else { $lngX = $lngX >> 1; } } $lngCrc = (($lngCrc >> 8) ^ $lngX) & 0xFFFFFFFF; } return ($lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF; }
 sub @@djb2 { my ($arrBytes_a) = @_; my $lngHash = 0; my $intI = 0; my $intLen = scalar(@$arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a->[$intI]) & 0xFFFFFFFF; } return $lngHash; }
 sub @@effSize { my ($intROMLen_a, $intCap_a, $blnSliding_a) = @_; my $intSize = $intCap_a; if ($intROMLen_a < $intCap_a) { $intSize = $intROMLen_a; } if ($blnSliding_a) { $intSize = @@regime($intROMLen_a, $intCap_a)->{size}; } return $intSize; }
-sub @@hdrValue { my ($arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a) = @_; my $intI = 0; my $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> (8 * $intI)) & 0xFF; @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), 2); } }
+sub @@hdrValue { my ($arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) = @_; my $intI = 0; my $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> ($intValueBits_a * $intI)) & ((1 << $intValueBits_a) - 1); @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), $intAddrBytes_a); } }
 sub @@nextRand { my $lngState = $m_lngRandState; $lngState = ($lngState ^ ($lngState << 13)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState >> 17)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState << 5)) & 0xFFFFFFFF; $m_lngRandState = $lngState; return $lngState; }
-sub @@offset { my ($intPtr_a, $intROMLen_a, $intCap_a, $blnSliding_a) = @_; my $intOffset = 0; my $objSpan = undef; if ($blnSliding_a) { $objSpan = @@regime($intROMLen_a, $intCap_a); if ($objSpan->{wrap} > 0) { $intOffset = $intPtr_a % $objSpan->{wrap}; } } return $intOffset; }
+sub @@offset { my ($intPtr_a, $intROMLen_a, $intCap_a, $blnSliding_a) = @_; my $intOffset = 0; my $objSpan = undef; if ($blnSliding_a) { $objSpan = @@regime($intROMLen_a, $intCap_a); if ($objSpan->{wrap} > 0) { $intOffset = $intPtr_a % ($objSpan->{wrap} + 1); } } return $intOffset; }
 sub @@pick { my ($arrWindow_a, $intValue_a) = @_; my $intAddr = 0; my $intLen = scalar(@{$arrWindow_a->[$intValue_a]}); if ($intLen > 0) { $intAddr = $arrWindow_a->[$intValue_a][@@nextRand() % $intLen]; } return $intAddr; }
 sub @@pushLE { my ($arrOut_a, $lngValue_a, $intBytes_a) = @_; my $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { push(@$arrOut_a, ($lngValue_a >> (8 * $intI)) & 0xFF); } }
-sub @@readHdrValue { my ($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a) = @_; my $intValue = 0; my $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a->[@@readLE($arrBytes_a, $intPos_a + $intI * 2, 2)] << (8 * $intI)); } return $intValue; }
+sub @@readHdrValue { my ($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) = @_; my $intValue = 0; my $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a->[@@readLE($arrBytes_a, $intPos_a + $intI * $intAddrBytes_a, $intAddrBytes_a)] << ($intValueBits_a * $intI)); } return $intValue; }
 sub @@readLE { my ($arrBytes_a, $intPos_a, $intBytes_a) = @_; my $lngValue = 0; my $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $lngValue = ($lngValue | ($arrBytes_a->[$intPos_a + $intI] << (8 * $intI))) & 0xFFFFFFFF; } return $lngValue; }
 sub @@regime { my ($intROMLen_a, $intCap_a) = @_; my $intPct = int($intROMLen_a * 2 / 100); my $intLimit = $intCap_a + int($intCap_a * 2 / 100); my $objSpan = { size => $intCap_a, wrap => $intCap_a }; if ($intROMLen_a < $intLimit) { $objSpan->{size} = $intROMLen_a - $intPct; $objSpan->{wrap} = $intPct; } elsif ($intROMLen_a < 2 * $intCap_a) { $objSpan->{size} = $intCap_a; $objSpan->{wrap} = $intROMLen_a - $intCap_a; } return $objSpan; }
 sub @@seed { my ($arrROM_a, $lngExtra_a) = @_; my $lngSeed = @@djb2($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
@@ -2504,9 +2800,12 @@ sub @@zacLen { my ($objArgs_a) = @_; my $intLen = 0; if ($objArgs_a->{zac}{on}) 
 sub @@encode
 {
     my ($arrROM_a, $arrMessage_a, $objArgs_a) = @_;
-    my $ADDRESS_SPACE = 65536;
+    my $ADDRESS_SPACE = 1 << $objArgs_a->{elemBits};
+    my $intAddrBytes = int($objArgs_a->{elemBits} / 8);
+    my $intValueBits = int($objArgs_a->{elemBits} / 2);
     my $arrOut = [];
     my $arrPayload = [];
+    my $arrElems = [];
     my $arrZac = [];
     my $arrPrefix = [];
     my $arrSuffix = [];
@@ -2560,6 +2859,24 @@ sub @@encode
         push(@$arrPayload, $arrMessage_a->[$intI]);
     }
 
+    # payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if ($objArgs_a->{elemBits} == 8)
+    {
+        for ($intI = 0; $intI < scalar(@$arrPayload); $intI++)
+        {
+            push(@$arrElems, $arrPayload->[$intI] & 0x0F);
+            push(@$arrElems, ($arrPayload->[$intI] >> 4) & 0x0F);
+        }
+        $intHeadLen = $intHeadLen * 2;
+    }
+    else
+    {
+        for ($intI = 0; $intI < scalar(@$arrPayload); $intI++)
+        {
+            push(@$arrElems, $arrPayload->[$intI]);
+        }
+    }
+
     # random prefix / suffix
     if ($objArgs_a->{prefix}{on})
     {
@@ -2596,12 +2913,12 @@ sub @@encode
             push(@$arrBlocks, { start => 0, len => $intHeadLen, ptr => 0, addrs => [] });
             $intI = $intHeadLen;
         }
-        while ($intI < scalar(@$arrPayload))
+        while ($intI < scalar(@$arrElems))
         {
             $intBlockLen = $objArgs_a->{blockMin} + (@@nextRand() % ($objArgs_a->{blockMax} - $objArgs_a->{blockMin} + 1));
-            if ($intBlockLen > scalar(@$arrPayload) - $intI)
+            if ($intBlockLen > scalar(@$arrElems) - $intI)
             {
-                $intBlockLen = scalar(@$arrPayload) - $intI;
+                $intBlockLen = scalar(@$arrElems) - $intI;
             }
             push(@$arrBlocks, { start => $intI, len => $intBlockLen, ptr => 0, addrs => [] });
             $intI = $intI + $intBlockLen;
@@ -2613,7 +2930,7 @@ sub @@encode
     }
     else
     {
-        push(@$arrBlocks, { start => 0, len => scalar(@$arrPayload), ptr => 0, addrs => [] });
+        push(@$arrBlocks, { start => 0, len => scalar(@$arrElems), ptr => 0, addrs => [] });
     }
 
     # encode each block at its own offset
@@ -2630,7 +2947,7 @@ sub @@encode
         $arrBlocks->[$intK]{ptr} = $intPtr;
         for ($intI = 0; $intI < $arrBlocks->[$intK]{len}; $intI++)
         {
-            $intValue = $arrPayload->[$arrBlocks->[$intK]{start} + $intI];
+            $intValue = $arrElems->[$arrBlocks->[$intK]{start} + $intI];
             if (scalar(@{$arrWindow->[$intValue]}) > 0)
             {
                 push(@{$arrBlocks->[$intK]{addrs}}, @@pick($arrWindow, $intValue));
@@ -2647,19 +2964,19 @@ sub @@encode
         # FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if ($objArgs_a->{sliding})
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks->[0]{ptr}, 2);
+            @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks->[0]{ptr}, 2, $intAddrBytes, $intValueBits);
         }
         if ($blnMulti)
         {
-            @@hdrValue($arrOut, $arrHdrWindow, scalar(@{$arrBlocks->[0]{addrs}}), 2);
+            @@hdrValue($arrOut, $arrHdrWindow, scalar(@{$arrBlocks->[0]{addrs}}), 2, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a->{prefix}{on})
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $intPrefixLen, $objArgs_a->{prefix}{width});
+            @@hdrValue($arrOut, $arrHdrWindow, $intPrefixLen, $objArgs_a->{prefix}{width}, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a->{suffix}{on})
         {
-            @@hdrValue($arrOut, $arrHdrWindow, $intSuffixLen, $objArgs_a->{suffix}{width});
+            @@hdrValue($arrOut, $arrHdrWindow, $intSuffixLen, $objArgs_a->{suffix}{width}, $intAddrBytes, $intValueBits);
         }
         for ($intI = 0; $intI < $intPrefixLen; $intI++)
         {
@@ -2671,18 +2988,18 @@ sub @@encode
             {
                 if ($intK + 1 < scalar(@$arrBlocks))
                 {
-                    @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks->[$intK + 1]{ptr}, 2);
-                    @@hdrValue($arrOut, $arrHdrWindow, scalar(@{$arrBlocks->[$intK + 1]{addrs}}), 2);
+                    @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks->[$intK + 1]{ptr}, 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, scalar(@{$arrBlocks->[$intK + 1]{addrs}}), 2, $intAddrBytes, $intValueBits);
                 }
                 else
                 {
-                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2);
-                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2);
+                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, @@nextRand() % $ADDRESS_SPACE, 2, $intAddrBytes, $intValueBits);
                 }
             }
             for ($intI = 0; $intI < scalar(@{$arrBlocks->[$intK]{addrs}}); $intI++)
             {
-                @@pushLE($arrOut, $arrBlocks->[$intK]{addrs}[$intI], 2);
+                @@pushLE($arrOut, $arrBlocks->[$intK]{addrs}[$intI], $intAddrBytes);
             }
         }
         for ($intI = 0; $intI < $intSuffixLen; $intI++)
@@ -2698,9 +3015,12 @@ sub @@encode
 sub @@decode
 {
     my ($arrROM_a, $arrEncoded_a, $objArgs_a) = @_;
-    my $ADDRESS_SPACE = 65536;
+    my $ADDRESS_SPACE = 1 << $objArgs_a->{elemBits};
+    my $intAddrBytes = int($objArgs_a->{elemBits} / 8);
+    my $intValueBits = int($objArgs_a->{elemBits} / 2);
     my $arrBytes = [];
     my $arrPayload = [];
+    my $arrElems = [];
     my $arrMessage = [];
     my $intI = 0;
     my $intPos = 0;
@@ -2726,23 +3046,23 @@ sub @@decode
     # FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if ($objArgs_a->{sliding})
     {
-        $intPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-        $intPos = $intPos + 4;
+        $intPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + 2 * $intAddrBytes;
     }
     if ($blnMulti)
     {
-        $intSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-        $intPos = $intPos + 4;
+        $intSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + 2 * $intAddrBytes;
     }
     if ($objArgs_a->{prefix}{on})
     {
-        $intPrefixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a->{prefix}{width});
-        $intPos = $intPos + $objArgs_a->{prefix}{width} * 2;
+        $intPrefixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a->{prefix}{width}, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + $objArgs_a->{prefix}{width} * $intAddrBytes;
     }
     if ($objArgs_a->{suffix}{on})
     {
-        $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a->{suffix}{width});
-        $intPos = $intPos + $objArgs_a->{suffix}{width} * 2;
+        $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a->{suffix}{width}, $intAddrBytes, $intValueBits);
+        $intPos = $intPos + $objArgs_a->{suffix}{width} * $intAddrBytes;
     }
     $intPos = $intPos + $intPrefixLen;
     $intEnd = $intEncodedLen - $intSuffixLen;
@@ -2752,13 +3072,13 @@ sub @@decode
     {
         while ($intPos < $intEnd)
         {
-            $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2);
-            $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 4, 2);
-            $intPos = $intPos + 8;
+            $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
+            $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 2 * $intAddrBytes, 2, $intAddrBytes, $intValueBits);
+            $intPos = $intPos + 4 * $intAddrBytes;
             for ($intI = 0; $intI < $intSize; $intI++)
             {
-                push(@$arrPayload, $arrROM_a->[$intOffset + @@readLE($arrBytes, $intPos, 2)]);
-                $intPos = $intPos + 2;
+                push(@$arrElems, $arrROM_a->[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)]);
+                $intPos = $intPos + $intAddrBytes;
             }
             $intOffset = @@offset($intNextPtr, $intROMLen, $ADDRESS_SPACE, $objArgs_a->{sliding});
             $intSize = $intNextSize;
@@ -2768,8 +3088,24 @@ sub @@decode
     {
         while ($intPos < $intEnd)
         {
-            push(@$arrPayload, $arrROM_a->[$intOffset + @@readLE($arrBytes, $intPos, 2)]);
-            $intPos = $intPos + 2;
+            push(@$arrElems, $arrROM_a->[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)]);
+            $intPos = $intPos + $intAddrBytes;
+        }
+    }
+
+    # address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if ($objArgs_a->{elemBits} == 8)
+    {
+        for ($intI = 0; $intI + 1 < scalar(@$arrElems); $intI = $intI + 2)
+        {
+            push(@$arrPayload, $arrElems->[$intI] | ($arrElems->[$intI + 1] << 4));
+        }
+    }
+    else
+    {
+        for ($intI = 0; $intI < scalar(@$arrElems); $intI++)
+        {
+            push(@$arrPayload, $arrElems->[$intI]);
         }
     }
 
@@ -2888,14 +3224,14 @@ def @@effSize(intROMLen_a, intCap_a, blnSliding_a):
     return intSize
 
 
-def @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a):
+def @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a, intAddrBytes_a, intValueBits_a):
     intI = 0
     byValue = 0
 
     intI = 0
     while intI < intWidth_a:
-        byValue = (intValue_a >> (8 * intI)) & 0xFF
-        @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), 2)
+        byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1)
+        @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), intAddrBytes_a)
         intI = intI + 1
 
 
@@ -2918,7 +3254,7 @@ def @@offset(intPtr_a, intROMLen_a, intCap_a, blnSliding_a):
     if blnSliding_a:
         objSpan = @@regime(intROMLen_a, intCap_a)
         if objSpan['wrap'] > 0:
-            intOffset = intPtr_a % objSpan['wrap']
+            intOffset = intPtr_a % (objSpan['wrap'] + 1)
 
     return intOffset
 
@@ -2942,13 +3278,13 @@ def @@pushLE(arrOut_a, lngValue_a, intBytes_a):
         intI = intI + 1
 
 
-def @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a):
+def @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a, intAddrBytes_a, intValueBits_a):
     intValue = 0
     intI = 0
 
     intI = 0
     while intI < intWidth_a:
-        intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * 2, 2)] << (8 * intI))
+        intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI))
         intI = intI + 1
 
     return intValue
@@ -3051,9 +3387,12 @@ def @@zacLen(objArgs_a):
 
 def @@encode(arrROM_a, arrMessage_a, objArgs_a):
     global m_lngRandState
-    ADDRESS_SPACE = 65536
+    ADDRESS_SPACE = 1 << objArgs_a['elemBits']
+    intAddrBytes = objArgs_a['elemBits'] // 8
+    intValueBits = objArgs_a['elemBits'] // 2
     arrOut = []
     arrPayload = []
+    arrElems = []
     arrZac = []
     arrPrefix = []
     arrSuffix = []
@@ -3099,6 +3438,20 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
         arrPayload.append(arrMessage_a[intI])
         intI = intI + 1
 
+    # payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if objArgs_a['elemBits'] == 8:
+        intI = 0
+        while intI < len(arrPayload):
+            arrElems.append(arrPayload[intI] & 0x0F)
+            arrElems.append((arrPayload[intI] >> 4) & 0x0F)
+            intI = intI + 1
+        intHeadLen = intHeadLen * 2
+    else:
+        intI = 0
+        while intI < len(arrPayload):
+            arrElems.append(arrPayload[intI])
+            intI = intI + 1
+
     # random prefix / suffix
     if objArgs_a['prefix']['on']:
         intPrefixLen = objArgs_a['prefix']['min'] + (@@nextRand() % (objArgs_a['prefix']['max'] - objArgs_a['prefix']['min'] + 1))
@@ -3126,16 +3479,16 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
         if objArgs_a['zac']['on'] and objArgs_a['zac']['closesBlock'] and intHeadLen > 0:
             arrBlocks.append({'start': 0, 'len': intHeadLen, 'ptr': 0, 'addrs': []})
             intI = intHeadLen
-        while intI < len(arrPayload):
+        while intI < len(arrElems):
             intBlockLen = objArgs_a['blockMin'] + (@@nextRand() % (objArgs_a['blockMax'] - objArgs_a['blockMin'] + 1))
-            if intBlockLen > len(arrPayload) - intI:
-                intBlockLen = len(arrPayload) - intI
+            if intBlockLen > len(arrElems) - intI:
+                intBlockLen = len(arrElems) - intI
             arrBlocks.append({'start': intI, 'len': intBlockLen, 'ptr': 0, 'addrs': []})
             intI = intI + intBlockLen
         if len(arrBlocks) == 0:
             arrBlocks.append({'start': 0, 'len': 0, 'ptr': 0, 'addrs': []})
     else:
-        arrBlocks.append({'start': 0, 'len': len(arrPayload), 'ptr': 0, 'addrs': []})
+        arrBlocks.append({'start': 0, 'len': len(arrElems), 'ptr': 0, 'addrs': []})
 
     # encode each block at its own offset
     intSize = @@effSize(intROMLen, ADDRESS_SPACE, objArgs_a['sliding'])
@@ -3149,7 +3502,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
         arrBlocks[intK]['ptr'] = intPtr
         intI = 0
         while intI < arrBlocks[intK]['len']:
-            intValue = arrPayload[arrBlocks[intK]['start'] + intI]
+            intValue = arrElems[arrBlocks[intK]['start'] + intI]
             if len(arrWindow[intValue]) > 0:
                 arrBlocks[intK]['addrs'].append(@@pick(arrWindow, intValue))
             else:
@@ -3160,13 +3513,13 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
     if blnOk:
         # FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if objArgs_a['sliding']:
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0]['ptr'], 2)
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0]['ptr'], 2, intAddrBytes, intValueBits)
         if blnMulti:
-            @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[0]['addrs']), 2)
+            @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[0]['addrs']), 2, intAddrBytes, intValueBits)
         if objArgs_a['prefix']['on']:
-            @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a['prefix']['width'])
+            @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a['prefix']['width'], intAddrBytes, intValueBits)
         if objArgs_a['suffix']['on']:
-            @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a['suffix']['width'])
+            @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a['suffix']['width'], intAddrBytes, intValueBits)
         intI = 0
         while intI < intPrefixLen:
             arrOut.append(arrPrefix[intI])
@@ -3175,14 +3528,14 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
         while intK < len(arrBlocks):
             if blnMulti:
                 if intK + 1 < len(arrBlocks):
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1]['ptr'], 2)
-                    @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[intK + 1]['addrs']), 2)
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1]['ptr'], 2, intAddrBytes, intValueBits)
+                    @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[intK + 1]['addrs']), 2, intAddrBytes, intValueBits)
                 else:
-                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2)
-                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2)
+                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits)
+                    @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits)
             intI = 0
             while intI < len(arrBlocks[intK]['addrs']):
-                @@pushLE(arrOut, arrBlocks[intK]['addrs'][intI], 2)
+                @@pushLE(arrOut, arrBlocks[intK]['addrs'][intI], intAddrBytes)
                 intI = intI + 1
             intK = intK + 1
         intI = 0
@@ -3195,9 +3548,12 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
 
 
 def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
-    ADDRESS_SPACE = 65536
+    ADDRESS_SPACE = 1 << objArgs_a['elemBits']
+    intAddrBytes = objArgs_a['elemBits'] // 8
+    intValueBits = objArgs_a['elemBits'] // 2
     arrBytes = []
     arrPayload = []
+    arrElems = []
     arrMessage = []
     intI = 0
     intPos = 0
@@ -3222,37 +3578,49 @@ def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
 
     # FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
     if objArgs_a['sliding']:
-        intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2)
-        intPos = intPos + 4
+        intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
+        intPos = intPos + 2 * intAddrBytes
     if blnMulti:
-        intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2)
-        intPos = intPos + 4
+        intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
+        intPos = intPos + 2 * intAddrBytes
     if objArgs_a['prefix']['on']:
-        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a['prefix']['width'])
-        intPos = intPos + objArgs_a['prefix']['width'] * 2
+        intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a['prefix']['width'], intAddrBytes, intValueBits)
+        intPos = intPos + objArgs_a['prefix']['width'] * intAddrBytes
     if objArgs_a['suffix']['on']:
-        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a['suffix']['width'])
-        intPos = intPos + objArgs_a['suffix']['width'] * 2
+        intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a['suffix']['width'], intAddrBytes, intValueBits)
+        intPos = intPos + objArgs_a['suffix']['width'] * intAddrBytes
     intPos = intPos + intPrefixLen
     intEnd = intEncodedLen - intSuffixLen
 
     intOffset = @@offset(intPtr, intROMLen, ADDRESS_SPACE, objArgs_a['sliding'])
     if blnMulti:
         while intPos < intEnd:
-            intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2)
-            intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 4, 2)
-            intPos = intPos + 8
+            intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
+            intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits)
+            intPos = intPos + 4 * intAddrBytes
             intI = 0
             while intI < intSize:
-                arrPayload.append(arrROM_a[intOffset + @@readLE(arrBytes, intPos, 2)])
-                intPos = intPos + 2
+                arrElems.append(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)])
+                intPos = intPos + intAddrBytes
                 intI = intI + 1
             intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a['sliding'])
             intSize = intNextSize
     else:
         while intPos < intEnd:
-            arrPayload.append(arrROM_a[intOffset + @@readLE(arrBytes, intPos, 2)])
-            intPos = intPos + 2
+            arrElems.append(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)])
+            intPos = intPos + intAddrBytes
+
+    # address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if objArgs_a['elemBits'] == 8:
+        intI = 0
+        while intI + 1 < len(arrElems):
+            arrPayload.append(arrElems[intI] | (arrElems[intI + 1] << 4))
+            intI = intI + 2
+    else:
+        intI = 0
+        while intI < len(arrElems):
+            arrPayload.append(arrElems[intI])
+            intI = intI + 1
 
     # strip integrity words + ZAC from the front of the payload
     if objArgs_a['rollingHash'] == 1:
@@ -3295,12 +3663,12 @@ public static class @@Protocol
     public static uint @@crc32Std(byte[] arrBytes_a) { uint lngCrc = 0xFFFFFFFF; uint lngX = 0; int intI = 0; int intJ = 0; int intLen = arrBytes_a.Length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = (lngX >> 1) ^ 0xEDB88320; } else { lngX = lngX >> 1; } } lngCrc = (lngCrc >> 8) ^ lngX; } return lngCrc ^ 0xFFFFFFFF; }
     public static uint @@djb2(byte[] arrBytes_a) { uint lngHash = 0; int intI = 0; int intLen = arrBytes_a.Length; for (intI = 0; intI < intLen; intI++) { lngHash = unchecked((lngHash * 33) + arrBytes_a[intI]); } return lngHash; }
     public static int @@effSize(int intROMLen_a, int intCap_a, bool blnSliding_a) { int intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
-    public static void @@hdrValue(List<byte> arrOut_a, List<List<int>> arrHdrWindow_a, int intValue_a, int intWidth_a) { int intI = 0; int byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >> (8 * intI)) & 0xFF; @@pushLE(arrOut_a, (uint)@@pick(arrHdrWindow_a, byValue), 2); } }
+    public static void @@hdrValue(List<byte> arrOut_a, List<List<int>> arrHdrWindow_a, int intValue_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { int intI = 0; int byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, (uint)@@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
     public static uint @@nextRand() { uint lngState = m_lngRandState; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); m_lngRandState = lngState; return lngState; }
-    public static int @@offset(int intPtr_a, int intROMLen_a, int intCap_a, bool blnSliding_a) { int intOffset = 0; @@Span objSpan = null; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % objSpan.wrap; } } return intOffset; }
+    public static int @@offset(int intPtr_a, int intROMLen_a, int intCap_a, bool blnSliding_a) { int intOffset = 0; @@Span objSpan = null; if (blnSliding_a) { objSpan = @@regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % (objSpan.wrap + 1); } } return intOffset; }
     public static int @@pick(List<List<int>> arrWindow_a, int intValue_a) { int intAddr = 0; int intLen = arrWindow_a[intValue_a].Count; if (intLen > 0) { intAddr = arrWindow_a[intValue_a][(int)(@@nextRand() % (uint)intLen)]; } return intAddr; }
     public static void @@pushLE(List<byte> arrOut_a, uint lngValue_a, int intBytes_a) { int intI = 0; for (intI = 0; intI < intBytes_a; intI++) { arrOut_a.Add((byte)((lngValue_a >> (8 * intI)) & 0xFF)); } }
-    public static int @@readHdrValue(byte[] arrROM_a, List<byte> arrBytes_a, int intPos_a, int intWidth_a) { int intValue = 0; int intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * 2, 2)] << (8 * intI)); } return intValue; }
+    public static int @@readHdrValue(byte[] arrROM_a, List<byte> arrBytes_a, int intPos_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { int intValue = 0; int intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
     public static uint @@readLE(List<byte> arrBytes_a, int intPos_a, int intBytes_a) { uint lngValue = 0; int intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = lngValue | ((uint)arrBytes_a[intPos_a + intI] << (8 * intI)); } return lngValue; }
     public static @@Span @@regime(int intROMLen_a, int intCap_a) { int intPct = (intROMLen_a * 2) / 100; int intLimit = intCap_a + (intCap_a * 2) / 100; @@Span objSpan = new @@Span { size = intCap_a, wrap = intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
     public static uint @@seed(byte[] arrROM_a, uint lngExtra_a) { uint lngSeed = @@djb2(arrROM_a); lngSeed = lngSeed ^ @@timer(); if (lngExtra_a != 0) { lngSeed = lngSeed ^ lngExtra_a; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
@@ -3311,9 +3679,12 @@ public static class @@Protocol
 
     public static byte[] @@encode(byte[] arrROM_a, byte[] arrMessage_a, @@Args objArgs_a)
     {
-        int ADDRESS_SPACE = 65536;
+        int ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+        int intAddrBytes = objArgs_a.elemBits / 8;
+        int intValueBits = objArgs_a.elemBits / 2;
         List<byte> arrOut = new List<byte>();
         List<byte> arrPayload = new List<byte>();
+        List<byte> arrElems = new List<byte>();
         List<byte> arrZac = new List<byte>();
         List<byte> arrPrefix = new List<byte>();
         List<byte> arrSuffix = new List<byte>();
@@ -3367,6 +3738,24 @@ public static class @@Protocol
             arrPayload.Add(arrMessage_a[intI]);
         }
 
+        // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+        if (objArgs_a.elemBits == 8)
+        {
+            for (intI = 0; intI < arrPayload.Count; intI++)
+            {
+                arrElems.Add((byte)(arrPayload[intI] & 0x0F));
+                arrElems.Add((byte)((arrPayload[intI] >> 4) & 0x0F));
+            }
+            intHeadLen = intHeadLen * 2;
+        }
+        else
+        {
+            for (intI = 0; intI < arrPayload.Count; intI++)
+            {
+                arrElems.Add(arrPayload[intI]);
+            }
+        }
+
         // random prefix / suffix
         if (objArgs_a.prefix.on)
         {
@@ -3403,12 +3792,12 @@ public static class @@Protocol
                 arrBlocks.Add(new @@Block { start = 0, len = intHeadLen, ptr = 0 });
                 intI = intHeadLen;
             }
-            while (intI < arrPayload.Count)
+            while (intI < arrElems.Count)
             {
                 intBlockLen = objArgs_a.blockMin + (int)(@@nextRand() % (uint)(objArgs_a.blockMax - objArgs_a.blockMin + 1));
-                if (intBlockLen > arrPayload.Count - intI)
+                if (intBlockLen > arrElems.Count - intI)
                 {
-                    intBlockLen = arrPayload.Count - intI;
+                    intBlockLen = arrElems.Count - intI;
                 }
                 arrBlocks.Add(new @@Block { start = intI, len = intBlockLen, ptr = 0 });
                 intI = intI + intBlockLen;
@@ -3420,7 +3809,7 @@ public static class @@Protocol
         }
         else
         {
-            arrBlocks.Add(new @@Block { start = 0, len = arrPayload.Count, ptr = 0 });
+            arrBlocks.Add(new @@Block { start = 0, len = arrElems.Count, ptr = 0 });
         }
 
         // encode each block at its own offset
@@ -3437,7 +3826,7 @@ public static class @@Protocol
             arrBlocks[intK].ptr = intPtr;
             for (intI = 0; intI < arrBlocks[intK].len; intI++)
             {
-                intValue = arrPayload[arrBlocks[intK].start + intI];
+                intValue = arrElems[arrBlocks[intK].start + intI];
                 if (arrWindow[intValue].Count > 0)
                 {
                     arrBlocks[intK].addrs.Add(@@pick(arrWindow, intValue));
@@ -3454,19 +3843,19 @@ public static class @@Protocol
             // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
             if (objArgs_a.sliding)
             {
-                @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2);
+                @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits);
             }
             if (blnMulti)
             {
-                @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.Count, 2);
+                @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.Count, 2, intAddrBytes, intValueBits);
             }
             if (objArgs_a.prefix.on)
             {
-                @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width);
+                @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits);
             }
             if (objArgs_a.suffix.on)
             {
-                @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width);
+                @@hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits);
             }
             for (intI = 0; intI < intPrefixLen; intI++)
             {
@@ -3478,18 +3867,18 @@ public static class @@Protocol
                 {
                     if (intK + 1 < arrBlocks.Count)
                     {
-                        @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2);
-                        @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.Count, 2);
+                        @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
+                        @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.Count, 2, intAddrBytes, intValueBits);
                     }
                     else
                     {
-                        @@hdrValue(arrOut, arrHdrWindow, (int)(@@nextRand() % (uint)ADDRESS_SPACE), 2);
-                        @@hdrValue(arrOut, arrHdrWindow, (int)(@@nextRand() % (uint)ADDRESS_SPACE), 2);
+                        @@hdrValue(arrOut, arrHdrWindow, (int)(@@nextRand() % (uint)ADDRESS_SPACE), 2, intAddrBytes, intValueBits);
+                        @@hdrValue(arrOut, arrHdrWindow, (int)(@@nextRand() % (uint)ADDRESS_SPACE), 2, intAddrBytes, intValueBits);
                     }
                 }
                 for (intI = 0; intI < arrBlocks[intK].addrs.Count; intI++)
                 {
-                    @@pushLE(arrOut, (uint)arrBlocks[intK].addrs[intI], 2);
+                    @@pushLE(arrOut, (uint)arrBlocks[intK].addrs[intI], intAddrBytes);
                 }
             }
             for (intI = 0; intI < intSuffixLen; intI++)
@@ -3504,9 +3893,12 @@ public static class @@Protocol
 
     public static byte[] @@decode(byte[] arrROM_a, byte[] arrEncoded_a, @@Args objArgs_a)
     {
-        int ADDRESS_SPACE = 65536;
+        int ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+        int intAddrBytes = objArgs_a.elemBits / 8;
+        int intValueBits = objArgs_a.elemBits / 2;
         List<byte> arrBytes = new List<byte>();
         List<byte> arrPayload = new List<byte>();
+        List<byte> arrElems = new List<byte>();
         List<byte> arrMessage = new List<byte>();
         int intI = 0;
         int intPos = 0;
@@ -3532,23 +3924,23 @@ public static class @@Protocol
         // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
         if (objArgs_a.sliding)
         {
-            intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-            intPos = intPos + 4;
+            intPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 2 * intAddrBytes;
         }
         if (blnMulti)
         {
-            intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-            intPos = intPos + 4;
+            intSize = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 2 * intAddrBytes;
         }
         if (objArgs_a.prefix.on)
         {
-            intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width);
-            intPos = intPos + objArgs_a.prefix.width * 2;
+            intPrefixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+            intPos = intPos + objArgs_a.prefix.width * intAddrBytes;
         }
         if (objArgs_a.suffix.on)
         {
-            intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width);
-            intPos = intPos + objArgs_a.suffix.width * 2;
+            intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+            intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
         }
         intPos = intPos + intPrefixLen;
         intEnd = intEncodedLen - intSuffixLen;
@@ -3558,13 +3950,13 @@ public static class @@Protocol
         {
             while (intPos < intEnd)
             {
-                intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2);
-                intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 4, 2);
-                intPos = intPos + 8;
+                intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+                intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+                intPos = intPos + 4 * intAddrBytes;
                 for (intI = 0; intI < intSize; intI++)
                 {
-                    arrPayload.Add(arrROM_a[intOffset + (int)@@readLE(arrBytes, intPos, 2)]);
-                    intPos = intPos + 2;
+                    arrElems.Add(arrROM_a[intOffset + (int)@@readLE(arrBytes, intPos, intAddrBytes)]);
+                    intPos = intPos + intAddrBytes;
                 }
                 intOffset = @@offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
                 intSize = intNextSize;
@@ -3574,8 +3966,24 @@ public static class @@Protocol
         {
             while (intPos < intEnd)
             {
-                arrPayload.Add(arrROM_a[intOffset + (int)@@readLE(arrBytes, intPos, 2)]);
-                intPos = intPos + 2;
+                arrElems.Add(arrROM_a[intOffset + (int)@@readLE(arrBytes, intPos, intAddrBytes)]);
+                intPos = intPos + intAddrBytes;
+            }
+        }
+
+        // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+        if (objArgs_a.elemBits == 8)
+        {
+            for (intI = 0; intI + 1 < arrElems.Count; intI = intI + 2)
+            {
+                arrPayload.Add((byte)(arrElems[intI] | (arrElems[intI + 1] << 4)));
+            }
+        }
+        else
+        {
+            for (intI = 0; intI < arrElems.Count; intI++)
+            {
+                arrPayload.Add(arrElems[intI]);
             }
         }
 
@@ -4446,6 +4854,7 @@ function zDescribe(objArgs_a)
     var arrRH = ['', 'rolling hash presegment', 'rolling hash in prefix'];
     var arrBR = ['', 'BRAINLESS forward', 'BRAINLESS backward'];
 
+    arrD.push(objArgs_a.elemBits === 8 ? 'nibble / 8-bit addresses' : 'byte / 16-bit addresses');
     arrD.push(objArgs_a.sliding ? 'sliding window' : 'fixed window');
     arrD.push(objArgs_a.blocks === 1 ? 'multi block' : 'single block');
     if (objArgs_a.prefix.on) { arrD.push('prefix (' + arrW[objArgs_a.prefix.width] + ' len)'); }
@@ -4628,11 +5037,6 @@ function generate(){
   $('argsOut').textContent="const args = "+JSON.stringify(args,null,2)+";";
   renderStructure(args);
   const host=$('code'); host.innerHTML="";
-  if(args.elemBits===8){
-    const w=document.createElement('div'); w.className='lang';
-    w.innerHTML="<h3 class='stub'>⚠ 8-bit / nibble</h3><pre>Not in this first attempt. The 16-bit path is complete; nibble addressing (header + payload element widths) needs the micro-spec pinned before it is emitted.</pre>";
-    host.appendChild(w);
-  }
   LANGS.forEach(L=>{
     const d=document.createElement('div'); d.className='lang';
     const h=document.createElement('h3'); h.textContent=(L.stub?"○ ":"● ")+L.name; if(L.stub) h.className='stub';
@@ -4654,9 +5058,8 @@ function roundTrips(encImpl, decImpl, rom, msg, args, n){
 function selftest(){
   const args=readArgs(); const prefix=readPrefix(); const log=$('stlog');
   const stamp="["+new Date().toLocaleTimeString()+"] ";
-  if(args.elemBits===8){ log.textContent=stamp+"Self-test skipped: 8-bit not implemented yet."; return; }
   try{
-    const rom=new Uint8Array(131072); for(let i=0;i<rom.length;i++) rom[i]=Math.random()*256|0;
+    let rom=null; if(args.elemBits===8){ rom=new Uint8Array(240); for(let i=0;i<240;i++) rom[i]=i%16; for(let i=239;i>0;i--){ const j=Math.random()*(i+1)|0; const t=rom[i]; rom[i]=rom[j]; rom[j]=t; } } else { rom=new Uint8Array(131072); for(let i=0;i<rom.length;i++) rom[i]=Math.random()*256|0; }
     const msg=new Uint8Array(4096+256); for(let i=0;i<msg.length;i++) msg[i]=(i<256)?i:(Math.random()*256|0);
     const es5=loadImpl(tplFor(TPL_ES5,'A',args),prefix), modern=loadImpl(tplFor(TPL_MODERN,'A',args),prefix);
     const r=[["ES5",roundTrips(es5,es5,rom,msg,args,20)],["ES2026",roundTrips(modern,modern,rom,msg,args,20)],
@@ -4674,6 +5077,7 @@ function syncZacBytes(){
 $('zacVal').addEventListener('input',function(){ syncZacBytes(); });
 syncZacBytes();
 $('gen').addEventListener('click',generate);
+['elemBits','pfxW','sfxW'].forEach(function(strId){ $(strId).addEventListener('change',function(){ clampFields(); generate(); }); });
 $('left').addEventListener('input',function(){ generate(); });
 $('left').addEventListener('change',function(){ generate(); });
 $('sliding').addEventListener('change',function(){ var blnSliding=($('sliding').value==='true'); $('pfxOn').checked=blnSliding; $('sfxOn').checked=blnSliding; if(!blnSliding){ $('blocks').value='single'; } generate(); });

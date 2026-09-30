@@ -6,7 +6,7 @@ listeners. Works with VLC, Winamp, foobar2000 and a browser `<audio>` element.
 ## Usage
 
 ```
-zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <url> [-c <seconds>]]
+zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log]
 ```
 
 | Flag | Meaning |
@@ -18,12 +18,15 @@ zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <
 | `-w` | wait for new messages at the end of the queue (default: loop to the start) |
 | `-p <seconds>` | poll interval while waiting for new messages (default 10) |
 | `-e <mp3file>` | local MP3 played from the top, looped, while waiting (default: silence) |
-| `-a <url>` | post the current public IP to `<url>` whenever it changes (default: disabled) |
-| `-c <seconds>` | seconds between IP checks - only used with `-a` (default 300) |
+| `-a <folder> <x> <y>` | inserts: after every `<y>` normal tracks, `<x>`% of the time, play a random MP3 from `<folder>` (ads, host talk) |
+| `-ip <url>` | post the current public IP to `<url>` whenever it changes (default: disabled) |
+| `-c <seconds>` | seconds between IP checks - only used with `-ip` (default 300) |
+| `-log` | log every console line and every MQ fetch to `<exename>log.csv` next to the exe |
 
 ```
 zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom
-zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom -a https://example.com/update-ip -c 120
+zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom -ip https://example.com/update-ip -c 120
+zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom -s -a c:\\zwr\\ads 50 3
 ```
 
 ## Listener URLs
@@ -74,17 +77,61 @@ listener disconnects, so the timestamp is the last-used time. A cleanup tool del
   stream with `PIPELINE_ERROR_DECODE: Unsupported midstream configuration change` when either
   changes, and doesn't recover. zwrserve logs a warning when it happens. Silence always matches
   the last track, so it's safe.
+- Inserts (`-a <folder> <x> <y>`): every `<y>` normal tracks there's a slot, and `<x>`% of the
+  time it's filled with a random MP3 from `<folder>` (plain MP3s, not encoded, not from the MQ).
+  `-a ads 50 3` = after every 3 songs, a 50/50 chance of an ad or talk segment; `-a ads 100 1` = one
+  after every song. The folder is re-read each time, so files can be added or removed while it
+  runs. The same insert isn't picked twice running when there's a choice. An insert whose sample
+  rate or channel count differs from the stream is skipped (logged), because Chrome stops at a
+  format change. Inserts don't move the queue pointer; skipped non-MP3 messages don't count as
+  tracks. In shared mode everyone hears the same inserts; in session mode each listener rolls
+  their own.
 - Ctrl+C, or closing the console window, saves every session's pointer and offset.
-- Optional (`-a <url>`): every `-c` seconds (default 300 = 5 minutes), zwrserve fetches its
+- Optional (`-ip <url>`): every `-c` seconds (default 300 = 5 minutes), zwrserve fetches its
   current public IP from an external "what's my IP" service and, only if it's changed since
   the last successful announce, sends it to `<url>` - either a `POST` with form field `ip`,
   or a `GET` with `{ip}` substituted in the URL if it contains that literal placeholder
-  (e.g. `-a "https://example.com/update?myip={ip}"`), useful for simple dynamic-DNS-style
+  (e.g. `-ip "https://example.com/update?myip={ip}"`), useful for simple dynamic-DNS-style
   webhooks. This is a real network call each time - there's no free local way to learn a
   home router's WAN address - so `-c` below ~60 seconds risks the lookup service
   rate-limiting or blocking the requests; zwrserve logs a warning at startup if it's set
   that low, but still runs. Lookup or announce failures are logged and retried at the next
   interval; they never affect streaming.
+
+## Log file (`-log`)
+
+`-log` writes to `<exename>log.csv` in the exe's folder (`zwrservelog.csv` for `zwrserve.exe`).
+It's UTF-8 with a BOM, so Excel shows non-English titles properly. Several instances (one per
+port) can share the file: each line carries its port, and they take turns writing. If the file
+is open somewhere that locks it, lines wait in memory and are written once it's free.
+
+Columns: `Time,Port,Session,Event,Status,After,Message,HttpStatus,BytesReceived,BytesExpected,FirstByteMs,TotalMs,Reason,Text`
+
+| Event | Meaning |
+|---|---|
+| `START` | program started - `Text` has the version and command line |
+| `LOG` | a console line - `Text` has it, `Session` is filled in from its `[n]` / `[shared]` prefix |
+| `FETCH_START` | fetch of the next message after `After` began |
+| `FETCH_END` | fetch finished - `Status`, `Message` (filename), HTTP status, bytes, timings, `Reason` |
+| `CHECK_START` / `CHECK_END` | the same, for the check made when a session starts waiting |
+| `DROPPED` | only if over 200,000 lines had to wait for a locked file - says how many were lost |
+
+`Status` on a `_END` line:
+
+| Status | Meaning |
+|---|---|
+| `OK` | message received |
+| `EMPTY` | the MQ says there's nothing after that pointer - end of queue |
+| `TIMEOUT` | no complete response within 60 seconds; `Reason` says whether it never answered or answered but didn't finish, and `BytesReceived` shows how far it got |
+| `NETWORK` | couldn't connect, name lookup failed, or the connection dropped - `Reason` has the error |
+| `HTTP_ERROR` | the web server returned an error status (e.g. `508 Resource Limit Is Reached`) - `Reason` has the start of its page |
+| `SERVER_ERROR` | the MQ answered with an error (e.g. `Queue '...' does not exist.`) |
+| `UNKNOWN` | an answer zwrserve didn't recognise - `Reason` has what it could see |
+
+`FirstByteMs` is how long until the server started answering, and `TotalMs` is the whole fetch.
+A big `FirstByteMs` means the server was slow to respond; a small `FirstByteMs` with a big
+`TotalMs` means the download itself was slow. Failed fetches also get a console line:
+`fetch failed <status> after <n>s, <bytes> bytes received - <reason>`.
 
 ## Build
 
