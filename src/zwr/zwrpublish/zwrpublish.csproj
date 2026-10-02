@@ -18,6 +18,7 @@
     <Compile Include="..\src\SecureDelete.cs" />
     <Compile Include="..\src\Unsignal.cs" />
     <Compile Include="..\src\ZOSCII.cs" />
+    <Compile Include="..\src\ZRollingHash.cs" />
   </ItemGroup>
 
 </Project>
