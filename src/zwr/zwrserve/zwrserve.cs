@@ -1,4 +1,4 @@
-// Cyborg ZOSCII Web Radio Serve - zwrserve v20260924
+// Cyborg ZOSCII Web Radio Serve - zwrserve v20261002
 // (c) 2026 Cyborg Unicorn Pty Ltd.
 // UNINTELLIGENCE License.
 // ZOSCII core logic remains under MIT License.
@@ -28,7 +28,7 @@
 //   -c  seconds between IP checks - only used with -ip (default 300 = 5 minutes;
 //       the check is a real HTTP call to a public "what's my IP" service, not a
 //       free local lookup, so anything much below 60s risks getting rate-limited)
-//   -log  write everything to <exename>log.csv next to the exe: every console line, plus
+//   -log <file>  write everything to <file> (CSV): every console line, plus
 //       every MQ fetch - when it started, when the response began, bytes received,
 //       how long it took, and how it ended (OK, end of queue, timeout, network error,
 //       HTTP error, server error) with the reason where one is known
@@ -61,7 +61,7 @@ public static class ZWRServe
 	// Constants
 	// -------------------------------------------------------------------------
 
-	internal const string VERSION = "v20260924";
+	internal const string VERSION = "v20261002";
 	internal const int META_INTERVAL = 16000;          // bytes of audio between ICY metadata blocks
 	internal const double LEAD_SECONDS = 4.0;          // burst sent ahead of real time so players start quickly
 	internal const int SHARED_QUEUE_LIMIT = 1048576;   // shared mode: drop a listener that falls this many bytes behind
@@ -143,7 +143,7 @@ public static class ZWRServe
 
 	private static void printUsage()
 	{
-		Console.WriteLine("Usage: zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log]");
+		Console.WriteLine("Usage: zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log <file>]");
 		Console.WriteLine();
 		Console.WriteLine("  -i  ICY (Icecast/SHOUTcast) server on <port>, streaming <queue> from <mqurl>");
 		Console.WriteLine("  -z  unZOSCII messages with <romfile>");
@@ -155,7 +155,7 @@ public static class ZWRServe
 		Console.WriteLine("  -a  inserts: after every <y> normal tracks, <x>% of the time, play a random MP3 from <folder>");
 		Console.WriteLine("  -ip post the current public IP to <url> whenever it changes");
 		Console.WriteLine("  -c  seconds between IP checks - only used with -ip (default 300)");
-		Console.WriteLine("  -log  log console output and every MQ fetch (timing, result, reason) to <exename>log.csv");
+		Console.WriteLine("  -log  log console output and every MQ fetch (timing, result, reason) to <file> (CSV)");
 		Console.WriteLine();
 		Console.WriteLine("Example: zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom");
 		Console.WriteLine("Listen:  http://localhost:8000/        new session");
@@ -223,10 +223,11 @@ public static class ZWRServe
 				g_blnLoop = false;
 				intI++;
 			}
-			else if (strArg == "-log")
+			else if (strArg == "-log" && intI + 1 < arrArgs_a.Length)
 			{
 				CsvLog.Enabled = true;
-				intI++;
+				CsvLog.FilePath = arrArgs_a[intI + 1];
+				intI += 2;
 			}
 			else
 			{
@@ -249,18 +250,21 @@ public static class ZWRServe
 
 		if (CsvLog.Enabled)
 		{
-			CsvLog.Start();
+			blnResult = CsvLog.Start();
 		}
 
-		try
+		if (blnResult)
 		{
-			g_strTempFolder = Path.Combine(AppContext.BaseDirectory, "t", g_intPort.ToString());
-			Directory.CreateDirectory(g_strTempFolder);
-		}
-		catch (Exception objEx)
-		{
-			Console.WriteLine("Error: cannot create working folder " + g_strTempFolder + " - " + objEx.Message);
-			blnResult = false;
+			try
+			{
+				g_strTempFolder = Path.Combine(AppContext.BaseDirectory, "t", g_intPort.ToString());
+				Directory.CreateDirectory(g_strTempFolder);
+			}
+			catch (Exception objEx)
+			{
+				Console.WriteLine("Error: cannot create working folder " + g_strTempFolder + " - " + objEx.Message);
+				blnResult = false;
+			}
 		}
 
 		if (blnResult && g_intDecodeMode != DECODE_NONE)
@@ -2828,8 +2832,7 @@ internal static class MQFetch
 }
 
 // -----------------------------------------------------------------------------
-// CsvLog - -log: every console line and every MQ fetch to <exename>log.csv next
-// to the exe. Lines are queued and written by a background thread, so a slow
+// CsvLog - -log <file>: every console line and every MQ fetch to <file>. Lines are queued and written by a background thread, so a slow
 // disk, or the file being open in Excel, never holds up streaming. If the file
 // is locked the lines wait in memory and are written once it's free. Several
 // instances (one per port) can share one file - each line carries its port.
@@ -2848,25 +2851,50 @@ internal static class CsvLog
 	private static readonly AutoResetEvent s_objSignal = new AutoResetEvent(false);
 	private static int s_intDropped = 0;
 
-	internal static void Start()
+	// FilePath is the -log <file> argument. A relative path is relative to the current folder,
+	// the same as the ROM and -e files. Returns false if the path is unusable.
+	internal static bool Start()
 	{
-		string strName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
+		bool blnResult = true;
 
-		// Run as "dotnet zwrserve.dll" the process is dotnet - use the app's own name instead.
-		if (strName.Length == 0 || strName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+		try
 		{
-			strName = AppDomain.CurrentDomain.FriendlyName;
+			string strFolder = "";
+
+			FilePath = Path.GetFullPath(FilePath);
+			strFolder = Path.GetDirectoryName(FilePath) ?? "";
+
+			if (Path.GetFileName(FilePath).Length == 0)
+			{
+				Console.WriteLine("Error: -log needs a file name, not a folder: " + FilePath);
+				blnResult = false;
+			}
+			else if (strFolder.Length > 0 && !Directory.Exists(strFolder))
+			{
+				Console.WriteLine("Error: -log folder not found " + strFolder);
+				blnResult = false;
+			}
+		}
+		catch (Exception objEx)
+		{
+			Console.WriteLine("Error: invalid -log file " + FilePath + " - " + objEx.Message);
+			blnResult = false;
 		}
 
-		FilePath = Path.Combine(AppContext.BaseDirectory, strName + "log.csv");
-
+		if (blnResult)
 		{
 			Thread objWriter = new Thread(writerLoop);
 			objWriter.IsBackground = true;
 			objWriter.Start();
+
+			Event(-1, "START", "", "", "", null, "ZOSCII Web Radio Serve " + ZWRServe.VERSION + "  " + string.Join(" ", Environment.GetCommandLineArgs(), 1, Environment.GetCommandLineArgs().Length - 1));
+		}
+		else
+		{
+			Enabled = false;
 		}
 
-		Event(-1, "START", "", "", "", null, "ZOSCII Web Radio Serve " + ZWRServe.VERSION + "  " + string.Join(" ", Environment.GetCommandLineArgs(), 1, Environment.GetCommandLineArgs().Length - 1));
+		return blnResult;
 	}
 
 	// A console line. The session comes from its "[n] " or "[shared] " prefix, if it has one.

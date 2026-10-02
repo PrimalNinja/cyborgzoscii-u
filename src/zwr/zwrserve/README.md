@@ -6,7 +6,7 @@ listeners. Works with VLC, Winamp, foobar2000 and a browser `<audio>` element.
 ## Usage
 
 ```
-zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log]
+zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <seconds>] [-e <mp3file>] [-a <folder> <x> <y>] [-ip <url> [-c <seconds>]] [-log <file>]
 ```
 
 | Flag | Meaning |
@@ -21,12 +21,13 @@ zwrserve -i <port> <mqurl> <queue> [-z <romfile> | -u <romfile>] [-s] [-w] [-p <
 | `-a <folder> <x> <y>` | inserts: after every `<y>` normal tracks, `<x>`% of the time, play a random MP3 from `<folder>` (ads, host talk) |
 | `-ip <url>` | post the current public IP to `<url>` whenever it changes (default: disabled) |
 | `-c <seconds>` | seconds between IP checks - only used with `-ip` (default 300) |
-| `-log` | log every console line and every MQ fetch to `<exename>log.csv` next to the exe |
+| `-log <file>` | log every console line and every MQ fetch to `<file>` (CSV) |
 
 ```
 zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom
 zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom -ip https://example.com/update-ip -c 120
 zwrserve -i 8000 https://example.com/zosciimq/index.php test_radio -z radio.rom -s -a c:\\zwr\\ads 50 3
+zwrserve -i 8001 https://example.com/zosciimq/index.php world_radio -z radio.rom -s -log c:\\zwr\\world.csv
 ```
 
 ## Listener URLs
@@ -98,12 +99,15 @@ listener disconnects, so the timestamp is the last-used time. A cleanup tool del
   that low, but still runs. Lookup or announce failures are logged and retried at the next
   interval; they never affect streaming.
 
-## Log file (`-log`)
+## Log file (`-log <file>`)
 
-`-log` writes to `<exename>log.csv` in the exe's folder (`zwrservelog.csv` for `zwrserve.exe`).
-It's UTF-8 with a BOM, so Excel shows non-English titles properly. Several instances (one per
-port) can share the file: each line carries its port, and they take turns writing. If the file
-is open somewhere that locks it, lines wait in memory and are written once it's free.
+`-log <file>` writes to `<file>`. A relative name is relative to the current folder, the same
+as the ROM and `-e` files, so `-log english.csv` run from `c:\zwr` writes `c:\zwr\english.csv`.
+The folder must already exist; the file is created if it isn't there and appended to if it is.
+Give each instance its own file to keep their logs apart, or the same file to have them
+together: each line carries its port, and instances sharing a file take turns writing.
+It's UTF-8 with a BOM, so Excel shows non-English titles properly. If the file is open
+somewhere that locks it, lines wait in memory and are written once it's free.
 
 Columns: `Time,Port,Session,Event,Status,After,Message,HttpStatus,BytesReceived,BytesExpected,FirstByteMs,TotalMs,Reason,Text`
 

@@ -1,0 +1,14 @@
+{
+  "station": {
+    "name": "Cyborg Unicorn World",
+    "id": "",
+    "website": "https://cyborgunicorn.com.au",
+    "email": "",
+    "phone": ""
+  },
+  "channel": { "name": "English", "id": "" },
+  "artist": { "name": "", "id": "", "website": "", "email": "", "phone": "" },
+  "stores": [
+    { "name": "main", "type": "mq", "path": "https://cyborgunicorn.com.au/radio/indexmq.php" }
+  ]
+}
