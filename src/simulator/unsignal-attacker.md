@@ -12,6 +12,7 @@ The attacker gets the file bytes and nothing else. It does not get:
 - the window offset, prefix length or suffix length (all read from the ROM)
 - the message length or where the message starts
 - whether BRAINLESS was applied
+- whether the plaintext was compressed
 - the plaintext
 
 Holding the ROM is access, not an attack. The ROM baseline exists only to show that.
@@ -28,6 +29,27 @@ The attacker handles this by sweeping every possible reading of the file:
 That gives 4 readings for UNSIGNAL (RAW/EVEN, RAW/ODD, PEELED/EVEN, PEELED/ODD) and 2 for ZOSCII (RAW, PEELED; ZOSCII has no header or padding). Every attack runs on all of them.
 
 Every run also prints the possible message length. The attacker only knows the total: file size = 8 header + prefix + 2 x message length + suffix, with prefix and suffix each 10 to 255. So the message could be anywhere from 0 characters up to the maximum that fits.
+
+### Compress plaintext (encoder option)
+
+Ticking **COMPRESS plaintext** runs the message through raw deflate (`CompressionStream('deflate-raw')`) before it is encoded. The encoder then encodes the compressed bytes, not the text.
+
+- Raw deflate has no fixed header, unlike gzip (`1F 8B 08`) or zlib (`78 xx`), so it hands the attacker no guaranteed crib.
+- The attacker is not told compression was used. Nothing in the file says so.
+- Text cribs and dictionary words are tested as text, so they are tested against deflate output and will not match. That is the point of the option.
+- The encoder log shows the plaintext and compressed sizes (encoder side only).
+- **Show demo answer** adds the compression note to the ground-truth line. **KPA** says so when its crib is not found because of compression. The **ROM baseline** decompresses what it recovers and prints the original text.
+- Needs a browser with `CompressionStream` / `DecompressionStream` and `'deflate-raw'`. If it is missing, the encoder logs an error and does not encode.
+
+### Double-encode (encoder option)
+
+Ticking **DOUBLE-ENCODE** applies the chosen method (ZOSCII, UNSIGNAL or BRICS) twice. Layer 1 encodes the message with **ROM 1**. The whole layer-1 file (header, padding and addresses) then becomes the plaintext of layer 2, encoded with **ROM 2**. BRAINLESS, if ticked, is applied once, to the outer file only.
+
+- Two ROM canvases appear when it is ticked. Each takes its own dropped key file.
+- The attacker still gets only the outer file bytes and sweeps the same readings. Text cribs and dictionary words are tested against the inner file's bytes, so they will not match, as with COMPRESS.
+- **Show demo answer** notes the double encoding. **KPA** says so when its crib is not found. The **ROM baseline** needs both ROMs: ROM 2 recovers the inner file, then ROM 1 recovers the message.
+- ROM 2 must contain every byte value, or inner-file bytes are dropped and layer 1 is corrupted (the encoder log warns).
+- `api.cribBytes` is never compressed or double-encoded.
 
 ### What can leak
 
@@ -109,7 +131,7 @@ Load it with **CUSTOM ATTACK**, set ATTACK TYPE to **Custom attack**, then click
 | `api.readAddrs(bytes, start)` | Pairs bytes into little-endian 16-bit addresses from byte `start` |
 | `api.peel(bytes)` | Keyless BRAINLESS inverse |
 | `api.crib` | Crib box text as typed, line breaks kept |
-| `api.cribBytes` | Crib as UTF-8 bytes, encoded the same way the encoder encodes the message |
+| `api.cribBytes` | Crib as UTF-8 bytes, encoded the same way the encoder encodes the message (never compressed, even when COMPRESS plaintext is ticked) |
 | `api.dictionary` | Loaded attack file text, or `''` if none |
 | `api.allow` | Allowed positions as a number array (empty = all) |
 | `api.forbid` | Forbidden positions as a number array |
@@ -132,6 +154,7 @@ Nothing that an attacker does not hold:
 - prefix or suffix length
 - message length or position
 - BRAINLESS on/off
+- whether the plaintext was compressed
 - the plaintext
 
 If your attack needs any of these, it is using access, not attacking.

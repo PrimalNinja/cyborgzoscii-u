@@ -67,10 +67,12 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
 <div class="panel">
   <h2>1 · ROM &amp; ENCODE (build a target ciphertext)</h2>
   <div class="mode-row">
-    <label><input type="radio" name="mode" value="zoscii"> ZOSCII (64KB)</label>
+    <label><input type="radio" name="mode" value="zoscii"> ZOSCII (64KB) - The PRIMITIVE!</label>
     <label><input type="radio" name="mode" value="unsignal" checked> UNSIGNAL (any ROM size, Regime 1 sliding window)</label>
     <label><input type="radio" name="mode" value="brics"> BRICS (per-block offsets)</label>
     <label><input type="checkbox" id="brainless"> BRAINLESS (XOR whole file)</label>
+    <label><input type="checkbox" id="compress"> COMPRESS plaintext (raw deflate, before encoding)</label>
+    <label><input type="checkbox" id="double"> DOUBLE-ENCODE (chosen method applied twice, 2 ROMs; BRAINLESS stays outermost) - REMOVES ALL PLAIN TEXT / CRIB ATTACKS</label>
   </div>
   <label>MESSAGE TO ENCODE</label>
   <textarea id="inputMessage" rows="2">the sender said meet me at the pier at three the pier is safe</textarea>
@@ -80,12 +82,22 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
     <button id="clearBtn">CLEAR</button>
   </div>
   <div class="hint">Drop any file on the canvas to use it as the ROM (smaller ROM = smaller pool = more leakage).</div>
+  <div class="hint" id="rom1lbl" style="display:none">ROM 1 (inner layer): drop a key file here</div>
   <canvas id="rom" width="1024" height="512"></canvas>
   <div class="stats">
     <div class="stat"><div class="k">ROM SIZE</div><div class="v" id="sRom">0</div></div>
     <div class="stat"><div class="k">UNIQUE BYTES</div><div class="v" id="sUniq">0 / 256</div></div>
     <div class="stat"><div class="k">WINDOW OFFSET</div><div class="v" id="sOff">---</div></div>
     <div class="stat"><div class="k">MSG ADDRS</div><div class="v" id="sLen">0</div></div>
+  </div>
+  <div id="rom2wrap" style="display:none">
+    <div class="hint" style="margin-top:14px">ROM 2 (outer layer): drop a different key file here</div>
+    <canvas id="rom2" width="1024" height="512"></canvas>
+    <div class="stats">
+      <div class="stat"><div class="k">ROM 2 SIZE</div><div class="v" id="sRom2">0</div></div>
+      <div class="stat"><div class="k">ROM 2 UNIQUE BYTES</div><div class="v" id="sUniq2">0 / 256</div></div>
+      <div class="stat"><div class="k">ROM 2 WINDOW OFFSET</div><div class="v" id="sOff2">---</div></div>
+    </div>
   </div>
   <label style="margin-top:12px">FULL FILE BYTES (this, and only this, is what the attacker gets)</label>
   <textarea id="fileOut" class="readonly" rows="3" readonly></textarea>
@@ -150,7 +162,13 @@ function regime1(x){
 // ROM start pointer -> window offset: one of w window positions, so offset + y <= x always
 function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer % r.w : 0; }
 
-let rom=new Uint8Array(ROM_SIZE), lookup=new Array(256), actualSize=ROM_SIZE;
+let rom, lookup, actualSize, cur=0;
+// two ROM contexts: 0 = ROM 1 (inner / only layer), 1 = ROM 2 (outer layer when double-encoding)
+const CT=[0,1].map(()=>({rom:new Uint8Array(ROM_SIZE),lookup:new Array(256),size:ROM_SIZE,winOffset:0,effSize:65536,canvas:null,cx:null}));
+function C(i){ cur=i; const c=CT[i]; rom=c.rom; lookup=c.lookup; actualSize=c.size; winOffset=c.winOffset; effSize=c.effSize; canvas=c.canvas; ctx=c.cx; }
+function save(){ const c=CT[cur]; c.size=actualSize; c.winOffset=winOffset; c.effSize=effSize; }
+function useOuter(){ C(trueFrame&&trueFrame.double?1:0); }
+function renderAll(){ for(const i of [0,1]){ C(i); render(); } useOuter(); }
 let mode='unsignal', canvas, ctx;
 // target state (encoder-private; attacks must NOT read these except where labelled demo ground truth)
 let ciphertext=[];        // message addresses: rel (unsignal) or abs (zoscii)
@@ -181,7 +199,7 @@ function b2(n){ return n.toString(16).toUpperCase().padStart(2,'0'); }
 function trunc(s){ return s.length>110?s.slice(0,110)+'…':s; }
 
 // ---------- ROM ----------
-function randomROM(){ actualSize=ROM_SIZE; for(let i=0;i<ROM_SIZE;i++) rom[i]=Math.random()*256|0; rebuild(); render(); stats(); }
+function randomROM(){ for(const k of [0,1]){ C(k); actualSize=ROM_SIZE; for(let i=0;i<ROM_SIZE;i++) rom[i]=Math.random()*256|0; rebuild(); render(); stats(); save(); } useOuter(); }
 function rebuild(){ for(let i=0;i<256;i++) lookup[i]=[]; const m=Math.min(actualSize,WINDOW); for(let i=0;i<m;i++) lookup[rom[i]].push(i); }
 function render(){
   ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -192,13 +210,14 @@ function render(){
 function box(sr,er,col){ if(er-sr<=0) return; ctx.strokeStyle=col; ctx.lineWidth=3; ctx.setLineDash([6,4]);
   ctx.strokeRect(1.5, sr*PX+1.5, GW*PX-3, (er-sr)*PX-3); ctx.setLineDash([]); }
 function stats(){
-  $('sRom').textContent=actualSize+' B';
+  const S=cur?'2':'';
+  $('sRom'+S).textContent=actualSize+' B';
   const p=new Array(256).fill(false); for(let i=0;i<actualSize;i++) p[rom[i]]=true;
-  $('sUniq').textContent=p.filter(Boolean).length+' / 256';
+  $('sUniq'+S).textContent=p.filter(Boolean).length+' / 256';
 }
-function dropROM(e){ e.preventDefault(); canvas.style.borderColor='#444'; const f=e.dataTransfer.files[0]; if(!f) return;
-  const r=new FileReader(); r.onload=ev=>{ const b=new Uint8Array(ev.target.result); actualSize=Math.min(b.length,ROM_SIZE);
-    for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; rebuild(); render(); stats(); elog('[rom] loaded '+f.name+' ('+b.length+' B)'); };
+function dropROM(e,k){ e.preventDefault(); CT[k].canvas.style.borderColor='#444'; const f=e.dataTransfer.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=ev=>{ C(k); const b=new Uint8Array(ev.target.result); actualSize=Math.min(b.length,ROM_SIZE);
+    for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; rebuild(); render(); stats(); save(); useOuter(); elog('[rom '+(k+1)+'] loaded '+f.name+' ('+b.length+' B)'+(k&&!trueFrame?'':'')); };
   r.readAsArrayBuffer(f); }
 
 // ---------- UNSIGNAL header ----------
@@ -219,71 +238,109 @@ function hdrPair(V){ return [pickAddr(V&0xFF), pickAddr((V>>8)&0xFF)]; }        
 function winLookupFor(off){ const wl=new Array(256); for(let i=0;i<256;i++) wl[i]=[]; for(let i=0;i<effSize;i++){ const a=off+i; if(a<actualSize) wl[rom[a]].push(i); } return wl; }
 function pushAddr(arr,a){ arr.push(a&0xFF,(a>>8)&0xFF); }
 
-function encode(){
-  const msg=$('inputMessage').value; truth=[...new TextEncoder().encode(msg)];
-  ciphertext=[]; msgBytes=[]; msgCells=[]; bricsBlocks=[];
+// ---------- COMPRESSION (raw deflate: no fixed header, so no free crib) ----------
+async function deflateRaw(bytes){
+  if(typeof CompressionStream==='undefined') throw new Error('CompressionStream not supported in this browser');
+  const s=new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return [...new Uint8Array(await new Response(s).arrayBuffer())];
+}
+async function inflateRaw(bytes){
+  if(typeof DecompressionStream==='undefined') throw new Error('DecompressionStream not supported in this browser');
+  const s=new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return [...new Uint8Array(await new Response(s).arrayBuffer())];
+}
+
+function encodeLayer(tr,bl){
+  const msgB=[],msgC=[],bb=[],fb=[],logs=[]; let sOff='---', frame=null;
   const reg=regime1(actualSize); effSize=(mode==='zoscii')?Math.min(actualSize,WINDOW):reg.y;
-  const bl=$('brainless').checked;
-  let dropped=0; fileBytes=[];
+  let dropped=0;
 
   if(mode==='zoscii'){
     winOffset=0;
-    for(const b of truth){ const c=lookup[b];
-      if(c&&c.length){ const a=c[Math.random()*c.length|0]; pushAddr(fileBytes,a); msgBytes.push(b); msgCells.push(a); } else dropped++; }
-    trueFrame={ mode, brainless:bl, msgBytes, msgCells };
-    $('sOff').textContent='0';
+    for(const b of tr){ const c=lookup[b];
+      if(c&&c.length){ const a=c[Math.random()*c.length|0]; pushAddr(fb,a); msgB.push(b); msgC.push(a); } else dropped++; }
+    frame={ mode, brainless:bl, msgBytes:msgB, msgCells:msgC };
+    sOff='0';
   }
   else if(mode==='unsignal'){
     const H=genHeader(); winOffset=H.off;
     const wl=winLookupFor(winOffset);
-    for(const a of [H.h1,H.h2,H.h3,H.h4]) pushAddr(fileBytes,a); fileBytes.push(...H.pre);
-    for(const b of truth){ const c=wl[b];
-      if(c&&c.length){ const r=c[Math.random()*c.length|0]; pushAddr(fileBytes,r); msgBytes.push(b); msgCells.push(winOffset+r); } else dropped++; }
-    fileBytes.push(...H.suf);
-    trueFrame={ mode, brainless:bl, msgBytes, msgCells, prefixLen:H.pl, suffixLen:H.sl, offset:winOffset };
-    $('sOff').textContent=hex(winOffset);
-    elog('[encode] '+truth.length+' bytes → '+msgBytes.length+' addresses, mode=unsignal'+(bl?' +BRAINLESS':'')+
+    for(const a of [H.h1,H.h2,H.h3,H.h4]) pushAddr(fb,a); fb.push(...H.pre);
+    for(const b of tr){ const c=wl[b];
+      if(c&&c.length){ const r=c[Math.random()*c.length|0]; pushAddr(fb,r); msgB.push(b); msgC.push(winOffset+r); } else dropped++; }
+    fb.push(...H.suf);
+    frame={ mode, brainless:bl, msgBytes:msgB, msgCells:msgC, prefixLen:H.pl, suffixLen:H.sl, offset:winOffset };
+    sOff=hex(winOffset);
+    logs.push('[encode] '+tr.length+' bytes → '+msgB.length+' addresses, mode=unsignal'+(bl?' +BRAINLESS':'')+
         '  (prefixLen='+H.pl+', suffixLen='+H.sl+', offset='+winOffset+', Regime 1 rule '+H.rule+': y='+H.y+' w='+H.w+')');
   }
   else { // brics — multiple blocks, each with its own offset
-    const chunks=[]; for(let i=0;i<truth.length;){ let z=128+(Math.random()*385|0); z=Math.min(z,truth.length-i); chunks.push([i,z]); i+=z; }
+    const chunks=[]; for(let i=0;i<tr.length;){ let z=128+(Math.random()*385|0); z=Math.min(z,tr.length-i); chunks.push([i,z]); i+=z; }
     if(!chunks.length) chunks.push([0,0]);
     // pass 1: encode each chunk at its own offset, keeping the ACTUAL emitted addresses (so header sizes match)
     const blocks=chunks.map(([start,len])=>{
       const P=Math.random()*65536|0, off=windowOffsetFor(P,actualSize), wl=winLookupFor(off);
       const addrs=[], bytes=[];
-      for(let k=0;k<len;k++){ const b=truth[start+k], c=wl[b];
+      for(let k=0;k<len;k++){ const b=tr[start+k], c=wl[b];
         if(c&&c.length){ const r=c[Math.random()*c.length|0]; addrs.push(r); bytes.push(b); } else dropped++; }
       return {P, off, addrs, bytes};
     });
     winOffset=blocks[0].off;   // for the window box only
     const pl=10+(Math.random()*246|0), sl=10+(Math.random()*246|0);
     // FH (12 bytes): block1 offset-pointer, block1 size, prefix len, suffix len
-    for(const a of hdrPair(blocks[0].P)) pushAddr(fileBytes,a);
-    for(const a of hdrPair(blocks[0].addrs.length)) pushAddr(fileBytes,a);
-    pushAddr(fileBytes, pickAddr(pl)); pushAddr(fileBytes, pickAddr(sl));
-    for(let i=0;i<pl;i++) fileBytes.push(Math.random()*256|0);
+    for(const a of hdrPair(blocks[0].P)) pushAddr(fb,a);
+    for(const a of hdrPair(blocks[0].addrs.length)) pushAddr(fb,a);
+    pushAddr(fb, pickAddr(pl)); pushAddr(fb, pickAddr(sl));
+    for(let i=0;i<pl;i++) fb.push(Math.random()*256|0);
     for(let bi=0;bi<blocks.length;bi++){
       const B=blocks[bi], next=blocks[bi+1];
-      if(next){ for(const a of hdrPair(next.P)) pushAddr(fileBytes,a); for(const a of hdrPair(next.addrs.length)) pushAddr(fileBytes,a); }
-      else { for(let j=0;j<4;j++) pushAddr(fileBytes, pickAddr(Math.random()*256|0)); }   // last block: NEXT is unused noise
-      const dataStartByte=fileBytes.length;
-      for(let k=0;k<B.addrs.length;k++){ pushAddr(fileBytes,B.addrs[k]); msgBytes.push(B.bytes[k]); msgCells.push(B.off+B.addrs[k]); }
-      bricsBlocks.push({off:B.off, dataStartByte, nAddrs:B.addrs.length});
+      if(next){ for(const a of hdrPair(next.P)) pushAddr(fb,a); for(const a of hdrPair(next.addrs.length)) pushAddr(fb,a); }
+      else { for(let j=0;j<4;j++) pushAddr(fb, pickAddr(Math.random()*256|0)); }   // last block: NEXT is unused noise
+      const dataStartByte=fb.length;
+      for(let k=0;k<B.addrs.length;k++){ pushAddr(fb,B.addrs[k]); msgB.push(B.bytes[k]); msgC.push(B.off+B.addrs[k]); }
+      bb.push({off:B.off, dataStartByte, nAddrs:B.addrs.length});
     }
-    for(let i=0;i<sl;i++) fileBytes.push(Math.random()*256|0);
-    trueFrame={ mode, brainless:bl, msgBytes, msgCells, blocks:bricsBlocks, prefixLen:pl, suffixLen:sl };
-    $('sOff').textContent=blocks.length+' blk';
-    elog('[encode] '+truth.length+' bytes → '+blocks.length+' block(s), '+msgBytes.length+' data addresses, mode=brics'+(bl?' +BRAINLESS':'')+
+    for(let i=0;i<sl;i++) fb.push(Math.random()*256|0);
+    frame={ mode, brainless:bl, msgBytes:msgB, msgCells:msgC, blocks:bb, prefixLen:pl, suffixLen:sl };
+    sOff=blocks.length+' blk';
+    logs.push('[encode] '+tr.length+' bytes → '+blocks.length+' block(s), '+msgB.length+' data addresses, mode=brics'+(bl?' +BRAINLESS':'')+
         '  (prefixLen='+pl+', suffixLen='+sl+', block sizes '+blocks.map(b=>b.addrs.length).join('/')+', offsets '+blocks.map(b=>b.off).join('/')+')');
   }
 
-  if(dropped) elog('[warn] '+dropped+' message byte(s) absent from the ROM window → dropped (rare on a full random ROM).');
+  return {frame,fileBytes:fb,msgBytes:msgB,msgCells:msgC,blocks:bb,dropped,sOff,logs};
+}
+
+async function encode(){
+  const msg=$('inputMessage').value, plain=[...new TextEncoder().encode(msg)];
+  const cz=$('compress').checked, dbl=$('double').checked, bl=$('brainless').checked;
+  let p0;
+  if(cz){
+    try{ p0=await deflateRaw(plain); }
+    catch(e){ elog('[compress] '+e.message+' → not encoded.'); return; }
+    elog('[compress] '+plain.length+' plaintext bytes → '+p0.length+' bytes raw deflate (compressed BEFORE encoding)');
+  } else p0=plain;
+  C(0); const L1=encodeLayer(p0,dbl?false:bl); save();
+  let L=L1, outerIn=p0, inner=null;
+  const pre=dbl?'[ROM 1 / inner] ':'';
+  L1.logs.forEach(s=>elog(pre+s));
+  if(L1.dropped) elog('[warn] '+pre+L1.dropped+' byte(s) absent from the ROM window → dropped (rare on a full random ROM).');
+  $('sOff').textContent=L1.sOff;
+  if(dbl){
+    inner=L1; outerIn=L1.fileBytes;
+    C(1); L=encodeLayer(outerIn,bl); save();
+    L.logs.forEach(s=>elog('[ROM 2 / outer] '+s));
+    if(L.dropped) elog('[warn] [ROM 2 / outer] '+L.dropped+' inner-file byte(s) absent from ROM 2 → dropped, so the inner layer is corrupted. Use a ROM 2 that contains every byte value.');
+    elog('[double] inner file ('+outerIn.length+' bytes, layer 1) was used as the plaintext of layer 2. BRAINLESS '+(bl?'applied once, to the outer file only.':'off.'));
+    $('sOff2').textContent=L.sOff;
+  }
+  truth=outerIn; ciphertext=[]; msgBytes=L.msgBytes; msgCells=L.msgCells; bricsBlocks=L.blocks; fileBytes=L.fileBytes;
+  trueFrame=L.frame; trueFrame.compressed=cz; trueFrame.plainLen=plain.length; trueFrame.double=dbl;
+  if(dbl) trueFrame.inner={msgBytes:L1.msgBytes,msgCells:L1.msgCells,fileBytes:L1.fileBytes};
   let out=fileBytes.slice();
   if(bl && out.length){ for(let i=out.length-2;i>=0;i--) out[i]^=out[i+1]; out[out.length-1]^=out[0]; }
   $('fileOut').value=out.map(b2).join(' ');
   $('sLen').textContent=msgBytes.length;
-  render();
+  renderAll();
 }
 
 // ---------- ATTACKER-SIDE PRIMITIVES (file bytes only) ----------
@@ -321,6 +378,10 @@ function getMasters(hyps){
 function trueBytes(){ const w=wireBytes(); if(!w) return null; return trueFrame.brainless?peel(w):w; }
 function truthLine(){
   if(!trueFrame || !$('showTruth').checked) return '';
+  const cz=trueFrame.compressed?' [plaintext was COMPRESSED before encoding: '+trueFrame.plainLen+' → '+(trueFrame.msgBytes||[]).length+' bytes]':'';
+  return truthCore()+cz+(trueFrame.double?' [DOUBLE-ENCODED: the inner file ('+trueFrame.inner.fileBytes.length+' bytes, ROM 1) was encoded again with ROM 2. The message above is the OUTER layer.]':'');
+}
+function truthCore(){
   if(trueFrame.mode==='brics') return '[demo ground truth] '+(trueFrame.blocks||[]).length+' block(s), real reading '+(trueFrame.brainless?'PEELED':'RAW')+', block offsets '+(trueFrame.blocks||[]).map(b=>b.off).join('/')+' — none visible in the file.';
   let s='[demo ground truth] real message length '+(trueFrame.msgBytes||[]).length+'. Real structure: '+(trueFrame.brainless?'PEELED':'RAW');
   if(trueFrame.mode==='unsignal'){ const rp=trueFrame.prefixLen; s+='/'+(rp%2?'ODD':'EVEN')+', message offset '+Math.floor(rp/2)+' (prefixLen='+rp+')'; }
@@ -368,6 +429,7 @@ function run(){
   const hyps=hypotheses();
   if(!hyps || !trueFrame){ log('\n[!] No file bytes. Encode a message first.'); return; }
   if(trueFrame.mode!==mode){ log('\n[!] Mode changed since encode. Re-encode first.'); return; }
+  useOuter();
   const opts={allow:parseIdx($('allowPos').value), forbid:parseIdx($('forbidPos').value)};
   log('\n==================== ATTACK: '+type.toUpperCase()+' ====================');
   log('attacker holds '+hyps[0].bytes.length+' file bytes. No ROM. BRAINLESS state UNKNOWN (keyless XOR leaves no marker) → RAW and PEELED both carried.');
@@ -552,7 +614,12 @@ function run(){
     log('This run grants all of that (demo ground truth) to show what ONE correct crib then propagates to.');
     if(MB.length!==truth.length) log('note: '+(truth.length-MB.length)+' message byte(s) had no address in this ROM and were dropped by the encoder.');
     let s0=-1; for(let i=0;i+w.length<=MB.length && s0<0;i++){ let hit=true; for(let j=0;j<w.length;j++) if(MB[i+j]!==w[j]){ hit=false; break; } if(hit) s0=i; }
-    if(s0<0){ log('[!] crib is not in the message, so there is no real position to grant. KPA needs a correct crib.'); return; }
+    if(s0<0){
+      log('[!] crib is not in the message, so there is no real position to grant. KPA needs a correct crib.');
+      if(trueFrame.double) log('  (demo) the file is DOUBLE-ENCODED: the outer layer encodes the inner FILE bytes (header, random padding, addresses), not the text. A text crib cannot match them.');
+      if(trueFrame.compressed) log('  (demo) the plaintext was COMPRESSED before encoding, so the encoded bytes are deflate output, not the text. A text crib cannot match them.');
+      return;
+    }
     log('placed "'+word+'" at its real position '+s0+' (granted).');
     const known=new Map();
     for(let i=0;i<w.length;i++){ const c=MC[s0+i]; if(known.has(c)&&known.get(c)!==w[i]){ log('[!] contradiction → crib wrong here.'); return; } known.set(c,w[i]); }
@@ -602,31 +669,54 @@ function run(){
 
   else if(type==='rom'){
     if(!$('hasROM').checked){ log('[!] Tick "Attacker HAS the ROM" — this baseline models codebook capture, not cryptanalysis.'); return; }
+    const dbl=!!trueFrame.double;
     const MB=trueFrame.msgBytes||[], MC=trueFrame.msgCells||[];
     const t=MC.map(c=> c<actualSize? rom[c] : null);
-    log('rom[cell] decode ('+(mode==='brics'?(trueFrame.blocks||[]).length+' blocks, each at its own offset':'framing')+' from ground truth):');
-    log('  '+t.map(b=>b===null?'·':String.fromCharCode(b)).join(''));
     const dropped=truth.length-MB.length;
-    const exact=t.length===MB.length && t.every((b,i)=>b===MB[i]);
-    log('exact recovery: '+(exact?(dropped?'100% of the '+MB.length+' encoded bytes — TOTAL BREAK ('+dropped+' byte(s) were never encoded: not in this ROM)':'100% — TOTAL BREAK'):'partial'));
+    let exact=t.length===MB.length && t.every((b,i)=>b===MB[i]), fin=t;
+    if(dbl){
+      log('DOUBLE-ENCODED: needs BOTH ROMs (two keys captured). ROM 2 → inner file bytes, then ROM 1 → message.');
+      log('step 1 (ROM 2): recovered '+t.length+' inner-file bytes'+(dropped?' ['+dropped+' never encoded: not in ROM 2]':''));
+      const I=trueFrame.inner, r1=CT[0].rom, s1=CT[0].size;
+      const t1=I.msgCells.map(c=> c<s1? r1[c] : null);
+      log('step 2 (ROM 1, inner framing from ground truth):');
+      log('  '+t1.map(b=>b===null?'·':String.fromCharCode(b)).join(''));
+      exact=exact && t1.length===I.msgBytes.length && t1.every((b,i)=>b===I.msgBytes[i]); fin=t1;
+      log('exact recovery: '+(exact?'100% — TOTAL BREAK (both ROMs held)':'partial'));
+    } else {
+      log('rom[cell] decode ('+(mode==='brics'?(trueFrame.blocks||[]).length+' blocks, each at its own offset':'framing')+' from ground truth):');
+      log('  '+t.map(b=>b===null?'·':String.fromCharCode(b)).join(''));
+      log('exact recovery: '+(exact?(dropped?'100% of the '+MB.length+' encoded bytes — TOTAL BREAK ('+dropped+' byte(s) were never encoded: not in this ROM)':'100% — TOTAL BREAK'):'partial'));
+    }
     log('EXPECTED: possessing the ROM = possessing the codebook. Key compromise, not a weakness in the scheme.');
+    if(trueFrame.compressed){
+      log('message was COMPRESSED before encoding → decompressing the recovered bytes:');
+      if(!exact){ log('  [!] recovery not exact, decompression skipped.'); return; }
+      inflateRaw(fin).then(b=>log('  '+trunc(new TextDecoder().decode(new Uint8Array(b)))+'  ('+b.length+' bytes)'))
+                     .catch(e=>log('  [!] decompress failed: '+e.message));
+    }
   }
 }
 
 // ---------- WIRE ----------
 function init(){
-  canvas=$('rom'); ctx=canvas.getContext('2d');
+  CT[0].canvas=$('rom'); CT[1].canvas=$('rom2'); for(const c of CT) c.cx=c.canvas.getContext('2d'); C(0);
   document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{
     mode=document.querySelector('input[name=mode]:checked').value;
-    if(msgBytes.length) encode(); else render();
+    if(msgBytes.length) encode(); else renderAll();
   }));
   $('encodeBtn').addEventListener('click',encode);
   $('randomROM').addEventListener('click',randomROM);
-  $('clearBtn').addEventListener('click',()=>{ ciphertext=[];truth=[];fileBytes=[];msgBytes=[];msgCells=[];bricsBlocks=[];trueFrame=null; $('fileOut').value='';$('sLen').textContent='0';$('sOff').textContent='---'; render(); });
+  $('clearBtn').addEventListener('click',()=>{ ciphertext=[];truth=[];fileBytes=[];msgBytes=[];msgCells=[];bricsBlocks=[];trueFrame=null; $('fileOut').value='';$('sLen').textContent='0';$('sOff').textContent='---'; renderAll(); });
   $('brainless').addEventListener('change',()=>{ if(msgBytes.length) encode(); });
-  canvas.addEventListener('dragover',e=>{ e.preventDefault(); canvas.style.borderColor='#ff6600'; });
-  canvas.addEventListener('dragleave',()=>canvas.style.borderColor='#444');
-  canvas.addEventListener('drop',dropROM);
+  $('compress').addEventListener('change',()=>{ if(msgBytes.length) encode(); });
+  $('double').addEventListener('change',()=>{ const d=$('double').checked;
+    $('rom2wrap').style.display=d?'block':'none'; $('rom1lbl').style.display=d?'block':'none';
+    if(msgBytes.length) encode(); });
+  CT.forEach((c,k)=>{ const cv=c.canvas;
+    cv.addEventListener('dragover',e=>{ e.preventDefault(); cv.style.borderColor='#ff6600'; });
+    cv.addEventListener('dragleave',()=>cv.style.borderColor='#444');
+    cv.addEventListener('drop',e=>dropROM(e,k)); });
   $('attackFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
     r.onload=ev=>{ attackFileText=ev.target.result; log('[file] loaded '+f.name+' ('+attackFileText.split(/\r?\n/).length+' lines)'); }; r.readAsText(f); });
   $('customFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
