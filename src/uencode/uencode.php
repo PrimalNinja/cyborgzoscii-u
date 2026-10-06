@@ -109,7 +109,7 @@ function buildLookupTable($ptrRom_a)
 	$intRomHash = 0;
 	for ($lngI = 0; $lngI < $ptrRom_a->lngROMSize; $lngI++) 
 	{
-		$intRomHash = ($intRomHash * 33) + ord($ptrRom_a->ptrROMData[$lngI]);
+		$intRomHash = (($intRomHash * 33) + ord($ptrRom_a->ptrROMData[$lngI])) & 0xFFFFFFFF;
 	}
 
 	$intRomHash ^= (int)(microtime(true) * 1000000);

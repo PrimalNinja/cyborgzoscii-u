@@ -65,14 +65,35 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
 
 <!-- ENCODER -->
 <div class="panel">
-  <h2>1 · ROM &amp; ENCODE (build a target ciphertext)</h2>
+  <h2>1 · ROM &amp; ENCODE (build a target encoded text)</h2>
+  <div id="outerWrap" style="margin-bottom:12px">
+    <label>OUTER LAYER PROTOCOL (ROM 1; 2nd encode on ROM 2 when DOUBLE-ENCODE is ticked) — the file the attacker holds.</label>
+    <select id="mode">
+      <option value="zoscii">ZOSCII (16-bit / byte, fixed window)</option>
+      <option value="unsignal" selected>UNSIGNAL (16-bit / byte, sliding window, prefix/suffix)</option>
+      <option value="brics">BRICS (16-bit / byte, per-block offsets, blocks 128..512)</option>
+      <option value="microzoscii">microZOSCII (8-bit / nibble, fixed window)</option>
+      <option value="microunsignal">microUNSIGNAL (8-bit / nibble, sliding window, prefix/suffix 10..15)</option>
+      <option value="microbrics">microBRICS (8-bit / nibble, per-block offsets, blocks 128..255)</option>
+    </select>
+  </div>
   <div class="mode-row">
-    <label><input type="radio" name="mode" value="zoscii"> ZOSCII (64KB) - The PRIMITIVE!</label>
-    <label><input type="radio" name="mode" value="unsignal" checked> UNSIGNAL (any ROM size, Regime 1 sliding window)</label>
-    <label><input type="radio" name="mode" value="brics"> BRICS (per-block offsets)</label>
     <label><input type="checkbox" id="brainless"> BRAINLESS (XOR whole file)</label>
     <label><input type="checkbox" id="compress"> COMPRESS plaintext (raw deflate, before encoding)</label>
-    <label><input type="checkbox" id="double"> DOUBLE-ENCODE (chosen method applied twice, 2 ROMs; BRAINLESS stays outermost) - REMOVES ALL PLAIN TEXT / CRIB ATTACKS</label>
+    <label><input type="checkbox" id="double"> DOUBLE-ENCODE (2 ROMs; BRAINLESS stays outermost) - REMOVES ALL PLAIN TEXT / CRIB ATTACKS</label>
+  </div>
+  <div id="innerWrap">
+    <label>INNER LAYER PROTOCOL (1st encode on ROM 1) — tick DOUBLE-ENCODE to enable.</label>
+    <select id="innerProto" disabled>
+      <option value="same" selected>same as outer layer</option>
+      <option value="zoscii">ZOSCII (16-bit / byte, fixed window)</option>
+      <option value="unsignal">UNSIGNAL (16-bit / byte, sliding window, prefix/suffix)</option>
+      <option value="brics">BRICS (16-bit / byte, per-block offsets, blocks 128..512)</option>
+      <option value="microzoscii">microZOSCII (8-bit / nibble, fixed window)</option>
+      <option value="microunsignal">microUNSIGNAL (8-bit / nibble, sliding window, prefix/suffix 10..15)</option>
+      <option value="microbrics">microBRICS (8-bit / nibble, per-block offsets, blocks 128..255)</option>
+    </select>
+    <div class="hint">Non-"same" inner layers use the creator's general encoder (same objArgs). Micro layers read ROM 1 as nibbles, 2 per byte, high nibble first (same as MicroZOSCII.FromBytes). microZOSCII uses the first 256 nibbles; microUNSIGNAL and microBRICS slide a 256-nibble window.</div>
   </div>
   <label>MESSAGE TO ENCODE</label>
   <textarea id="inputMessage" rows="2">the sender said meet me at the pier at three the pier is safe</textarea>
@@ -82,7 +103,7 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
     <button id="clearBtn">CLEAR</button>
   </div>
   <div class="hint">Drop any file on the canvas to use it as the ROM (smaller ROM = smaller pool = more leakage).</div>
-  <div class="hint" id="rom1lbl" style="display:none">ROM 1 (inner layer): drop a key file here</div>
+  <div class="hint" id="rom1lbl" style="display:none;color:#ff6600;font-weight:bold">ROM 1 — INNER LAYER (1st encode): drop a key file here</div>
   <canvas id="rom" width="1024" height="512"></canvas>
   <div class="stats">
     <div class="stat"><div class="k">ROM SIZE</div><div class="v" id="sRom">0</div></div>
@@ -91,7 +112,7 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
     <div class="stat"><div class="k">MSG ADDRS</div><div class="v" id="sLen">0</div></div>
   </div>
   <div id="rom2wrap" style="display:none">
-    <div class="hint" style="margin-top:14px">ROM 2 (outer layer): drop a different key file here</div>
+    <div class="hint" style="margin-top:14px;color:#ff6600;font-weight:bold">ROM 2 — OUTER LAYER (2nd encode, the file the attacker holds): drop a different key file here</div>
     <canvas id="rom2" width="1024" height="512"></canvas>
     <div class="stats">
       <div class="stat"><div class="k">ROM 2 SIZE</div><div class="v" id="sRom2">0</div></div>
@@ -112,10 +133,10 @@ canvas { border:2px solid #444; background:#000; max-width:100%; height:auto; im
     <div>
       <label>ATTACK TYPE</label>
       <select id="attackType">
-        <option value="repeat">Repeat-structure + framing sweep (ciphertext-only)</option>
+        <option value="repeat">Repeat-structure + framing sweep (encoded-text-only)</option>
         <option value="crib">Crib drag, framing swept (from textbox)</option>
         <option value="dict">Dictionary pattern attack (from file)</option>
-        <option value="kpa">Known-plaintext ROM reconstruction (assumes framing+crib guessed)</option>
+        <option value="kpa">Known plaintext (typed in the box; nothing else given)</option>
         <option value="brainless">BRAINLESS peel (invert keyless XOR)</option>
         <option value="rom">Baseline: full decode WITH ROM (codebook = game over)</option>
         <option value="custom">Custom attack (your own .js file)</option>
@@ -152,33 +173,22 @@ It runs inside this page, so it could read the encoder panel too. An honest atta
 <script>
 (function(){
 const ROM_SIZE=131072, WINDOW=65536, GW=512, GH=256, PX=2;
-// UNSIGNAL spec v1.2 section 7 - Regime 1: effective ROM size (y) and sliding window (w). Integer math only.
-function regime1(x){
-  const xp=Math.floor(x*2/100), t1=65536+Math.floor(65536*2/100);   // t1 = 66846
-  if(x<t1)     return {y:x-xp,  w:xp,        rule:1};
-  if(x<131072) return {y:65536, w:x-65536,   rule:2};   // spec text says 131072-x-xp; that overruns/goes negative, see notes
-  return              {y:65536, w:65536,     rule:3};
-}
-// ROM start pointer -> window offset: one of w window positions, so offset + y <= x always
-function windowOffsetFor(pointer,x){ const r=regime1(x); return r.w>0 ? pointer % r.w : 0; }
-
-let rom, lookup, actualSize, cur=0;
+let rom, actualSize, cur=0;
 // two ROM contexts: 0 = ROM 1 (inner / only layer), 1 = ROM 2 (outer layer when double-encoding)
-const CT=[0,1].map(()=>({rom:new Uint8Array(ROM_SIZE),lookup:new Array(256),size:ROM_SIZE,winOffset:0,effSize:65536,canvas:null,cx:null}));
-function C(i){ cur=i; const c=CT[i]; rom=c.rom; lookup=c.lookup; actualSize=c.size; winOffset=c.winOffset; effSize=c.effSize; canvas=c.canvas; ctx=c.cx; }
-function save(){ const c=CT[cur]; c.size=actualSize; c.winOffset=winOffset; c.effSize=effSize; }
+const CT=[0,1].map(()=>({rom:new Uint8Array(ROM_SIZE),size:ROM_SIZE,winOffset:0,effSize:65536,proto:null,canvas:null,cx:null}));
+function C(i){ cur=i; const c=CT[i]; rom=c.rom; actualSize=c.size; winOffset=c.winOffset; effSize=c.effSize; curProto=c.proto; canvas=c.canvas; ctx=c.cx; }
+function save(){ const c=CT[cur]; c.size=actualSize; c.winOffset=winOffset; c.effSize=effSize; c.proto=curProto; }
 function useOuter(){ C(trueFrame&&trueFrame.double?1:0); }
 function renderAll(){ for(const i of [0,1]){ C(i); render(); } useOuter(); }
-let mode='unsignal', canvas, ctx;
-// target state (encoder-private; attacks must NOT read these except where labelled demo ground truth)
-let ciphertext=[];        // message addresses: rel (unsignal) or abs (zoscii)
-let truth=[];             // plaintext bytes (ground truth)
-let winOffset=0;          // window offset (unsignal)
-let effSize=65536;        // Regime 1 effective size (y) of the current encode
-let fileBytes=[];         // assembled file (pre-brainless)
-let trueFrame=null;       // {msgStartByte, msgLenAddrs, prefixLen, suffixLen, brainless} — demo ground truth
+let mode='unsignal', canvas, ctx, curProto=null;   // curProto: protocol of the layer last encoded with this ROM
+// encoder state. The attacks never read it: they get the file bytes only.
+// trueFrame is the encoder's own record, used for "Show demo answer" and by the ROM holder (ROM baseline).
+let winOffset=0;          // first window offset, for the ROM picture
+let effSize=65536;        // effective window size, for the ROM picture
+let fileBytes=[];         // outer file before BRAINLESS (demo answer only)
+let trueFrame=null;       // {mode, proto, args, frame, brainless, msgLen, plain, compressed, plainLen, double, inner}
+let hasEnc=false;         // a message has been encoded (re-encode when options change)
 let attackFileText='', customSrc='', customName='';
-let msgBytes=[], msgCells=[], bricsBlocks=[];
 
 const $=id=>document.getElementById(id);
 function log(s){ if(s==='') return; const c=$('console'); c.value+=s+'\n'; c.scrollTop=c.scrollHeight; }
@@ -199,16 +209,32 @@ function b2(n){ return n.toString(16).toUpperCase().padStart(2,'0'); }
 function trunc(s){ return s.length>110?s.slice(0,110)+'…':s; }
 
 // ---------- ROM ----------
-function randomROM(){ for(const k of [0,1]){ C(k); actualSize=ROM_SIZE; for(let i=0;i<ROM_SIZE;i++) rom[i]=Math.random()*256|0; rebuild(); render(); stats(); save(); } useOuter(); }
-function rebuild(){ for(let i=0;i<256;i++) lookup[i]=[]; const m=Math.min(actualSize,WINDOW); for(let i=0;i<m;i++) lookup[rom[i]].push(i); }
+function randomROM(){ for(const k of [0,1]){ C(k); actualSize=ROM_SIZE; for(let i=0;i<ROM_SIZE;i++) rom[i]=Math.random()*256|0; render(); stats(); save(); } useOuter(); }
 function render(){
+  // window = the ROM bytes the layer encoded with this ROM can address (micro: 256 nibbles = 128 bytes)
+  const p=curProto||mode; let wa, wb, col;
+  if(p==='zoscii'){ wa=0; wb=Math.min(WINDOW,actualSize); col='#00ff00'; }
+  else if(p==='microzoscii'){ wa=0; wb=Math.min(128,actualSize); col='#00ff00'; }
+  else { wa=winOffset; wb=Math.min(winOffset+effSize,actualSize); col='#ff6600'; }
   ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){ const i=y*GW+x; if(i<actualSize){ ctx.fillStyle='rgb(0,'+rom[i]+',0)'; ctx.fillRect(x*PX,y*PX,PX,PX);} }
-  if(mode==='zoscii'){ box(0,Math.ceil(Math.min(WINDOW,actualSize)/GW),'#00ff00'); }
-  else { const sr=Math.floor(winOffset/GW), er=Math.ceil(Math.min(winOffset+effSize,actualSize)/GW); box(sr,er,'#ff6600'); }
+  // cells outside the window are dimmed so even a 128-byte micro window stands out
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){ const i=y*GW+x; if(i<actualSize){ const v=(i>=wa&&i<wb)?rom[i]:(rom[i]*0.3|0); ctx.fillStyle='rgb(0,'+v+',0)'; ctx.fillRect(x*PX,y*PX,PX,PX);} }
+  boxSpan(wa,wb,col);
 }
-function box(sr,er,col){ if(er-sr<=0) return; ctx.strokeStyle=col; ctx.lineWidth=3; ctx.setLineDash([6,4]);
-  ctx.strokeRect(1.5, sr*PX+1.5, GW*PX-3, (er-sr)*PX-3); ctx.setLineDash([]); }
+// outline ROM bytes [a,b) as one shape; a 1-row window is padded to 10px tall so it stays visible; labelled below
+function boxSpan(a,b,col){ if(b<=a) return; ctx.strokeStyle=col; ctx.lineWidth=3;
+  const ra=Math.floor(a/GW), rb=Math.floor((b-1)/GW), xa=a%GW*PX, xb=((b-1)%GW+1)*PX, W=GW*PX, L=1.5, R=W-1.5;
+  let bottom;
+  if(ra===rb){ let top=ra*PX, h=PX; if(h<10){ top=Math.max(L,top-(10-h)/2); h=10; } ctx.strokeRect(xa+L, top, Math.max(3,xb-xa-3), h); bottom=top+h; }
+  else {
+    const y0=ra*PX+L, y1=(ra+1)*PX, y2=rb*PX, y3=(rb+1)*PX-L;
+    ctx.beginPath(); ctx.moveTo(xa+L,y0); ctx.lineTo(R,y0); ctx.lineTo(R,xb>=W?y3:y2); if(xb<W){ ctx.lineTo(xb,y2); ctx.lineTo(xb,y3); }
+    ctx.lineTo(L,y3); ctx.lineTo(L,xa>0?y1:y0); if(xa>0){ ctx.lineTo(xa+L,y1); } ctx.closePath(); ctx.stroke(); bottom=y3;
+  }
+  const lbl=(trueFrame&&trueFrame.double?(cur===0?'INNER ':'OUTER '):'')+'window '+(b-a)+' B @ '+a; ctx.font='bold 14px monospace'; const tw=ctx.measureText(lbl).width;
+  let ty=bottom+18; if(ty>canvas.height-4) ty=ra*PX-6; const tx=Math.max(4,Math.min(xa+4, canvas.width-tw-6));
+  ctx.fillStyle='#000'; ctx.fillRect(tx-3,ty-14,tw+6,18); ctx.fillStyle=col; ctx.fillText(lbl,tx,ty);
+}
 function stats(){
   const S=cur?'2':'';
   $('sRom'+S).textContent=actualSize+' B';
@@ -217,26 +243,8 @@ function stats(){
 }
 function dropROM(e,k){ e.preventDefault(); CT[k].canvas.style.borderColor='#444'; const f=e.dataTransfer.files[0]; if(!f) return;
   const r=new FileReader(); r.onload=ev=>{ C(k); const b=new Uint8Array(ev.target.result); actualSize=Math.min(b.length,ROM_SIZE);
-    for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; rebuild(); render(); stats(); save(); useOuter(); elog('[rom '+(k+1)+'] loaded '+f.name+' ('+b.length+' B)'+(k&&!trueFrame?'':'')); };
+    for(let i=0;i<ROM_SIZE;i++) rom[i]=i<b.length?b[i]:0; render(); stats(); save(); useOuter(); elog('[rom '+(k+1)+'] loaded '+f.name+' ('+b.length+' B)'+(k&&!trueFrame?'':'')); };
   r.readAsArrayBuffer(f); }
-
-// ---------- UNSIGNAL header ----------
-function genHeader(){
-  const pick=(lo,hi)=>{ const c=[]; const max=Math.min(actualSize,WINDOW);
-    for(let v=lo;v<=hi;v++) if(lookup[v]) for(const a of lookup[v]) if(a<max) c.push(a);
-    return c.length? c[Math.random()*c.length|0] : 0; };
-  const h1=pick(0,255),h2=pick(0,255),h3=pick(10,255),h4=pick(10,255);
-  const oLo=rom[h1],oHi=rom[h2],pl=rom[h3],sl=rom[h4];
-  const raw=(oHi<<8)|oLo, reg=regime1(actualSize), off=windowOffsetFor(raw,actualSize);
-  const pre=[],suf=[]; for(let i=0;i<pl;i++) pre.push(Math.random()*256|0); for(let i=0;i<sl;i++) suf.push(Math.random()*256|0);
-  return {h1,h2,h3,h4,oLo,oHi,pl,sl,off,pre,suf,y:reg.y,w:reg.w,rule:reg.rule};
-}
-
-// ---------- ENCODE ----------
-function pickAddr(v){ const c=lookup[v]; return (c&&c.length)? c[Math.random()*c.length|0] : 0; }   // an address in the first window whose ROM value == v
-function hdrPair(V){ return [pickAddr(V&0xFF), pickAddr((V>>8)&0xFF)]; }                              // two header addresses composing to V
-function winLookupFor(off){ const wl=new Array(256); for(let i=0;i<256;i++) wl[i]=[]; for(let i=0;i<effSize;i++){ const a=off+i; if(a<actualSize) wl[rom[a]].push(i); } return wl; }
-function pushAddr(arr,a){ arr.push(a&0xFF,(a>>8)&0xFF); }
 
 // ---------- COMPRESSION (raw deflate: no fixed header, so no free crib) ----------
 async function deflateRaw(bytes){
@@ -250,65 +258,478 @@ async function inflateRaw(bytes){
   return [...new Uint8Array(await new Response(s).arrayBuffer())];
 }
 
-function encodeLayer(tr,bl){
-  const msgB=[],msgC=[],bb=[],fb=[],logs=[]; let sOff='---', frame=null;
-  const reg=regime1(actualSize); effSize=(mode==='zoscii')?Math.min(actualSize,WINDOW):reg.y;
-  let dropped=0;
 
-  if(mode==='zoscii'){
-    winOffset=0;
-    for(const b of tr){ const c=lookup[b];
-      if(c&&c.length){ const a=c[Math.random()*c.length|0]; pushAddr(fb,a); msgB.push(b); msgC.push(a); } else dropped++; }
-    frame={ mode, brainless:bl, msgBytes:msgB, msgCells:msgC };
-    sOff='0';
-  }
-  else if(mode==='unsignal'){
-    const H=genHeader(); winOffset=H.off;
-    const wl=winLookupFor(winOffset);
-    for(const a of [H.h1,H.h2,H.h3,H.h4]) pushAddr(fb,a); fb.push(...H.pre);
-    for(const b of tr){ const c=wl[b];
-      if(c&&c.length){ const r=c[Math.random()*c.length|0]; pushAddr(fb,r); msgB.push(b); msgC.push(winOffset+r); } else dropped++; }
-    fb.push(...H.suf);
-    frame={ mode, brainless:bl, msgBytes:msgB, msgCells:msgC, prefixLen:H.pl, suffixLen:H.sl, offset:winOffset };
-    sOff=hex(winOffset);
-    logs.push('[encode] '+tr.length+' bytes → '+msgB.length+' addresses, mode=unsignal'+(bl?' +BRAINLESS':'')+
-        '  (prefixLen='+H.pl+', suffixLen='+H.sl+', offset='+winOffset+', Regime 1 rule '+H.rule+': y='+H.y+' w='+H.w+')');
-  }
-  else { // brics — multiple blocks, each with its own offset
-    const chunks=[]; for(let i=0;i<tr.length;){ let z=128+(Math.random()*385|0); z=Math.min(z,tr.length-i); chunks.push([i,z]); i+=z; }
-    if(!chunks.length) chunks.push([0,0]);
-    // pass 1: encode each chunk at its own offset, keeping the ACTUAL emitted addresses (so header sizes match)
-    const blocks=chunks.map(([start,len])=>{
-      const P=Math.random()*65536|0, off=windowOffsetFor(P,actualSize), wl=winLookupFor(off);
-      const addrs=[], bytes=[];
-      for(let k=0;k<len;k++){ const b=tr[start+k], c=wl[b];
-        if(c&&c.length){ const r=c[Math.random()*c.length|0]; addrs.push(r); bytes.push(b); } else dropped++; }
-      return {P, off, addrs, bytes};
-    });
-    winOffset=blocks[0].off;   // for the window box only
-    const pl=10+(Math.random()*246|0), sl=10+(Math.random()*246|0);
-    // FH (12 bytes): block1 offset-pointer, block1 size, prefix len, suffix len
-    for(const a of hdrPair(blocks[0].P)) pushAddr(fb,a);
-    for(const a of hdrPair(blocks[0].addrs.length)) pushAddr(fb,a);
-    pushAddr(fb, pickAddr(pl)); pushAddr(fb, pickAddr(sl));
-    for(let i=0;i<pl;i++) fb.push(Math.random()*256|0);
-    for(let bi=0;bi<blocks.length;bi++){
-      const B=blocks[bi], next=blocks[bi+1];
-      if(next){ for(const a of hdrPair(next.P)) pushAddr(fb,a); for(const a of hdrPair(next.addrs.length)) pushAddr(fb,a); }
-      else { for(let j=0;j<4;j++) pushAddr(fb, pickAddr(Math.random()*256|0)); }   // last block: NEXT is unused noise
-      const dataStartByte=fb.length;
-      for(let k=0;k<B.addrs.length;k++){ pushAddr(fb,B.addrs[k]); msgB.push(B.bytes[k]); msgC.push(B.off+B.addrs[k]); }
-      bb.push({off:B.off, dataStartByte, nAddrs:B.addrs.length});
-    }
-    for(let i=0;i<sl;i++) fb.push(Math.random()*256|0);
-    frame={ mode, brainless:bl, msgBytes:msgB, msgCells:msgC, blocks:bb, prefixLen:pl, suffixLen:sl };
-    sOff=blocks.length+' blk';
-    logs.push('[encode] '+tr.length+' bytes → '+blocks.length+' block(s), '+msgB.length+' data addresses, mode=brics'+(bl?' +BRAINLESS':'')+
-        '  (prefixLen='+pl+', suffixLen='+sl+', block sizes '+blocks.map(b=>b.addrs.length).join('/')+', offsets '+blocks.map(b=>b.off).join('/')+')');
-  }
-
-  return {frame,fileBytes:fb,msgBytes:msgB,msgCells:msgC,blocks:bb,dropped,sOff,logs};
+// ---------- PROTOCOLS (the creator's general encoder, ES5) ----------
+// Every layer is built by gen_encode, the same code the creator generates, so files always match the creator's.
+function innerArgs(p){
+  var a={elemBits:16,sliding:true,blocks:0,blockMin:128,blockMax:512,
+    prefix:{on:true,width:1,min:10,max:255},suffix:{on:true,width:1,min:10,max:255},
+    rollingHash:0,crc32:false,brainless:0,zac:{on:false,value:'',bytes:16,closesBlock:true},seed:0};
+  var off={on:false,width:1,min:0,max:0}, mpad=function(){ return {on:true,width:1,min:10,max:15}; };
+  if(p==='zoscii'){ a.sliding=false; a.prefix=off; a.suffix={on:false,width:1,min:0,max:0}; }
+  else if(p==='brics'){ a.blocks=1; }
+  else if(p==='microzoscii'){ a.elemBits=8; a.sliding=false; a.prefix=off; a.suffix={on:false,width:1,min:0,max:0}; }
+  else if(p==='microunsignal'){ a.elemBits=8; a.prefix=mpad(); a.suffix=mpad(); }
+  else if(p==='microbrics'){ a.elemBits=8; a.blocks=1; a.blockMax=255; a.prefix=mpad(); a.suffix=mpad(); }
+  return a;
 }
+function innerROMc(p,ci){ var c=CT[ci], r=[], i=0, m=p.indexOf('micro')===0; for(i=0;i<c.size;i++){ if(m){ r.push((c.rom[i]>>4)&15); r.push(c.rom[i]&15); } else { r.push(c.rom[i]); } } return r; }
+function innerROM(p){ return innerROMc(p,0); }
+function isMicro(p){ return typeof p==='string' && p.indexOf('micro')===0; }
+const INNER_NAME={zoscii:'ZOSCII',unsignal:'UNSIGNAL',brics:'BRICS',microzoscii:'microZOSCII',microunsignal:'microUNSIGNAL',microbrics:'microBRICS'};
+
+var m_lngRandState = 0;
+
+function gen_brainless(arrBytes_a, intDir_a) { var intI = 0; var intLen = arrBytes_a.length; if (intLen > 0 && intDir_a == 1) { for (intI = intLen - 2; intI >= 0; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; } else if (intLen > 0 && intDir_a == 2) { for (intI = 1; intI < intLen; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; } }
+function gen_buildWindow(arrROM_a, intOffset_a, intSize_a) { var arrWindow = []; var intI = 0; var intROMLen = arrROM_a.length; for (intI = 0; intI < 256; intI++) { arrWindow.push([]); } for (intI = 0; intI < intSize_a; intI++) { if (intOffset_a + intI < intROMLen) { arrWindow[arrROM_a[intOffset_a + intI]].push(intI); } } return arrWindow; }
+function gen_crc32Std(arrBytes_a) { var lngCrc = 0xFFFFFFFF; var lngX = 0; var intI = 0; var intJ = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = ((lngX >>> 1) ^ 0xEDB88320) >>> 0; } else { lngX = lngX >>> 1; } } lngCrc = ((lngCrc >>> 8) ^ lngX) >>> 0; } return (lngCrc ^ 0xFFFFFFFF) >>> 0; }
+function gen_romHash(arrBytes_a) { var lngHash = 0; var intI = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
+function gen_effSize(intROMLen_a, intCap_a, blnSliding_a) { var intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = gen_regime(intROMLen_a, intCap_a).size; } return intSize; }
+function gen_hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a, intAddrBytes_a, intValueBits_a) { var intI = 0; var byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); gen_pushLE(arrOut_a, gen_pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
+function gen_nextRand() { var lngState = m_lngRandState; lngState = (lngState ^ (lngState << 13)) >>> 0; lngState = (lngState ^ (lngState >>> 17)) >>> 0; lngState = (lngState ^ (lngState << 5)) >>> 0; m_lngRandState = lngState; return lngState; }
+function gen_offset(intPtr_a, intROMLen_a, intCap_a, blnSliding_a) { var intOffset = 0; var objSpan = null; if (blnSliding_a) { objSpan = gen_regime(intROMLen_a, intCap_a); if (objSpan.wrap > 0) { intOffset = intPtr_a % (objSpan.wrap + 1); } } return intOffset; }
+function gen_pick(arrWindow_a, intValue_a) { var intAddr = 0; var intLen = arrWindow_a[intValue_a].length; if (intLen > 0) { intAddr = arrWindow_a[intValue_a][gen_nextRand() % intLen]; } return intAddr; }
+function gen_pushLE(arrOut_a, lngValue_a, intBytes_a) { var intI = 0; for (intI = 0; intI < intBytes_a; intI++) { arrOut_a.push((lngValue_a >>> (8 * intI)) & 0xFF); } }
+function gen_readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a, intAddrBytes_a, intValueBits_a) { var intValue = 0; var intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[gen_readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
+function gen_readLE(arrBytes_a, intPos_a, intBytes_a) { var lngValue = 0; var intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = (lngValue | (arrBytes_a[intPos_a + intI] << (8 * intI))) >>> 0; } return lngValue; }
+function gen_regime(intROMLen_a, intCap_a) { var intPct = Math.floor(intROMLen_a * 2 / 100); var intLimit = intCap_a + Math.floor(intCap_a * 2 / 100); var objSpan = { size: intCap_a, wrap: intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
+function gen_rollingHash(arrBytes_a) { var lngHash = 0; var intPass = 0; var intI = 0; var intLast = 0; var byState = 0; var intLen = arrBytes_a.length; for (intPass = 0; intPass < 4; intPass++) { byState = 0; intLast = intLen - 1; while (intLast >= 0 && (intLast % 4) != intPass) { intLast--; } if (intLast >= 0) { byState = arrBytes_a[intLast]; for (intI = intLast - 4; intI >= 0; intI = intI - 4) { byState = byState ^ arrBytes_a[intI]; } byState = byState ^ arrBytes_a[intLast]; } lngHash = (lngHash | (byState << (8 * intPass))) >>> 0; } return lngHash; }
+function gen_seed(arrROM_a, lngExtra_a) { var lngSeed = gen_romHash(arrROM_a); lngSeed = (lngSeed ^ gen_timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
+function gen_timer() { var lngTime = 0; if (typeof performance != "undefined" && performance.now) { lngTime = (performance.now() * 1000) >>> 0; } else { lngTime = Date.now() >>> 0; } return lngTime; }
+function gen_unbrainless(arrBytes_a, intDir_a) { var intI = 0; var intLen = arrBytes_a.length; if (intLen > 0 && intDir_a == 1) { arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; for (intI = 0; intI <= intLen - 2; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } } else if (intLen > 0 && intDir_a == 2) { arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; for (intI = intLen - 1; intI >= 1; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } } }
+function gen_zacBytes(objArgs_a) { var arrZac = []; var intI = 0; var intLen = objArgs_a.zac.value.length; if (intLen > 0) { for (intI = 0; intI < intLen; intI++) { arrZac.push(objArgs_a.zac.value.charCodeAt(intI)); } } else { for (intI = 0; intI < objArgs_a.zac.bytes; intI++) { arrZac.push(gen_nextRand() % 256); } } return arrZac; }
+function gen_zacLen(objArgs_a) { var intLen = 0; if (objArgs_a.zac.on) { intLen = objArgs_a.zac.value.length; if (intLen == 0) { intLen = objArgs_a.zac.bytes; } } return intLen; }
+
+function gen_encode(arrROM_a, arrMessage_a, objArgs_a)
+{
+    var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    var intAddrBytes = objArgs_a.elemBits / 8;
+    var intValueBits = objArgs_a.elemBits / 2;
+    var intUnit = 16 / objArgs_a.elemBits;
+    var arrOut = [];
+    var arrPayload = [];
+    var arrElems = [];
+    var arrZac = [];
+    var arrPrefix = [];
+    var arrSuffix = [];
+    var arrBlocks = [];
+    var arrHdrWindow = [];
+    var arrWindow = [];
+    var intI = 0;
+    var intK = 0;
+    var intHeadLen = 0;
+    var intPrefixLen = 0;
+    var intSuffixLen = 0;
+    var intBlockLen = 0;
+    var intPtr = 0;
+    var intOffset = 0;
+    var intSize = 0;
+    var intValue = 0;
+    var intROMLen = arrROM_a.length;
+    var intMessageLen = arrMessage_a.length;
+    var lngHash = 0;
+    var blnMulti = (objArgs_a.blocks == 1);
+    var blnOk = true;
+
+    m_lngRandState = gen_seed(arrROM_a, objArgs_a.seed);
+    intSize = ADDRESS_SPACE;
+    if (intROMLen < ADDRESS_SPACE)
+    {
+        intSize = intROMLen;
+    }
+    arrHdrWindow = gen_buildWindow(arrROM_a, 0, intSize);
+
+    // integrity words + ZAC lead the payload (presegment placement)
+    if (objArgs_a.rollingHash == 1)
+    {
+        gen_pushLE(arrPayload, gen_rollingHash(arrMessage_a), 4);
+    }
+    if (objArgs_a.crc32)
+    {
+        gen_pushLE(arrPayload, gen_crc32Std(arrMessage_a), 4);
+    }
+    if (objArgs_a.zac.on)
+    {
+        arrZac = gen_zacBytes(objArgs_a);
+        for (intI = 0; intI < arrZac.length; intI++)
+        {
+            arrPayload.push(arrZac[intI]);
+        }
+    }
+    intHeadLen = arrPayload.length;
+    for (intI = 0; intI < intMessageLen; intI++)
+    {
+        arrPayload.push(arrMessage_a[intI]);
+    }
+
+    // payload bytes -> address elements (nibble mode: low nibble first, then high nibble)
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI < arrPayload.length; intI++)
+        {
+            arrElems.push(arrPayload[intI] & 0x0F);
+            arrElems.push((arrPayload[intI] >> 4) & 0x0F);
+        }
+        intHeadLen = intHeadLen * 2;
+    }
+    else
+    {
+        for (intI = 0; intI < arrPayload.length; intI++)
+        {
+            arrElems.push(arrPayload[intI]);
+        }
+    }
+
+    // random prefix / suffix
+    if (objArgs_a.prefix.on)
+    {
+        intPrefixLen = objArgs_a.prefix.min + (gen_nextRand() % (objArgs_a.prefix.max - objArgs_a.prefix.min + 1));
+    }
+    if (objArgs_a.suffix.on)
+    {
+        intSuffixLen = objArgs_a.suffix.min + (gen_nextRand() % (objArgs_a.suffix.max - objArgs_a.suffix.min + 1));
+    }
+    for (intI = 0; intI < intPrefixLen; intI++)
+    {
+        arrPrefix.push(gen_nextRand() % 256);
+    }
+    for (intI = 0; intI < intSuffixLen; intI++)
+    {
+        arrSuffix.push(gen_nextRand() % 256);
+    }
+    // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
+    if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
+    {
+        lngHash = gen_rollingHash(arrMessage_a);
+        for (intI = 0; intI < 4; intI++)
+        {
+            arrPrefix[intPrefixLen - 4 + intI] = (lngHash >>> (8 * intI)) & 0xFF;
+        }
+    }
+
+    // plan blocks (element counts)
+    if (blnMulti)
+    {
+        intI = 0;
+        if (objArgs_a.zac.on && objArgs_a.zac.closesBlock && intHeadLen > 0)
+        {
+            arrBlocks.push({ start: 0, len: intHeadLen, ptr: 0, addrs: [] });
+            intI = intHeadLen;
+        }
+        while (intI < arrElems.length)
+        {
+            intBlockLen = (objArgs_a.blockMin + (gen_nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1))) * intUnit;
+            if (intBlockLen > arrElems.length - intI)
+            {
+                intBlockLen = arrElems.length - intI;
+            }
+            arrBlocks.push({ start: intI, len: intBlockLen, ptr: 0, addrs: [] });
+            intI = intI + intBlockLen;
+        }
+        if (arrBlocks.length == 0)
+        {
+            arrBlocks.push({ start: 0, len: 0, ptr: 0, addrs: [] });
+        }
+    }
+    else
+    {
+        arrBlocks.push({ start: 0, len: arrElems.length, ptr: 0, addrs: [] });
+    }
+
+    // encode each block at its own offset
+    intSize = gen_effSize(intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
+    for (intK = 0; intK < arrBlocks.length; intK++)
+    {
+        intPtr = 0;
+        if (objArgs_a.sliding)
+        {
+            intPtr = gen_nextRand() % ADDRESS_SPACE;
+        }
+        intOffset = gen_offset(intPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
+        arrWindow = gen_buildWindow(arrROM_a, intOffset, intSize);
+        arrBlocks[intK].ptr = intPtr;
+        for (intI = 0; intI < arrBlocks[intK].len; intI++)
+        {
+            intValue = arrElems[arrBlocks[intK].start + intI];
+            if (arrWindow[intValue].length > 0)
+            {
+                arrBlocks[intK].addrs.push(gen_pick(arrWindow, intValue));
+            }
+            else
+            {
+                blnOk = false;
+            }
+        }
+    }
+
+    if (blnOk)
+    {
+        // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
+        if (objArgs_a.sliding)
+        {
+            gen_hdrValue(arrOut, arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits);
+        }
+        if (blnMulti)
+        {
+            gen_hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length / intUnit, 2, intAddrBytes, intValueBits);
+        }
+        if (objArgs_a.prefix.on)
+        {
+            gen_hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+        }
+        if (objArgs_a.suffix.on)
+        {
+            gen_hdrValue(arrOut, arrHdrWindow, intSuffixLen, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+        }
+        for (intI = 0; intI < intPrefixLen; intI++)
+        {
+            arrOut.push(arrPrefix[intI]);
+        }
+        for (intK = 0; intK < arrBlocks.length; intK++)
+        {
+            if (blnMulti)
+            {
+                if (intK + 1 < arrBlocks.length)
+                {
+                    gen_hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
+                    gen_hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length / intUnit, 2, intAddrBytes, intValueBits);
+                }
+                else
+                {
+                    gen_hdrValue(arrOut, arrHdrWindow, gen_nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
+                    gen_hdrValue(arrOut, arrHdrWindow, gen_nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits);
+                }
+            }
+            for (intI = 0; intI < arrBlocks[intK].addrs.length; intI++)
+            {
+                gen_pushLE(arrOut, arrBlocks[intK].addrs[intI], intAddrBytes);
+            }
+        }
+        for (intI = 0; intI < intSuffixLen; intI++)
+        {
+            arrOut.push(arrSuffix[intI]);
+        }
+        gen_brainless(arrOut, objArgs_a.brainless);
+    }
+
+    return arrOut;
+}
+
+function gen_decode(arrROM_a, arrEncoded_a, objArgs_a)
+{
+    var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    var intAddrBytes = objArgs_a.elemBits / 8;
+    var intValueBits = objArgs_a.elemBits / 2;
+    var intUnit = 16 / objArgs_a.elemBits;
+    var arrBytes = [];
+    var arrPayload = [];
+    var arrElems = [];
+    var arrMessage = [];
+    var intI = 0;
+    var intPos = 0;
+    var intPtr = 0;
+    var intSize = 0;
+    var intPrefixLen = 0;
+    var intSuffixLen = 0;
+    var intEnd = 0;
+    var intOffset = 0;
+    var intNextPtr = 0;
+    var intNextSize = 0;
+    var intHead = 0;
+    var intROMLen = arrROM_a.length;
+    var intEncodedLen = arrEncoded_a.length;
+    var blnMulti = (objArgs_a.blocks == 1);
+    var arrBody = [];
+    var blnOk = true;
+    var intPrefixStart = 0;
+    var intCrcPos = 0;
+
+    for (intI = 0; intI < intEncodedLen; intI++)
+    {
+        arrBytes.push(arrEncoded_a[intI]);
+    }
+    gen_unbrainless(arrBytes, objArgs_a.brainless);
+
+    // FILE HEADER: [offset if sliding][block 1 size if multi][prefix len][suffix len]
+    if (objArgs_a.sliding)
+    {
+        intPtr = gen_readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
+    }
+    if (blnMulti)
+    {
+        intSize = gen_readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+        intPos = intPos + 2 * intAddrBytes;
+    }
+    if (objArgs_a.prefix.on)
+    {
+        intPrefixLen = gen_readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.prefix.width * intAddrBytes;
+    }
+    if (objArgs_a.suffix.on)
+    {
+        intSuffixLen = gen_readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
+        intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
+    }
+    intPrefixStart = intPos;
+    intPos = intPos + intPrefixLen;
+    intEnd = intEncodedLen - intSuffixLen;
+
+    intOffset = gen_offset(intPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
+    if (blnMulti)
+    {
+        while (intPos < intEnd)
+        {
+            intNextPtr = gen_readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intNextSize = gen_readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 4 * intAddrBytes;
+            for (intI = 0; intI < intSize * intUnit; intI++)
+            {
+                arrElems.push(arrROM_a[intOffset + gen_readLE(arrBytes, intPos, intAddrBytes)]);
+                intPos = intPos + intAddrBytes;
+            }
+            intOffset = gen_offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
+            intSize = intNextSize;
+        }
+    }
+    else
+    {
+        while (intPos < intEnd)
+        {
+            arrElems.push(arrROM_a[intOffset + gen_readLE(arrBytes, intPos, intAddrBytes)]);
+            intPos = intPos + intAddrBytes;
+        }
+    }
+
+    // address elements -> payload bytes (nibble mode: low nibble first, then high nibble)
+    if (objArgs_a.elemBits == 8)
+    {
+        for (intI = 0; intI + 1 < arrElems.length; intI = intI + 2)
+        {
+            arrPayload.push(arrElems[intI] | (arrElems[intI + 1] << 4));
+        }
+    }
+    else
+    {
+        for (intI = 0; intI < arrElems.length; intI++)
+        {
+            arrPayload.push(arrElems[intI]);
+        }
+    }
+
+    // strip integrity words + ZAC from the front of the payload
+    if (objArgs_a.rollingHash == 1)
+    {
+        intHead = intHead + 4;
+    }
+    if (objArgs_a.crc32)
+    {
+        intHead = intHead + 4;
+    }
+    intHead = intHead + gen_zacLen(objArgs_a);
+    for (intI = intHead; intI < arrPayload.length; intI++)
+    {
+        arrBody.push(arrPayload[intI]);
+    }
+    // integrity: recompute over the message and compare; a mismatch returns an empty message
+    blnOk = (arrPayload.length >= intHead);
+    if (objArgs_a.rollingHash == 1)
+    {
+        blnOk = blnOk && (gen_readLE(arrPayload, 0, 4) == gen_rollingHash(arrBody));
+    }
+    if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
+    {
+        blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (gen_readLE(arrBytes, intPrefixStart + intPrefixLen - 4, 4) == gen_rollingHash(arrBody));
+    }
+    if (objArgs_a.crc32)
+    {
+        if (objArgs_a.rollingHash == 1)
+        {
+            intCrcPos = 4;
+        }
+        blnOk = blnOk && (gen_readLE(arrPayload, intCrcPos, 4) == gen_crc32Std(arrBody));
+    }
+    if (blnOk)
+    {
+        arrMessage = arrBody;
+    }
+
+    return arrMessage;
+}
+
+// Walk an encoded file with the ROM, the same way gen_decode does, and record the framing.
+// Encoder / ROM-holder side only: used for the ROM picture and "Show demo answer". The attacks never call it.
+function gen_frame(arrROM_a, arrEncoded_a, objArgs_a)
+{
+    var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
+    var intAddrBytes = objArgs_a.elemBits / 8;
+    var intValueBits = objArgs_a.elemBits / 2;
+    var intUnit = 16 / objArgs_a.elemBits;
+    var arrBytes = arrEncoded_a.slice();
+    var intPos = 0, intPtr = 0, intSize = 0, intPrefixLen = 0, intSuffixLen = 0, intHdrEnd = 0, intEnd = 0;
+    var intOffset = 0, intNextPtr = 0, intNextSize = 0, intStart = 0, intI = 0, intN = 0;
+    var arrBlocks = [];
+    var arrCells = [];
+    var intROMLen = arrROM_a.length;
+    var blnMulti = (objArgs_a.blocks == 1);
+
+    gen_unbrainless(arrBytes, objArgs_a.brainless);
+    if (objArgs_a.sliding) { intPtr = gen_readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits); intPos = intPos + 2 * intAddrBytes; }
+    if (blnMulti) { intSize = gen_readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits); intPos = intPos + 2 * intAddrBytes; }
+    if (objArgs_a.prefix.on) { intPrefixLen = gen_readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.prefix.width, intAddrBytes, intValueBits); intPos = intPos + objArgs_a.prefix.width * intAddrBytes; }
+    if (objArgs_a.suffix.on) { intSuffixLen = gen_readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits); intPos = intPos + objArgs_a.suffix.width * intAddrBytes; }
+    intHdrEnd = intPos;
+    intPos = intPos + intPrefixLen;
+    intEnd = arrBytes.length - intSuffixLen;
+    intOffset = gen_offset(intPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
+    if (blnMulti)
+    {
+        while (intPos < intEnd)
+        {
+            intNextPtr = gen_readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
+            intNextSize = gen_readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
+            intPos = intPos + 4 * intAddrBytes;
+            intStart = intPos;
+            intN = intSize * intUnit;
+            for (intI = 0; intI < intN; intI++) { arrCells.push(intOffset + gen_readLE(arrBytes, intPos, intAddrBytes)); intPos = intPos + intAddrBytes; }
+            arrBlocks.push({ off: intOffset, start: intStart, n: intN });
+            intOffset = gen_offset(intNextPtr, intROMLen, ADDRESS_SPACE, objArgs_a.sliding);
+            intSize = intNextSize;
+        }
+    }
+    else
+    {
+        intStart = intPos;
+        while (intPos < intEnd) { arrCells.push(intOffset + gen_readLE(arrBytes, intPos, intAddrBytes)); intPos = intPos + intAddrBytes; }
+        arrBlocks.push({ off: intOffset, start: intStart, n: arrCells.length });
+    }
+
+    return { hdrEnd: intHdrEnd, prefixLen: intPrefixLen, suffixLen: intSuffixLen, blocks: arrBlocks, cells: arrCells, firstOff: (arrBlocks.length ? arrBlocks[0].off : 0) };
+}
+
+// one layer: gen_encode with the protocol's args and the ROM in slot ci
+function encodeLayer(tr,bl,ci,proto){
+  C(ci);
+  const a=innerArgs(proto); a.brainless=bl?1:0;
+  const r=innerROMc(proto,ci), micro=a.elemBits===8;
+  const f=gen_encode(r,tr,a);
+  if(!f.length && tr.length) return {fail:true, proto};
+  const fr=gen_frame(r,f,a);
+  const effN=gen_effSize(r.length,1<<a.elemBits,a.sliding);   // window size in cells (nibbles for micro)
+  winOffset=micro?Math.floor(fr.firstOff/2):fr.firstOff;      // first ROM byte of the window
+  effSize=micro?Math.ceil((fr.firstOff+effN)/2)-winOffset:effN; // ROM bytes the window touches
+  curProto=proto;
+  save();
+  const sOff=a.blocks===1?fr.blocks.length+' blk':(a.sliding?(micro?fr.firstOff+' nib (byte '+(fr.firstOff>>1)+')':hex(fr.firstOff)):'0');
+  let line='[encode] '+tr.length+' bytes → '+f.length+'-byte '+INNER_NAME[proto]+' file ('+a.elemBits+'-bit addresses'
+    +(micro?', ROM read as nibbles (2 per byte, high first), '+(proto==='microzoscii'?'first 256 nibbles':'sliding 256-nibble window'):'')
+    +(bl?', +BRAINLESS':'')+')';
+  if(a.sliding) line+='  (prefixLen='+fr.prefixLen+', suffixLen='+fr.suffixLen
+    +(a.blocks===1?', block sizes '+fr.blocks.map(b=>b.n).join('/')+', offsets '+fr.blocks.map(b=>b.off).join('/'):', offset='+fr.firstOff)+')';
+  return {proto,args:a,fileBytes:f,frame:fr,msgLen:tr.length,sOff,line};
+}
+
+function clearOut(){ $('fileOut').value=''; trueFrame=null; fileBytes=[]; $('sLen').textContent='0'; }
 
 async function encode(){
   const msg=$('inputMessage').value, plain=[...new TextEncoder().encode(msg)];
@@ -319,27 +740,27 @@ async function encode(){
     catch(e){ elog('[compress] '+e.message+' → not encoded.'); return; }
     elog('[compress] '+plain.length+' plaintext bytes → '+p0.length+' bytes raw deflate (compressed BEFORE encoding)');
   } else p0=plain;
-  C(0); const L1=encodeLayer(p0,dbl?false:bl); save();
-  let L=L1, outerIn=p0, inner=null;
+  hasEnc=true;
+  const sel=dbl?$('innerProto').value:'same', ip=(sel==='same')?mode:sel;
   const pre=dbl?'[ROM 1 / inner] ':'';
-  L1.logs.forEach(s=>elog(pre+s));
-  if(L1.dropped) elog('[warn] '+pre+L1.dropped+' byte(s) absent from the ROM window → dropped (rare on a full random ROM).');
+  const L1=encodeLayer(p0, dbl?false:bl, 0, ip);
+  if(L1.fail){ elog('[error] '+pre+INNER_NAME[L1.proto]+': a message '+(isMicro(L1.proto)?'nibble':'byte')+' value is missing from the ROM'+(dbl?' 1':'')+' window → not encoded. Use a ROM that contains every value.'); clearOut(); renderAll(); return; }
+  elog(pre+L1.line);
   $('sOff').textContent=L1.sOff;
+  let L=L1;
   if(dbl){
-    inner=L1; outerIn=L1.fileBytes;
-    C(1); L=encodeLayer(outerIn,bl); save();
-    L.logs.forEach(s=>elog('[ROM 2 / outer] '+s));
-    if(L.dropped) elog('[warn] [ROM 2 / outer] '+L.dropped+' inner-file byte(s) absent from ROM 2 → dropped, so the inner layer is corrupted. Use a ROM 2 that contains every byte value.');
-    elog('[double] inner file ('+outerIn.length+' bytes, layer 1) was used as the plaintext of layer 2. BRAINLESS '+(bl?'applied once, to the outer file only.':'off.'));
+    L=encodeLayer(L1.fileBytes, bl, 1, mode);
+    if(L.fail){ elog('[error] [ROM 2 / outer] '+INNER_NAME[L.proto]+': an inner-file '+(isMicro(L.proto)?'nibble':'byte')+' value is missing from the ROM 2 window → not encoded. Use a ROM 2 that contains every value.'); clearOut(); renderAll(); return; }
+    elog('[ROM 2 / outer] '+L.line);
+    elog('[double] inner file ('+L1.fileBytes.length+' bytes, layer 1) was used as the plaintext of layer 2. BRAINLESS '+(bl?'applied once, to the outer file only.':'off.'));
     $('sOff2').textContent=L.sOff;
   }
-  truth=outerIn; ciphertext=[]; msgBytes=L.msgBytes; msgCells=L.msgCells; bricsBlocks=L.blocks; fileBytes=L.fileBytes;
-  trueFrame=L.frame; trueFrame.compressed=cz; trueFrame.plainLen=plain.length; trueFrame.double=dbl;
-  if(dbl) trueFrame.inner={msgBytes:L1.msgBytes,msgCells:L1.msgCells,fileBytes:L1.fileBytes};
-  let out=fileBytes.slice();
-  if(bl && out.length){ for(let i=out.length-2;i>=0;i--) out[i]^=out[i+1]; out[out.length-1]^=out[0]; }
-  $('fileOut').value=out.map(b2).join(' ');
-  $('sLen').textContent=msgBytes.length;
+  trueFrame={ mode, proto:L.proto, args:L.args, frame:L.frame, brainless:bl, msgLen:L.msgLen, plain:p0,
+              compressed:cz, plainLen:plain.length, double:dbl,
+              inner: dbl?{proto:L1.proto, args:L1.args, fileLen:L1.fileBytes.length}:null };
+  fileBytes=L.fileBytes.slice(); gen_unbrainless(fileBytes, L.args.brainless);
+  $('fileOut').value=L.fileBytes.map(b2).join(' ');
+  $('sLen').textContent=L.frame.cells.length;
   renderAll();
 }
 
@@ -374,19 +795,18 @@ function getMasters(hyps){
   }
   return out;
 }
-// demo ground truth: the real bytes (pre-BRAINLESS) — granted ONLY in KPA / ROM baseline
-function trueBytes(){ const w=wireBytes(); if(!w) return null; return trueFrame.brainless?peel(w):w; }
+// "Show demo answer": the encoder's own record. Never passed to an attack.
 function truthLine(){
   if(!trueFrame || !$('showTruth').checked) return '';
-  const cz=trueFrame.compressed?' [plaintext was COMPRESSED before encoding: '+trueFrame.plainLen+' → '+(trueFrame.msgBytes||[]).length+' bytes]':'';
-  return truthCore()+cz+(trueFrame.double?' [DOUBLE-ENCODED: the inner file ('+trueFrame.inner.fileBytes.length+' bytes, ROM 1) was encoded again with ROM 2. The message above is the OUTER layer.]':'');
-}
-function truthCore(){
-  if(trueFrame.mode==='brics') return '[demo ground truth] '+(trueFrame.blocks||[]).length+' block(s), real reading '+(trueFrame.brainless?'PEELED':'RAW')+', block offsets '+(trueFrame.blocks||[]).map(b=>b.off).join('/')+' — none visible in the file.';
-  let s='[demo ground truth] real message length '+(trueFrame.msgBytes||[]).length+'. Real structure: '+(trueFrame.brainless?'PEELED':'RAW');
-  if(trueFrame.mode==='unsignal'){ const rp=trueFrame.prefixLen; s+='/'+(rp%2?'ODD':'EVEN')+', message offset '+Math.floor(rp/2)+' (prefixLen='+rp+')'; }
-  else s+='/start0';
-  return s+' — one of '+(trueFrame.mode==='zoscii'?2:4)+' structures, unmarked in the file.';
+  const T=trueFrame, F=T.frame;
+  let s='[demo ground truth] real reading '+(T.brainless?'PEELED':'RAW');
+  if(T.args.blocks===1) s+=', '+F.blocks.length+' block(s), block offsets '+F.blocks.map(b=>b.off).join('/');
+  else if(!T.args.sliding) s+='/start0';
+  else { const pl=F.prefixLen; s+='/'+(pl%2?'ODD':'EVEN')+', message offset '+Math.floor(pl/2)+' (prefixLen='+pl+', window offset '+F.firstOff+')'; }
+  s+=', real message length '+T.msgLen+' — none of it visible in the file.';
+  if(T.compressed) s+=' [plaintext was COMPRESSED before encoding: '+T.plainLen+' → '+T.plain.length+' bytes]';
+  if(T.double) s+=' [DOUBLE-ENCODED: the inner '+INNER_NAME[T.inner.proto]+' file ('+T.inner.fileLen+' bytes, ROM 1) was encoded again with ROM 2. The message above is the OUTER layer.]';
+  return s;
 }
 function skeleton(addrs){
   const byV=new Map(); addrs.forEach((v,i)=>{ if(!byV.has(v)) byV.set(v,[]); byV.get(v).push(i); });
@@ -411,7 +831,6 @@ function scanCrib(A,word,opts){
   }
   return res;
 }
-function romDecode(addrs){ return addrs.map(x=>{ const abs=mode==='zoscii'?x:winOffset+x; return abs<actualSize?rom[abs]:null; }); }
 // crib pattern → which index-pairs MAY share an address (equal letters) vs MUST NOT (unequal letters)
 function cribProfile(word){
   const w=[...new TextEncoder().encode(word)], m=w.length, same=[];
@@ -423,6 +842,33 @@ function cribProfile(word){
   return {w,m,same,adjForbidden,totalPairs:m*(m-1)/2};
 }
 
+// ---------- ROM BASELINE (key holder) ----------
+// Decodes with gen_decode and the ROM(s), exactly as the intended recipient would. Key compromise, not an attack.
+function runRom(hyps){
+  log('\n==================== ROM BASELINE ====================');
+  if(!$('hasROM').checked){ log('[!] Tick "Attacker HAS the ROM" — this baseline models codebook capture, not cryptanalysis.'); return; }
+  const T=trueFrame, ci=T.double?1:0;
+  let t, fin;
+  try{ t=gen_decode(innerROMc(T.proto,ci), hyps[0].bytes, T.args); }catch(e){ log('[!] decode error: '+e.message); return; }
+  log('step 1 (ROM '+(ci+1)+', '+INNER_NAME[T.proto]+' decoder'+(T.brainless?', BRAINLESS undone':'')+'): '+t.length+' bytes');
+  fin=t;
+  if(T.double){
+    log('DOUBLE-ENCODED: needs BOTH ROMs (two keys captured). ROM 2 gave the inner file, ROM 1 decodes it.');
+    try{ fin=gen_decode(innerROMc(T.inner.proto,0), t, T.inner.args); }catch(e){ log('[!] decode error: '+e.message); return; }
+    log('step 2 (ROM 1, '+INNER_NAME[T.inner.proto]+' decoder): '+fin.length+' bytes');
+  }
+  log('  '+trunc(fin.map(b=>(b>=32&&b<127)?String.fromCharCode(b):'·').join('')));
+  const exact=fin.length===T.plain.length && fin.every((b,i)=>b===T.plain[i]);
+  log('exact recovery: '+(exact?'100% — TOTAL BREAK'+(T.double?' (both ROMs held)':''):'partial'));
+  log('EXPECTED: possessing the ROM = possessing the codebook. Key compromise, not a weakness in the scheme.');
+  if(T.compressed){
+    log('message was COMPRESSED before encoding → decompressing the recovered bytes:');
+    if(!exact){ log('  [!] recovery not exact, decompression skipped.'); return; }
+    inflateRaw(fin).then(b=>log('  '+trunc(new TextDecoder().decode(new Uint8Array(b)))+'  ('+b.length+' bytes)'))
+                   .catch(e=>log('  [!] decompress failed: '+e.message));
+  }
+}
+
 // ---------- ATTACKS ----------
 function run(){
   const type=$('attackType').value;
@@ -430,6 +876,13 @@ function run(){
   if(!hyps || !trueFrame){ log('\n[!] No file bytes. Encode a message first.'); return; }
   if(trueFrame.mode!==mode){ log('\n[!] Mode changed since encode. Re-encode first.'); return; }
   useOuter();
+  if(type==='rom'){ runRom(hyps); return; }
+  if(isMicro(mode)){
+    log('\n=== '+INNER_NAME[mode]+' (8-bit outer layer) ===');
+    log('[!] The "'+type+'" attack is not implemented for 8-bit / nibble layers (the attack suite assumes 16-bit addresses).');
+    log('    Pick "Baseline: full decode WITH ROM" to decode this layer, or choose ZOSCII / UNSIGNAL / BRICS.');
+    return;
+  }
   const opts={allow:parseIdx($('allowPos').value), forbid:parseIdx($('forbidPos').value)};
   log('\n==================== ATTACK: '+type.toUpperCase()+' ====================');
   log('attacker holds '+hyps[0].bytes.length+' file bytes. No ROM. BRAINLESS state UNKNOWN (keyless XOR leaves no marker) → RAW and PEELED both carried.');
@@ -541,7 +994,7 @@ function run(){
     log('  chance: a random crib of length '+m+' expects ≈ '+expRepeatK.toFixed(4)+' equal-address pair(s) inside its window.');
 
     if(possible===0){
-      log('VERDICT: DEFINITELY ISN\'T. Every placement at every structure contradicts the ciphertext. This crib is not in the message.');
+      log('VERDICT: DEFINITELY ISN\'T. Every placement at every structure contradicts the encoded text. This crib is not in the message.');
     } else if(degenerate){
       log('VERDICT: MIGHT BE — DEGENERATE crib, no test performed. '+possible+' placement(s) survive, but nothing was excluded and k is meaningless.');
     } else {
@@ -607,31 +1060,42 @@ function run(){
   }
 
   else if(type==='kpa'){
-    const word=$('cribText').value.replace(/\r?\n+$/,'').trim(); if(!word){ log('[!] Empty crib.'); return; }
-    const w=[...new TextEncoder().encode(word)];
-    const MB=trueFrame.msgBytes||[], MC=trueFrame.msgCells||[];
-    log('KPA models an attacker who has ALREADY guessed, correctly and separately: BRAINLESS state, framing/blocks, message length, the exact position, and the word.');
-    log('This run grants all of that (demo ground truth) to show what ONE correct crib then propagates to.');
-    if(MB.length!==truth.length) log('note: '+(truth.length-MB.length)+' message byte(s) had no address in this ROM and were dropped by the encoder.');
-    let s0=-1; for(let i=0;i+w.length<=MB.length && s0<0;i++){ let hit=true; for(let j=0;j<w.length;j++) if(MB[i+j]!==w[j]){ hit=false; break; } if(hit) s0=i; }
-    if(s0<0){
-      log('[!] crib is not in the message, so there is no real position to grant. KPA needs a correct crib.');
-      if(trueFrame.double) log('  (demo) the file is DOUBLE-ENCODED: the outer layer encodes the inner FILE bytes (header, random padding, addresses), not the text. A text crib cannot match them.');
-      if(trueFrame.compressed) log('  (demo) the plaintext was COMPRESSED before encoding, so the encoded bytes are deflate output, not the text. A text crib cannot match them.');
-      return;
+    // Known plaintext = what the person types in. Nothing else is given: no ROM, no position, no framing.
+    const raw=$('cribText').value.replace(/\r?\n+$/,'');
+    if(!raw.trim()){ log('[!] Empty known plaintext.'); return; }
+    const w=[...new TextEncoder().encode(raw)], m=w.length;
+    const masters=getMasters(hyps);
+    log('known plaintext ("'+(raw.length>40?raw.slice(0,40)+'…':raw)+'", '+m+' bytes) is taken as TRUE and somewhere in the message. Position, reading and framing are NOT given.');
+    if(mode==='brics') log('BRICS caveat: a placement assumes ONE offset for the whole plaintext. If it crosses a block boundary it is wrongly thrown out.');
+    let scanned=0; const fits=[];
+    for(const M of masters){
+      const A=M.A;
+      for(let s=0;s+m<=A.length;s++){
+        if(opts.forbid.length && opts.forbid.includes(s)) continue;
+        if(opts.allow.length && !opts.allow.includes(s)) continue;
+        scanned++;
+        const known=new Map(); let bad=false;
+        for(let i=0;i<m && !bad;i++){ const a=A[s+i]; if(known.has(a)&&known.get(a)!==w[i]) bad=true; else known.set(a,w[i]); }
+        if(bad) continue;
+        let hits=0; for(let i=0;i<A.length;i++) if((i<s||i>=s+m) && known.has(A[i])) hits++;
+        fits.push({M,s,known,hits});
+      }
     }
-    log('placed "'+word+'" at its real position '+s0+' (granted).');
-    const known=new Map();
-    for(let i=0;i<w.length;i++){ const c=MC[s0+i]; if(known.has(c)&&known.get(c)!==w[i]){ log('[!] contradiction → crib wrong here.'); return; } known.set(c,w[i]); }
-    log('learned '+known.size+' ROM cell(s) from the crib.');
-    const rec=MC.map(c=>known.has(c)?known.get(c):null);
-    const got=rec.filter(x=>x!==null).length, outside=got-w.length, expOut=(MB.length-w.length)*known.size/65536;
-    log('propagation via shared ROM cells across the '+MB.length+' message addresses:');
-    log('recovered '+got+' / '+MB.length+' = '+(MB.length?(100*got/MB.length).toFixed(1):0)+'%  ('+w.length+' from the crib itself, '+outside+' elsewhere; chance ≈ '+expOut.toFixed(1)+')');
-    if(mode==='brics' && outside>expOut*4) log('  BRICS note: the extra bytes are positions in OTHER blocks that reuse a ROM cell the crib revealed — per-block offsets do not stop this once a cell is known.');
-    log('  '+rec.map(c=>c===null?'·':show(c)).join(''));
-    if($('hasROM').checked){ let ok=0,chk=0; for(let i=0;i<MC.length;i++) if(rec[i]!==null){ chk++; if(rom[MC[i]]===rec[i]) ok++; } log('[ground truth] '+ok+'/'+chk+' recovered bytes correct → crib '+(ok===chk?'CORRECT':'partly WRONG')); }
-    log('LAW: recovery ≈ shared-cell rate ≈ message_length / pool_size. Big random ROM + short msg → ~0%. Small/reused ROM → climbs.');
+    log('placements tested: '+scanned+' across '+masters.length+' structure(s); consistent with the known plaintext: '+fits.length+'.');
+    if(!fits.length){ log('VERDICT: the known plaintext fits nowhere. Under every reading and position some equal address would need two different bytes, so it is not in this file as typed.'); log(truthLine()); return; }
+    const showRec=f=>'  '+f.M.A.map((a,i)=>f.known.has(a)?show(f.known.get(a)):'·').join('');
+    if(fits.length===1){
+      const f=fits[0];
+      log('VERDICT: exactly one placement fits ('+f.M.align+' pos '+f.s+'), so the known plaintext is located. Its '+f.known.size+' learned ROM cell(s) are reused at '+f.hits+' other position(s); those bytes are recovered:');
+      log(trunc(showRec(f)));
+      if(mode==='brics') log('  BRICS note: reuse only carries inside the same block offset; in other blocks the same address is a different ROM cell, so bytes shown there are not reliable.');
+    } else {
+      let mx=0, sum=0; for(const f of fits){ sum+=f.hits; if(f.hits>mx) mx=f.hits; }
+      log('VERDICT: not located. '+fits.length+' placements fit equally well and nothing in the file says which one is real.');
+      log('  Each would reveal other positions only if it were the real one: '+(sum/fits.length).toFixed(1)+' on average, '+mx+' at most. Picking one is a guess, so knowing this plaintext reveals nothing else for certain.');
+    }
+    log('LAW: one known plaintext only helps once it is located, and then only as far as its ROM cells are reused ≈ message length / pool size.');
+    log(truthLine());
   }
 
   else if(type==='brainless'){
@@ -642,7 +1106,7 @@ function run(){
     log('The peel always "succeeds" — on a non-BRAINLESS file it just produces different noise. Nothing in either reading says which is real.');
     if(!$('showTruth').checked){} else if(trueFrame.brainless) log('[demo ground truth] BRAINLESS was ON → PEELED matches assembled file: '+(fileBytes.length===n && fileBytes.every((b,i)=>b===o[i])));
     else log('[demo ground truth] BRAINLESS was OFF → RAW is the file; PEELED is garbage.');
-    log('VERDICT: as a cipher layer BRAINLESS adds 0 bits (keyless, invertible). Because its presence is undetectable, it doubles the attacker\'s structures (×2 readings).');
+    log('VERDICT: as a security layer BRAINLESS adds 0 bits (keyless, invertible). Because its presence is undetectable, it doubles the attacker\'s structures (×2 readings).');
   }
 
   else if(type==='custom'){
@@ -667,52 +1131,25 @@ function run(){
     }catch(e){ log('[custom] error: '+e.message); }
   }
 
-  else if(type==='rom'){
-    if(!$('hasROM').checked){ log('[!] Tick "Attacker HAS the ROM" — this baseline models codebook capture, not cryptanalysis.'); return; }
-    const dbl=!!trueFrame.double;
-    const MB=trueFrame.msgBytes||[], MC=trueFrame.msgCells||[];
-    const t=MC.map(c=> c<actualSize? rom[c] : null);
-    const dropped=truth.length-MB.length;
-    let exact=t.length===MB.length && t.every((b,i)=>b===MB[i]), fin=t;
-    if(dbl){
-      log('DOUBLE-ENCODED: needs BOTH ROMs (two keys captured). ROM 2 → inner file bytes, then ROM 1 → message.');
-      log('step 1 (ROM 2): recovered '+t.length+' inner-file bytes'+(dropped?' ['+dropped+' never encoded: not in ROM 2]':''));
-      const I=trueFrame.inner, r1=CT[0].rom, s1=CT[0].size;
-      const t1=I.msgCells.map(c=> c<s1? r1[c] : null);
-      log('step 2 (ROM 1, inner framing from ground truth):');
-      log('  '+t1.map(b=>b===null?'·':String.fromCharCode(b)).join(''));
-      exact=exact && t1.length===I.msgBytes.length && t1.every((b,i)=>b===I.msgBytes[i]); fin=t1;
-      log('exact recovery: '+(exact?'100% — TOTAL BREAK (both ROMs held)':'partial'));
-    } else {
-      log('rom[cell] decode ('+(mode==='brics'?(trueFrame.blocks||[]).length+' blocks, each at its own offset':'framing')+' from ground truth):');
-      log('  '+t.map(b=>b===null?'·':String.fromCharCode(b)).join(''));
-      log('exact recovery: '+(exact?(dropped?'100% of the '+MB.length+' encoded bytes — TOTAL BREAK ('+dropped+' byte(s) were never encoded: not in this ROM)':'100% — TOTAL BREAK'):'partial'));
-    }
-    log('EXPECTED: possessing the ROM = possessing the codebook. Key compromise, not a weakness in the scheme.');
-    if(trueFrame.compressed){
-      log('message was COMPRESSED before encoding → decompressing the recovered bytes:');
-      if(!exact){ log('  [!] recovery not exact, decompression skipped.'); return; }
-      inflateRaw(fin).then(b=>log('  '+trunc(new TextDecoder().decode(new Uint8Array(b)))+'  ('+b.length+' bytes)'))
-                     .catch(e=>log('  [!] decompress failed: '+e.message));
-    }
-  }
 }
 
 // ---------- WIRE ----------
 function init(){
   CT[0].canvas=$('rom'); CT[1].canvas=$('rom2'); for(const c of CT) c.cx=c.canvas.getContext('2d'); C(0);
-  document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{
-    mode=document.querySelector('input[name=mode]:checked').value;
-    if(msgBytes.length) encode(); else renderAll();
-  }));
+  $('mode').addEventListener('change',()=>{
+    mode=$('mode').value;
+    if(hasEnc) encode(); else renderAll();
+  });
   $('encodeBtn').addEventListener('click',encode);
   $('randomROM').addEventListener('click',randomROM);
-  $('clearBtn').addEventListener('click',()=>{ ciphertext=[];truth=[];fileBytes=[];msgBytes=[];msgCells=[];bricsBlocks=[];trueFrame=null; $('fileOut').value='';$('sLen').textContent='0';$('sOff').textContent='---'; renderAll(); });
-  $('brainless').addEventListener('change',()=>{ if(msgBytes.length) encode(); });
-  $('compress').addEventListener('change',()=>{ if(msgBytes.length) encode(); });
+  $('clearBtn').addEventListener('click',()=>{ hasEnc=false;fileBytes=[];trueFrame=null; $('fileOut').value='';$('sLen').textContent='0';$('sOff').textContent='---'; renderAll(); });
+  $('brainless').addEventListener('change',()=>{ if(hasEnc) encode(); });
+  $('compress').addEventListener('change',()=>{ if(hasEnc) encode(); });
   $('double').addEventListener('change',()=>{ const d=$('double').checked;
-    $('rom2wrap').style.display=d?'block':'none'; $('rom1lbl').style.display=d?'block':'none';
-    if(msgBytes.length) encode(); });
+    $('rom2wrap').style.display=d?'block':'none'; $('rom1lbl').style.display=d?'block':'none'; $('innerProto').disabled=!d;
+    if(hasEnc) encode(); });
+  $('innerProto').addEventListener('change',()=>{ if(hasEnc) encode(); });
+  { const d=$('double').checked; $('innerProto').disabled=!d; $('rom2wrap').style.display=d?'block':'none'; $('rom1lbl').style.display=d?'block':'none'; }
   CT.forEach((c,k)=>{ const cv=c.canvas;
     cv.addEventListener('dragover',e=>{ e.preventDefault(); cv.style.borderColor='#ff6600'; });
     cv.addEventListener('dragleave',()=>cv.style.borderColor='#444');
@@ -724,7 +1161,7 @@ function init(){
   $('runBtn').addEventListener('click',run);
   $('clearConsole').addEventListener('click',()=>$('console').value='');
   randomROM();
-  log('Attacker ready. Default model: ciphertext-only, no ROM, BRAINLESS state and framing swept.');
+  log('Attacker ready. Default model: encoded-text-only, no ROM, BRAINLESS state and framing swept.');
 }
 window.addEventListener('load',init);
 })();

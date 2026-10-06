@@ -103,8 +103,8 @@ pre { background:#050505; color:#cfe8cf; border:1px solid #333; border-radius:5p
         <option value="multi">multi (BRICS)</option>
       </select>
     </div>
-    <div><label>block min</label><input type="number" id="blkMin" value="128"></div>
-    <div><label>block max</label><input type="number" id="blkMax" value="512"></div>
+    <div><label>block min (bytes)</label><input type="number" id="blkMin" value="128"></div>
+    <div><label>block max (bytes)</label><input type="number" id="blkMax" value="512"></div>
   </div>
 </div>
 
@@ -112,7 +112,7 @@ pre { background:#050505; color:#cfe8cf; border:1px solid #333; border-radius:5p
   <h2>3 · INTEGRITY &amp; OBFUSCATION</h2>
   <div class="row">
     <div>
-      <label>ROLLING HASH (32-bit, over plaintext)</label>
+      <label>ZOSCII ROLLING HASH (32-bit, reverse, over plaintext, verified on decode)</label>
       <select id="roll">
         <option value="none" selected>none</option>
         <option value="presegment">payload (after first offset)</option>
@@ -128,11 +128,11 @@ pre { background:#050505; color:#cfe8cf; border:1px solid #333; border-radius:5p
       </select>
     </div>
   </div>
-  <div class="chk"><input type="checkbox" id="crc"><label for="crc">CRC32 (standard, after the rolling hash)</label></div>
+  <div class="chk"><input type="checkbox" id="crc"><label for="crc">CRC32 (standard, after the rolling hash, verified on decode)</label></div>
   <div class="row"><div><label>EXTRA SEED (optional — XOR'd into the RNG when no timer)</label><input type="number" id="seed" placeholder="0"></div></div>
-  <div class="chk"><input type="checkbox" id="zacOn"><label for="zacOn">ZAC (supplied value, e.g. a GUID)</label></div>
+  <div class="chk"><input type="checkbox" id="zacOn"><label for="zacOn">ZAC (supplied value, e.g. a GUID without dashes)</label></div>
   <label>ZAC value (ZOSCII Access Control - string, used as-is, never encoded). Blank = random of "bytes" length.</label>
-  <input type="text" id="zacVal" value="550e8400-e29b-41d4-a716-446655440000">
+  <input type="text" id="zacVal" value="550e8400e29b41d4a716446655440000">
   <div class="row">
     <div><label>ZAC bytes (used only if value blank)</label><input type="number" id="zacBytes" value="16"></div>
     <div><label>ZAC closes block 1 (multi)</label><select id="zacClose"><option value="true" selected>yes</option><option value="false">no</option></select></div>
@@ -217,8 +217,8 @@ function readArgs(){
 const TPL_ES5 = String.raw`// ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - JavaScript (ES5)
 // arrEncoded = @@encode(arrROM, arrMessage, objArgs)   arrMessage = @@decode(arrROM, arrEncoded, objArgs)
 // All byte data is arrays of bytes 0-255 (Uint8Array or number[] in, number[] out). Text and binary safe. All little-endian.
-// objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
+// objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 
 var m_lngRandState = 0;
@@ -226,7 +226,7 @@ var m_lngRandState = 0;
 function @@brainless(arrBytes_a, intDir_a) { var intI = 0; var intLen = arrBytes_a.length; if (intLen > 0 && intDir_a == 1) { for (intI = intLen - 2; intI >= 0; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; } else if (intLen > 0 && intDir_a == 2) { for (intI = 1; intI < intLen; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; } }
 function @@buildWindow(arrROM_a, intOffset_a, intSize_a) { var arrWindow = []; var intI = 0; var intROMLen = arrROM_a.length; for (intI = 0; intI < 256; intI++) { arrWindow.push([]); } for (intI = 0; intI < intSize_a; intI++) { if (intOffset_a + intI < intROMLen) { arrWindow[arrROM_a[intOffset_a + intI]].push(intI); } } return arrWindow; }
 function @@crc32Std(arrBytes_a) { var lngCrc = 0xFFFFFFFF; var lngX = 0; var intI = 0; var intJ = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = ((lngX >>> 1) ^ 0xEDB88320) >>> 0; } else { lngX = lngX >>> 1; } } lngCrc = ((lngCrc >>> 8) ^ lngX) >>> 0; } return (lngCrc ^ 0xFFFFFFFF) >>> 0; }
-function @@djb2(arrBytes_a) { var lngHash = 0; var intI = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
+function @@romHash(arrBytes_a) { var lngHash = 0; var intI = 0; var intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
 function @@effSize(intROMLen_a, intCap_a, blnSliding_a) { var intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
 function @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a, intAddrBytes_a, intValueBits_a) { var intI = 0; var byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
 function @@nextRand() { var lngState = m_lngRandState; lngState = (lngState ^ (lngState << 13)) >>> 0; lngState = (lngState ^ (lngState >>> 17)) >>> 0; lngState = (lngState ^ (lngState << 5)) >>> 0; m_lngRandState = lngState; return lngState; }
@@ -236,7 +236,8 @@ function @@pushLE(arrOut_a, lngValue_a, intBytes_a) { var intI = 0; for (intI = 
 function @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a, intAddrBytes_a, intValueBits_a) { var intValue = 0; var intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
 function @@readLE(arrBytes_a, intPos_a, intBytes_a) { var lngValue = 0; var intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = (lngValue | (arrBytes_a[intPos_a + intI] << (8 * intI))) >>> 0; } return lngValue; }
 function @@regime(intROMLen_a, intCap_a) { var intPct = Math.floor(intROMLen_a * 2 / 100); var intLimit = intCap_a + Math.floor(intCap_a * 2 / 100); var objSpan = { size: intCap_a, wrap: intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
-function @@seed(arrROM_a, lngExtra_a) { var lngSeed = @@djb2(arrROM_a); lngSeed = (lngSeed ^ @@timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
+function @@rollingHash(arrBytes_a) { var lngHash = 0; var intPass = 0; var intI = 0; var intLast = 0; var byState = 0; var intLen = arrBytes_a.length; for (intPass = 0; intPass < 4; intPass++) { byState = 0; intLast = intLen - 1; while (intLast >= 0 && (intLast % 4) != intPass) { intLast--; } if (intLast >= 0) { byState = arrBytes_a[intLast]; for (intI = intLast - 4; intI >= 0; intI = intI - 4) { byState = byState ^ arrBytes_a[intI]; } byState = byState ^ arrBytes_a[intLast]; } lngHash = (lngHash | (byState << (8 * intPass))) >>> 0; } return lngHash; }
+function @@seed(arrROM_a, lngExtra_a) { var lngSeed = @@romHash(arrROM_a); lngSeed = (lngSeed ^ @@timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
 function @@timer() { var lngTime = 0; if (typeof performance != "undefined" && performance.now) { lngTime = (performance.now() * 1000) >>> 0; } else { lngTime = Date.now() >>> 0; } return lngTime; }
 function @@unbrainless(arrBytes_a, intDir_a) { var intI = 0; var intLen = arrBytes_a.length; if (intLen > 0 && intDir_a == 1) { arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; for (intI = 0; intI <= intLen - 2; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } } else if (intLen > 0 && intDir_a == 2) { arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; for (intI = intLen - 1; intI >= 1; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } } }
 function @@zacBytes(objArgs_a) { var arrZac = []; var intI = 0; var intLen = objArgs_a.zac.value.length; if (intLen > 0) { for (intI = 0; intI < intLen; intI++) { arrZac.push(objArgs_a.zac.value.charCodeAt(intI)); } } else { for (intI = 0; intI < objArgs_a.zac.bytes; intI++) { arrZac.push(@@nextRand() % 256); } } return arrZac; }
@@ -247,6 +248,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
     var intAddrBytes = objArgs_a.elemBits / 8;
     var intValueBits = objArgs_a.elemBits / 2;
+    var intUnit = 16 / objArgs_a.elemBits;
     var arrOut = [];
     var arrPayload = [];
     var arrElems = [];
@@ -283,7 +285,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     // integrity words + ZAC lead the payload (presegment placement)
     if (objArgs_a.rollingHash == 1)
     {
-        @@pushLE(arrPayload, @@djb2(arrMessage_a), 4);
+        @@pushLE(arrPayload, @@rollingHash(arrMessage_a), 4);
     }
     if (objArgs_a.crc32)
     {
@@ -341,7 +343,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
     {
-        lngHash = @@djb2(arrMessage_a);
+        lngHash = @@rollingHash(arrMessage_a);
         for (intI = 0; intI < 4; intI++)
         {
             arrPrefix[intPrefixLen - 4 + intI] = (lngHash >>> (8 * intI)) & 0xFF;
@@ -359,7 +361,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         }
         while (intI < arrElems.length)
         {
-            intBlockLen = objArgs_a.blockMin + (@@nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1));
+            intBlockLen = (objArgs_a.blockMin + (@@nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1))) * intUnit;
             if (intBlockLen > arrElems.length - intI)
             {
                 intBlockLen = arrElems.length - intI;
@@ -412,7 +414,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         }
         if (blnMulti)
         {
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length, 2, intAddrBytes, intValueBits);
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length / intUnit, 2, intAddrBytes, intValueBits);
         }
         if (objArgs_a.prefix.on)
         {
@@ -433,7 +435,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
                 if (intK + 1 < arrBlocks.length)
                 {
                     @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length / intUnit, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
@@ -461,6 +463,7 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     var ADDRESS_SPACE = 1 << objArgs_a.elemBits;
     var intAddrBytes = objArgs_a.elemBits / 8;
     var intValueBits = objArgs_a.elemBits / 2;
+    var intUnit = 16 / objArgs_a.elemBits;
     var arrBytes = [];
     var arrPayload = [];
     var arrElems = [];
@@ -479,6 +482,10 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     var intROMLen = arrROM_a.length;
     var intEncodedLen = arrEncoded_a.length;
     var blnMulti = (objArgs_a.blocks == 1);
+    var arrBody = [];
+    var blnOk = true;
+    var intPrefixStart = 0;
+    var intCrcPos = 0;
 
     for (intI = 0; intI < intEncodedLen; intI++)
     {
@@ -507,6 +514,7 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
         intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
+    intPrefixStart = intPos;
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
 
@@ -518,7 +526,7 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
             intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
             intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
             intPos = intPos + 4 * intAddrBytes;
-            for (intI = 0; intI < intSize; intI++)
+            for (intI = 0; intI < intSize * intUnit; intI++)
             {
                 arrElems.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)]);
                 intPos = intPos + intAddrBytes;
@@ -564,7 +572,30 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     intHead = intHead + @@zacLen(objArgs_a);
     for (intI = intHead; intI < arrPayload.length; intI++)
     {
-        arrMessage.push(arrPayload[intI]);
+        arrBody.push(arrPayload[intI]);
+    }
+
+    // integrity: recompute over the message and compare; a mismatch returns an empty message
+    blnOk = (arrPayload.length >= intHead);
+    if (objArgs_a.rollingHash == 1)
+    {
+        blnOk = blnOk && (@@readLE(arrPayload, 0, 4) == @@rollingHash(arrBody));
+    }
+    if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
+    {
+        blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (@@readLE(arrBytes, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(arrBody));
+    }
+    if (objArgs_a.crc32)
+    {
+        if (objArgs_a.rollingHash == 1)
+        {
+            intCrcPos = 4;
+        }
+        blnOk = blnOk && (@@readLE(arrPayload, intCrcPos, 4) == @@crc32Std(arrBody));
+    }
+    if (blnOk)
+    {
+        arrMessage = arrBody;
     }
 
     return arrMessage;
@@ -573,8 +604,8 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
 const TPL_MODERN = String.raw`// ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - JavaScript (ES2026)
 // arrEncoded = @@encode(arrROM, arrMessage, objArgs)   arrMessage = @@decode(arrROM, arrEncoded, objArgs)
 // All byte data is arrays of bytes 0-255 (Uint8Array or number[] in, number[] out). Text and binary safe. All little-endian.
-// objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
+// objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 
 let m_lngRandState = 0;
@@ -582,7 +613,7 @@ let m_lngRandState = 0;
 function @@brainless(arrBytes_a, intDir_a) { let intI = 0; let intLen = arrBytes_a.length; if (intLen > 0 && intDir_a == 1) { for (intI = intLen - 2; intI >= 0; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; } else if (intLen > 0 && intDir_a == 2) { for (intI = 1; intI < intLen; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; } }
 function @@buildWindow(arrROM_a, intOffset_a, intSize_a) { let arrWindow = []; let intI = 0; let intROMLen = arrROM_a.length; for (intI = 0; intI < 256; intI++) { arrWindow.push([]); } for (intI = 0; intI < intSize_a; intI++) { if (intOffset_a + intI < intROMLen) { arrWindow[arrROM_a[intOffset_a + intI]].push(intI); } } return arrWindow; }
 function @@crc32Std(arrBytes_a) { let lngCrc = 0xFFFFFFFF; let lngX = 0; let intI = 0; let intJ = 0; let intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = ((lngX >>> 1) ^ 0xEDB88320) >>> 0; } else { lngX = lngX >>> 1; } } lngCrc = ((lngCrc >>> 8) ^ lngX) >>> 0; } return (lngCrc ^ 0xFFFFFFFF) >>> 0; }
-function @@djb2(arrBytes_a) { let lngHash = 0; let intI = 0; let intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
+function @@romHash(arrBytes_a) { let lngHash = 0; let intI = 0; let intLen = arrBytes_a.length; for (intI = 0; intI < intLen; intI++) { lngHash = ((lngHash * 33) + arrBytes_a[intI]) >>> 0; } return lngHash; }
 function @@effSize(intROMLen_a, intCap_a, blnSliding_a) { let intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
 function @@hdrValue(arrOut_a, arrHdrWindow_a, intValue_a, intWidth_a, intAddrBytes_a, intValueBits_a) { let intI = 0; let byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >>> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
 function @@nextRand() { let lngState = m_lngRandState; lngState = (lngState ^ (lngState << 13)) >>> 0; lngState = (lngState ^ (lngState >>> 17)) >>> 0; lngState = (lngState ^ (lngState << 5)) >>> 0; m_lngRandState = lngState; return lngState; }
@@ -592,7 +623,8 @@ function @@pushLE(arrOut_a, lngValue_a, intBytes_a) { let intI = 0; for (intI = 
 function @@readHdrValue(arrROM_a, arrBytes_a, intPos_a, intWidth_a, intAddrBytes_a, intValueBits_a) { let intValue = 0; let intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
 function @@readLE(arrBytes_a, intPos_a, intBytes_a) { let lngValue = 0; let intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = (lngValue | (arrBytes_a[intPos_a + intI] << (8 * intI))) >>> 0; } return lngValue; }
 function @@regime(intROMLen_a, intCap_a) { let intPct = Math.floor(intROMLen_a * 2 / 100); let intLimit = intCap_a + Math.floor(intCap_a * 2 / 100); let objSpan = { size: intCap_a, wrap: intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
-function @@seed(arrROM_a, lngExtra_a) { let lngSeed = @@djb2(arrROM_a); lngSeed = (lngSeed ^ @@timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
+function @@rollingHash(arrBytes_a) { let lngHash = 0; let intPass = 0; let intI = 0; let intLast = 0; let byState = 0; let intLen = arrBytes_a.length; for (intPass = 0; intPass < 4; intPass++) { byState = 0; intLast = intLen - 1; while (intLast >= 0 && (intLast % 4) != intPass) { intLast--; } if (intLast >= 0) { byState = arrBytes_a[intLast]; for (intI = intLast - 4; intI >= 0; intI = intI - 4) { byState = byState ^ arrBytes_a[intI]; } byState = byState ^ arrBytes_a[intLast]; } lngHash = (lngHash | (byState << (8 * intPass))) >>> 0; } return lngHash; }
+function @@seed(arrROM_a, lngExtra_a) { let lngSeed = @@romHash(arrROM_a); lngSeed = (lngSeed ^ @@timer()) >>> 0; if (lngExtra_a != 0) { lngSeed = (lngSeed ^ lngExtra_a) >>> 0; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
 function @@timer() { let lngTime = 0; if (typeof performance != "undefined" && performance.now) { lngTime = (performance.now() * 1000) >>> 0; } else { lngTime = Date.now() >>> 0; } return lngTime; }
 function @@unbrainless(arrBytes_a, intDir_a) { let intI = 0; let intLen = arrBytes_a.length; if (intLen > 0 && intDir_a == 1) { arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; for (intI = 0; intI <= intLen - 2; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } } else if (intLen > 0 && intDir_a == 2) { arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; for (intI = intLen - 1; intI >= 1; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } } }
 function @@zacBytes(objArgs_a) { let arrZac = []; let intI = 0; let intLen = objArgs_a.zac.value.length; if (intLen > 0) { for (intI = 0; intI < intLen; intI++) { arrZac.push(objArgs_a.zac.value.charCodeAt(intI)); } } else { for (intI = 0; intI < objArgs_a.zac.bytes; intI++) { arrZac.push(@@nextRand() % 256); } } return arrZac; }
@@ -603,6 +635,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     const ADDRESS_SPACE = 1 << objArgs_a.elemBits;
     let intAddrBytes = objArgs_a.elemBits / 8;
     let intValueBits = objArgs_a.elemBits / 2;
+    let intUnit = 16 / objArgs_a.elemBits;
     let arrOut = [];
     let arrPayload = [];
     let arrElems = [];
@@ -639,7 +672,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     // integrity words + ZAC lead the payload (presegment placement)
     if (objArgs_a.rollingHash == 1)
     {
-        @@pushLE(arrPayload, @@djb2(arrMessage_a), 4);
+        @@pushLE(arrPayload, @@rollingHash(arrMessage_a), 4);
     }
     if (objArgs_a.crc32)
     {
@@ -697,7 +730,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
     // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
     {
-        lngHash = @@djb2(arrMessage_a);
+        lngHash = @@rollingHash(arrMessage_a);
         for (intI = 0; intI < 4; intI++)
         {
             arrPrefix[intPrefixLen - 4 + intI] = (lngHash >>> (8 * intI)) & 0xFF;
@@ -715,7 +748,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         }
         while (intI < arrElems.length)
         {
-            intBlockLen = objArgs_a.blockMin + (@@nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1));
+            intBlockLen = (objArgs_a.blockMin + (@@nextRand() % (objArgs_a.blockMax - objArgs_a.blockMin + 1))) * intUnit;
             if (intBlockLen > arrElems.length - intI)
             {
                 intBlockLen = arrElems.length - intI;
@@ -768,7 +801,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
         }
         if (blnMulti)
         {
-            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length, 2, intAddrBytes, intValueBits);
+            @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.length / intUnit, 2, intAddrBytes, intValueBits);
         }
         if (objArgs_a.prefix.on)
         {
@@ -789,7 +822,7 @@ function @@encode(arrROM_a, arrMessage_a, objArgs_a)
                 if (intK + 1 < arrBlocks.length)
                 {
                     @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
-                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.length / intUnit, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
@@ -817,6 +850,7 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     const ADDRESS_SPACE = 1 << objArgs_a.elemBits;
     let intAddrBytes = objArgs_a.elemBits / 8;
     let intValueBits = objArgs_a.elemBits / 2;
+    let intUnit = 16 / objArgs_a.elemBits;
     let arrBytes = [];
     let arrPayload = [];
     let arrElems = [];
@@ -835,6 +869,10 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     let intROMLen = arrROM_a.length;
     let intEncodedLen = arrEncoded_a.length;
     let blnMulti = (objArgs_a.blocks == 1);
+    let arrBody = [];
+    let blnOk = true;
+    let intPrefixStart = 0;
+    let intCrcPos = 0;
 
     for (intI = 0; intI < intEncodedLen; intI++)
     {
@@ -863,6 +901,7 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
         intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
+    intPrefixStart = intPos;
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
 
@@ -874,7 +913,7 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
             intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
             intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
             intPos = intPos + 4 * intAddrBytes;
-            for (intI = 0; intI < intSize; intI++)
+            for (intI = 0; intI < intSize * intUnit; intI++)
             {
                 arrElems.push(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)]);
                 intPos = intPos + intAddrBytes;
@@ -920,7 +959,30 @@ function @@decode(arrROM_a, arrEncoded_a, objArgs_a)
     intHead = intHead + @@zacLen(objArgs_a);
     for (intI = intHead; intI < arrPayload.length; intI++)
     {
-        arrMessage.push(arrPayload[intI]);
+        arrBody.push(arrPayload[intI]);
+    }
+
+    // integrity: recompute over the message and compare; a mismatch returns an empty message
+    blnOk = (arrPayload.length >= intHead);
+    if (objArgs_a.rollingHash == 1)
+    {
+        blnOk = blnOk && (@@readLE(arrPayload, 0, 4) == @@rollingHash(arrBody));
+    }
+    if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
+    {
+        blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (@@readLE(arrBytes, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(arrBody));
+    }
+    if (objArgs_a.crc32)
+    {
+        if (objArgs_a.rollingHash == 1)
+        {
+            intCrcPos = 4;
+        }
+        blnOk = blnOk && (@@readLE(arrPayload, intCrcPos, 4) == @@crc32Std(arrBody));
+    }
+    if (blnOk)
+    {
+        arrMessage = arrBody;
     }
 
     return arrMessage;
@@ -930,8 +992,8 @@ const TPL_PHP54 = String.raw`<?php
 // ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - PHP 5.4+ (64-bit PHP)
 // $arrEncoded = @@encode($arrROM, $arrMessage, $objArgs)   $arrMessage = @@decode($arrROM, $arrEncoded, $objArgs)
 // All byte data is arrays of bytes 0-255 (string -> array: array_values(unpack('C*', $str))). Text and binary safe. All little-endian.
-// $objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (its bytes, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional $objArgs['seed']. Randomness carries NO security - ROM secrecy does.
+// $objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (its bytes, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional $objArgs['seed']. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 
 $m_lngRandState = 0;
@@ -939,7 +1001,7 @@ $m_lngRandState = 0;
 function @@brainless(&$arrBytes_a, $intDir_a) { $intI = 0; $intLen = count($arrBytes_a); if ($intLen > 0 && $intDir_a == 1) { for ($intI = $intLen - 2; $intI >= 0; $intI--) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI + 1]; } $arrBytes_a[$intLen - 1] = $arrBytes_a[$intLen - 1] ^ $arrBytes_a[0]; } else if ($intLen > 0 && $intDir_a == 2) { for ($intI = 1; $intI < $intLen; $intI++) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI - 1]; } $arrBytes_a[0] = $arrBytes_a[0] ^ $arrBytes_a[$intLen - 1]; } }
 function @@buildWindow($arrROM_a, $intOffset_a, $intSize_a) { $arrWindow = array(); $intI = 0; $intROMLen = count($arrROM_a); for ($intI = 0; $intI < 256; $intI++) { $arrWindow[] = array(); } for ($intI = 0; $intI < $intSize_a; $intI++) { if ($intOffset_a + $intI < $intROMLen) { $arrWindow[$arrROM_a[$intOffset_a + $intI]][] = $intI; } } return $arrWindow; }
 function @@crc32Std($arrBytes_a) { $lngCrc = 0xFFFFFFFF; $lngX = 0; $intI = 0; $intJ = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngX = ($lngCrc ^ $arrBytes_a[$intI]) & 0xFF; for ($intJ = 0; $intJ < 8; $intJ++) { if (($lngX & 1) != 0) { $lngX = (($lngX >> 1) ^ 0xEDB88320) & 0xFFFFFFFF; } else { $lngX = $lngX >> 1; } } $lngCrc = (($lngCrc >> 8) ^ $lngX) & 0xFFFFFFFF; } return ($lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF; }
-function @@djb2($arrBytes_a) { $lngHash = 0; $intI = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a[$intI]) & 0xFFFFFFFF; } return $lngHash; }
+function @@romHash($arrBytes_a) { $lngHash = 0; $intI = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a[$intI]) & 0xFFFFFFFF; } return $lngHash; }
 function @@effSize($intROMLen_a, $intCap_a, $blnSliding_a) { $intSize = $intCap_a; if ($intROMLen_a < $intCap_a) { $intSize = $intROMLen_a; } if ($blnSliding_a) { $intSize = @@regime($intROMLen_a, $intCap_a)['size']; } return $intSize; }
 function @@hdrValue(&$arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intI = 0; $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> ($intValueBits_a * $intI)) & ((1 << $intValueBits_a) - 1); @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), $intAddrBytes_a); } }
 function @@nextRand() { global $m_lngRandState; $lngState = $m_lngRandState; $lngState = ($lngState ^ ($lngState << 13)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState >> 17)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState << 5)) & 0xFFFFFFFF; $m_lngRandState = $lngState; return $lngState; }
@@ -949,7 +1011,8 @@ function @@pushLE(&$arrOut_a, $lngValue_a, $intBytes_a) { $intI = 0; for ($intI 
 function @@readHdrValue($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intValue = 0; $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a[@@readLE($arrBytes_a, $intPos_a + $intI * $intAddrBytes_a, $intAddrBytes_a)] << ($intValueBits_a * $intI)); } return $intValue; }
 function @@readLE($arrBytes_a, $intPos_a, $intBytes_a) { $lngValue = 0; $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $lngValue = ($lngValue | ($arrBytes_a[$intPos_a + $intI] << (8 * $intI))) & 0xFFFFFFFF; } return $lngValue; }
 function @@regime($intROMLen_a, $intCap_a) { $intPct = (int)($intROMLen_a * 2 / 100); $intLimit = $intCap_a + (int)($intCap_a * 2 / 100); $objSpan = array('size' => $intCap_a, 'wrap' => $intCap_a); if ($intROMLen_a < $intLimit) { $objSpan['size'] = $intROMLen_a - $intPct; $objSpan['wrap'] = $intPct; } else if ($intROMLen_a < 2 * $intCap_a) { $objSpan['size'] = $intCap_a; $objSpan['wrap'] = $intROMLen_a - $intCap_a; } return $objSpan; }
-function @@seed($arrROM_a, $lngExtra_a) { $lngSeed = @@djb2($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
+function @@rollingHash($arrBytes_a) { $lngHash = 0; $intPass = 0; $intI = 0; $intLast = 0; $byState = 0; $intLen = count($arrBytes_a); for ($intPass = 0; $intPass < 4; $intPass++) { $byState = 0; $intLast = $intLen - 1; while ($intLast >= 0 && ($intLast % 4) != $intPass) { $intLast--; } if ($intLast >= 0) { $byState = $arrBytes_a[$intLast]; for ($intI = $intLast - 4; $intI >= 0; $intI = $intI - 4) { $byState = $byState ^ $arrBytes_a[$intI]; } $byState = $byState ^ $arrBytes_a[$intLast]; } $lngHash = ($lngHash | ($byState << (8 * $intPass))) & 0xFFFFFFFF; } return $lngHash; }
+function @@seed($arrROM_a, $lngExtra_a) { $lngSeed = @@romHash($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
 function @@timer() { $lngTime = 0; $lngTime = ((int)(microtime(true) * 1000000)) & 0xFFFFFFFF; return $lngTime; }
 function @@unbrainless(&$arrBytes_a, $intDir_a) { $intI = 0; $intLen = count($arrBytes_a); if ($intLen > 0 && $intDir_a == 1) { $arrBytes_a[$intLen - 1] = $arrBytes_a[$intLen - 1] ^ $arrBytes_a[0]; for ($intI = 0; $intI <= $intLen - 2; $intI++) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI + 1]; } } else if ($intLen > 0 && $intDir_a == 2) { $arrBytes_a[0] = $arrBytes_a[0] ^ $arrBytes_a[$intLen - 1]; for ($intI = $intLen - 1; $intI >= 1; $intI--) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI - 1]; } } }
 function @@zacBytes($objArgs_a) { $arrZac = array(); $intI = 0; $intLen = strlen($objArgs_a['zac']['value']); if ($intLen > 0) { for ($intI = 0; $intI < $intLen; $intI++) { $arrZac[] = ord($objArgs_a['zac']['value'][$intI]); } } else { for ($intI = 0; $intI < $objArgs_a['zac']['bytes']; $intI++) { $arrZac[] = @@nextRand() % 256; } } return $arrZac; }
@@ -961,6 +1024,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
     $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
     $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
     $intValueBits = (int)($objArgs_a['elemBits'] / 2);
+    $intUnit = (int)(16 / $objArgs_a['elemBits']);
     $arrOut = array();
     $arrPayload = array();
     $arrElems = array();
@@ -997,7 +1061,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
     // integrity words + ZAC lead the payload (presegment placement)
     if ($objArgs_a['rollingHash'] == 1)
     {
-        @@pushLE($arrPayload, @@djb2($arrMessage_a), 4);
+        @@pushLE($arrPayload, @@rollingHash($arrMessage_a), 4);
     }
     if ($objArgs_a['crc32'])
     {
@@ -1055,7 +1119,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
     // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if ($objArgs_a['rollingHash'] == 2 && $intPrefixLen >= 4)
     {
-        $lngHash = @@djb2($arrMessage_a);
+        $lngHash = @@rollingHash($arrMessage_a);
         for ($intI = 0; $intI < 4; $intI++)
         {
             $arrPrefix[$intPrefixLen - 4 + $intI] = ($lngHash >> (8 * $intI)) & 0xFF;
@@ -1073,7 +1137,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
         }
         while ($intI < count($arrElems))
         {
-            $intBlockLen = $objArgs_a['blockMin'] + (@@nextRand() % ($objArgs_a['blockMax'] - $objArgs_a['blockMin'] + 1));
+            $intBlockLen = ($objArgs_a['blockMin'] + (@@nextRand() % ($objArgs_a['blockMax'] - $objArgs_a['blockMin'] + 1))) * $intUnit;
             if ($intBlockLen > count($arrElems) - $intI)
             {
                 $intBlockLen = count($arrElems) - $intI;
@@ -1126,7 +1190,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
         }
         if ($blnMulti)
         {
-            @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[0]['addrs']), 2, $intAddrBytes, $intValueBits);
+            @@hdrValue($arrOut, $arrHdrWindow, (int)(count($arrBlocks[0]['addrs']) / $intUnit), 2, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a['prefix']['on'])
         {
@@ -1147,7 +1211,7 @@ function @@encode($arrROM_a, $arrMessage_a, $objArgs_a)
                 if ($intK + 1 < count($arrBlocks))
                 {
                     @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[$intK + 1]['ptr'], 2, $intAddrBytes, $intValueBits);
-                    @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[$intK + 1]['addrs']), 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, (int)(count($arrBlocks[$intK + 1]['addrs']) / $intUnit), 2, $intAddrBytes, $intValueBits);
                 }
                 else
                 {
@@ -1175,6 +1239,7 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
     $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
     $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
     $intValueBits = (int)($objArgs_a['elemBits'] / 2);
+    $intUnit = (int)(16 / $objArgs_a['elemBits']);
     $arrBytes = array();
     $arrPayload = array();
     $arrElems = array();
@@ -1193,6 +1258,10 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
     $intROMLen = count($arrROM_a);
     $intEncodedLen = count($arrEncoded_a);
     $blnMulti = ($objArgs_a['blocks'] == 1);
+    $arrBody = array();
+    $blnOk = true;
+    $intPrefixStart = 0;
+    $intCrcPos = 0;
 
     for ($intI = 0; $intI < $intEncodedLen; $intI++)
     {
@@ -1221,6 +1290,7 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
         $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['suffix']['width'], $intAddrBytes, $intValueBits);
         $intPos = $intPos + $objArgs_a['suffix']['width'] * $intAddrBytes;
     }
+    $intPrefixStart = $intPos;
     $intPos = $intPos + $intPrefixLen;
     $intEnd = $intEncodedLen - $intSuffixLen;
 
@@ -1232,7 +1302,7 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
             $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
             $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 2 * $intAddrBytes, 2, $intAddrBytes, $intValueBits);
             $intPos = $intPos + 4 * $intAddrBytes;
-            for ($intI = 0; $intI < $intSize; $intI++)
+            for ($intI = 0; $intI < $intSize * $intUnit; $intI++)
             {
                 $arrElems[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)];
                 $intPos = $intPos + $intAddrBytes;
@@ -1278,7 +1348,30 @@ function @@decode($arrROM_a, $arrEncoded_a, $objArgs_a)
     $intHead = $intHead + @@zacLen($objArgs_a);
     for ($intI = $intHead; $intI < count($arrPayload); $intI++)
     {
-        $arrMessage[] = $arrPayload[$intI];
+        $arrBody[] = $arrPayload[$intI];
+    }
+
+    // integrity: recompute over the message and compare; a mismatch returns an empty message
+    $blnOk = (count($arrPayload) >= $intHead);
+    if ($objArgs_a['rollingHash'] == 1)
+    {
+        $blnOk = $blnOk && (@@readLE($arrPayload, 0, 4) == @@rollingHash($arrBody));
+    }
+    if ($objArgs_a['rollingHash'] == 2 && $intPrefixLen >= 4)
+    {
+        $blnOk = $blnOk && ($intPrefixStart + $intPrefixLen <= $intEncodedLen) && (@@readLE($arrBytes, $intPrefixStart + $intPrefixLen - 4, 4) == @@rollingHash($arrBody));
+    }
+    if ($objArgs_a['crc32'])
+    {
+        if ($objArgs_a['rollingHash'] == 1)
+        {
+            $intCrcPos = 4;
+        }
+        $blnOk = $blnOk && (@@readLE($arrPayload, $intCrcPos, 4) == @@crc32Std($arrBody));
+    }
+    if ($blnOk)
+    {
+        $arrMessage = $arrBody;
     }
 
     return $arrMessage;
@@ -1288,8 +1381,8 @@ const TPL_PHPLATEST = String.raw`<?php
 // ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - PHP 7+ (64-bit PHP)
 // $arrEncoded = @@encode($arrROM, $arrMessage, $objArgs)   $arrMessage = @@decode($arrROM, $arrEncoded, $objArgs)
 // All byte data is arrays of bytes 0-255 (string -> array: array_values(unpack('C*', $str))). Text and binary safe. All little-endian.
-// $objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (its bytes, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional $objArgs['seed']. Randomness carries NO security - ROM secrecy does.
+// $objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (its bytes, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional $objArgs['seed']. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 
 $m_lngRandState = 0;
@@ -1297,7 +1390,7 @@ $m_lngRandState = 0;
 function @@brainless(&$arrBytes_a, $intDir_a) { $intI = 0; $intLen = count($arrBytes_a); if ($intLen > 0 && $intDir_a == 1) { for ($intI = $intLen - 2; $intI >= 0; $intI--) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI + 1]; } $arrBytes_a[$intLen - 1] = $arrBytes_a[$intLen - 1] ^ $arrBytes_a[0]; } else if ($intLen > 0 && $intDir_a == 2) { for ($intI = 1; $intI < $intLen; $intI++) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI - 1]; } $arrBytes_a[0] = $arrBytes_a[0] ^ $arrBytes_a[$intLen - 1]; } }
 function @@buildWindow($arrROM_a, $intOffset_a, $intSize_a) { $arrWindow = []; $intI = 0; $intROMLen = count($arrROM_a); for ($intI = 0; $intI < 256; $intI++) { $arrWindow[] = []; } for ($intI = 0; $intI < $intSize_a; $intI++) { if ($intOffset_a + $intI < $intROMLen) { $arrWindow[$arrROM_a[$intOffset_a + $intI]][] = $intI; } } return $arrWindow; }
 function @@crc32Std($arrBytes_a) { $lngCrc = 0xFFFFFFFF; $lngX = 0; $intI = 0; $intJ = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngX = ($lngCrc ^ $arrBytes_a[$intI]) & 0xFF; for ($intJ = 0; $intJ < 8; $intJ++) { if (($lngX & 1) != 0) { $lngX = (($lngX >> 1) ^ 0xEDB88320) & 0xFFFFFFFF; } else { $lngX = $lngX >> 1; } } $lngCrc = (($lngCrc >> 8) ^ $lngX) & 0xFFFFFFFF; } return ($lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF; }
-function @@djb2($arrBytes_a) { $lngHash = 0; $intI = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a[$intI]) & 0xFFFFFFFF; } return $lngHash; }
+function @@romHash($arrBytes_a) { $lngHash = 0; $intI = 0; $intLen = count($arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a[$intI]) & 0xFFFFFFFF; } return $lngHash; }
 function @@effSize($intROMLen_a, $intCap_a, $blnSliding_a) { $intSize = $intCap_a; if ($intROMLen_a < $intCap_a) { $intSize = $intROMLen_a; } if ($blnSliding_a) { $intSize = @@regime($intROMLen_a, $intCap_a)['size']; } return $intSize; }
 function @@hdrValue(&$arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intI = 0; $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> ($intValueBits_a * $intI)) & ((1 << $intValueBits_a) - 1); @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), $intAddrBytes_a); } }
 function @@nextRand() { global $m_lngRandState; $lngState = $m_lngRandState; $lngState = ($lngState ^ ($lngState << 13)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState >> 17)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState << 5)) & 0xFFFFFFFF; $m_lngRandState = $lngState; return $lngState; }
@@ -1307,7 +1400,8 @@ function @@pushLE(&$arrOut_a, $lngValue_a, $intBytes_a) { $intI = 0; for ($intI 
 function @@readHdrValue($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) { $intValue = 0; $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a[@@readLE($arrBytes_a, $intPos_a + $intI * $intAddrBytes_a, $intAddrBytes_a)] << ($intValueBits_a * $intI)); } return $intValue; }
 function @@readLE($arrBytes_a, $intPos_a, $intBytes_a) { $lngValue = 0; $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $lngValue = ($lngValue | ($arrBytes_a[$intPos_a + $intI] << (8 * $intI))) & 0xFFFFFFFF; } return $lngValue; }
 function @@regime($intROMLen_a, $intCap_a) { $intPct = intdiv($intROMLen_a * 2, 100); $intLimit = $intCap_a + intdiv($intCap_a * 2, 100); $objSpan = ['size' => $intCap_a, 'wrap' => $intCap_a]; if ($intROMLen_a < $intLimit) { $objSpan['size'] = $intROMLen_a - $intPct; $objSpan['wrap'] = $intPct; } else if ($intROMLen_a < 2 * $intCap_a) { $objSpan['size'] = $intCap_a; $objSpan['wrap'] = $intROMLen_a - $intCap_a; } return $objSpan; }
-function @@seed($arrROM_a, $lngExtra_a) { $lngSeed = @@djb2($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
+function @@rollingHash($arrBytes_a) { $lngHash = 0; $intPass = 0; $intI = 0; $intLast = 0; $byState = 0; $intLen = count($arrBytes_a); for ($intPass = 0; $intPass < 4; $intPass++) { $byState = 0; $intLast = $intLen - 1; while ($intLast >= 0 && ($intLast % 4) != $intPass) { $intLast--; } if ($intLast >= 0) { $byState = $arrBytes_a[$intLast]; for ($intI = $intLast - 4; $intI >= 0; $intI = $intI - 4) { $byState = $byState ^ $arrBytes_a[$intI]; } $byState = $byState ^ $arrBytes_a[$intLast]; } $lngHash = ($lngHash | ($byState << (8 * $intPass))) & 0xFFFFFFFF; } return $lngHash; }
+function @@seed($arrROM_a, $lngExtra_a) { $lngSeed = @@romHash($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
 function @@timer() { $lngTime = 0; $lngTime = ((int)(microtime(true) * 1000000)) & 0xFFFFFFFF; return $lngTime; }
 function @@unbrainless(&$arrBytes_a, $intDir_a) { $intI = 0; $intLen = count($arrBytes_a); if ($intLen > 0 && $intDir_a == 1) { $arrBytes_a[$intLen - 1] = $arrBytes_a[$intLen - 1] ^ $arrBytes_a[0]; for ($intI = 0; $intI <= $intLen - 2; $intI++) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI + 1]; } } else if ($intLen > 0 && $intDir_a == 2) { $arrBytes_a[0] = $arrBytes_a[0] ^ $arrBytes_a[$intLen - 1]; for ($intI = $intLen - 1; $intI >= 1; $intI--) { $arrBytes_a[$intI] = $arrBytes_a[$intI] ^ $arrBytes_a[$intI - 1]; } } }
 function @@zacBytes($objArgs_a) { $arrZac = []; $intI = 0; $intLen = strlen($objArgs_a['zac']['value']); if ($intLen > 0) { for ($intI = 0; $intI < $intLen; $intI++) { $arrZac[] = ord($objArgs_a['zac']['value'][$intI]); } } else { for ($intI = 0; $intI < $objArgs_a['zac']['bytes']; $intI++) { $arrZac[] = @@nextRand() % 256; } } return $arrZac; }
@@ -1319,6 +1413,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
     $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
     $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
     $intValueBits = (int)($objArgs_a['elemBits'] / 2);
+    $intUnit = (int)(16 / $objArgs_a['elemBits']);
     $arrOut = [];
     $arrPayload = [];
     $arrElems = [];
@@ -1355,7 +1450,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
     // integrity words + ZAC lead the payload (presegment placement)
     if ($objArgs_a['rollingHash'] == 1)
     {
-        @@pushLE($arrPayload, @@djb2($arrMessage_a), 4);
+        @@pushLE($arrPayload, @@rollingHash($arrMessage_a), 4);
     }
     if ($objArgs_a['crc32'])
     {
@@ -1413,7 +1508,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
     // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if ($objArgs_a['rollingHash'] == 2 && $intPrefixLen >= 4)
     {
-        $lngHash = @@djb2($arrMessage_a);
+        $lngHash = @@rollingHash($arrMessage_a);
         for ($intI = 0; $intI < 4; $intI++)
         {
             $arrPrefix[$intPrefixLen - 4 + $intI] = ($lngHash >> (8 * $intI)) & 0xFF;
@@ -1431,7 +1526,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
         }
         while ($intI < count($arrElems))
         {
-            $intBlockLen = $objArgs_a['blockMin'] + (@@nextRand() % ($objArgs_a['blockMax'] - $objArgs_a['blockMin'] + 1));
+            $intBlockLen = ($objArgs_a['blockMin'] + (@@nextRand() % ($objArgs_a['blockMax'] - $objArgs_a['blockMin'] + 1))) * $intUnit;
             if ($intBlockLen > count($arrElems) - $intI)
             {
                 $intBlockLen = count($arrElems) - $intI;
@@ -1484,7 +1579,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
         }
         if ($blnMulti)
         {
-            @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[0]['addrs']), 2, $intAddrBytes, $intValueBits);
+            @@hdrValue($arrOut, $arrHdrWindow, intdiv(count($arrBlocks[0]['addrs']), $intUnit), 2, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a['prefix']['on'])
         {
@@ -1505,7 +1600,7 @@ function @@encode(array $arrROM_a, array $arrMessage_a, array $objArgs_a): array
                 if ($intK + 1 < count($arrBlocks))
                 {
                     @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks[$intK + 1]['ptr'], 2, $intAddrBytes, $intValueBits);
-                    @@hdrValue($arrOut, $arrHdrWindow, count($arrBlocks[$intK + 1]['addrs']), 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, intdiv(count($arrBlocks[$intK + 1]['addrs']), $intUnit), 2, $intAddrBytes, $intValueBits);
                 }
                 else
                 {
@@ -1533,6 +1628,7 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
     $ADDRESS_SPACE = 1 << $objArgs_a['elemBits'];
     $intAddrBytes = (int)($objArgs_a['elemBits'] / 8);
     $intValueBits = (int)($objArgs_a['elemBits'] / 2);
+    $intUnit = (int)(16 / $objArgs_a['elemBits']);
     $arrBytes = [];
     $arrPayload = [];
     $arrElems = [];
@@ -1551,6 +1647,10 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
     $intROMLen = count($arrROM_a);
     $intEncodedLen = count($arrEncoded_a);
     $blnMulti = ($objArgs_a['blocks'] == 1);
+    $arrBody = [];
+    $blnOk = true;
+    $intPrefixStart = 0;
+    $intCrcPos = 0;
 
     for ($intI = 0; $intI < $intEncodedLen; $intI++)
     {
@@ -1579,6 +1679,7 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
         $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a['suffix']['width'], $intAddrBytes, $intValueBits);
         $intPos = $intPos + $objArgs_a['suffix']['width'] * $intAddrBytes;
     }
+    $intPrefixStart = $intPos;
     $intPos = $intPos + $intPrefixLen;
     $intEnd = $intEncodedLen - $intSuffixLen;
 
@@ -1590,7 +1691,7 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
             $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
             $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 2 * $intAddrBytes, 2, $intAddrBytes, $intValueBits);
             $intPos = $intPos + 4 * $intAddrBytes;
-            for ($intI = 0; $intI < $intSize; $intI++)
+            for ($intI = 0; $intI < $intSize * $intUnit; $intI++)
             {
                 $arrElems[] = $arrROM_a[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)];
                 $intPos = $intPos + $intAddrBytes;
@@ -1636,7 +1737,30 @@ function @@decode(array $arrROM_a, array $arrEncoded_a, array $objArgs_a): array
     $intHead = $intHead + @@zacLen($objArgs_a);
     for ($intI = $intHead; $intI < count($arrPayload); $intI++)
     {
-        $arrMessage[] = $arrPayload[$intI];
+        $arrBody[] = $arrPayload[$intI];
+    }
+
+    // integrity: recompute over the message and compare; a mismatch returns an empty message
+    $blnOk = (count($arrPayload) >= $intHead);
+    if ($objArgs_a['rollingHash'] == 1)
+    {
+        $blnOk = $blnOk && (@@readLE($arrPayload, 0, 4) == @@rollingHash($arrBody));
+    }
+    if ($objArgs_a['rollingHash'] == 2 && $intPrefixLen >= 4)
+    {
+        $blnOk = $blnOk && ($intPrefixStart + $intPrefixLen <= $intEncodedLen) && (@@readLE($arrBytes, $intPrefixStart + $intPrefixLen - 4, 4) == @@rollingHash($arrBody));
+    }
+    if ($objArgs_a['crc32'])
+    {
+        if ($objArgs_a['rollingHash'] == 1)
+        {
+            $intCrcPos = 4;
+        }
+        $blnOk = $blnOk && (@@readLE($arrPayload, $intCrcPos, 4) == @@crc32Std($arrBody));
+    }
+    if ($blnOk)
+    {
+        $arrMessage = $arrBody;
     }
 
     return $arrMessage;
@@ -1646,8 +1770,8 @@ const TPL_C = String.raw`/* ZOSCII / UNSIGNAL / BRICS - general encoder/decoder 
    arrEncoded = @@encode(arrROM, intROMLen, arrMessage, intMessageLen, objArgs, &intEncodedLen)   malloc'd, caller frees
    arrMessage = @@decode(arrROM, intROMLen, arrEncoded, intEncodedLen, objArgs, &intMessageLen)   malloc'd, caller frees
    All byte data is arrays of bytes 0-255. Text and binary safe. All little-endian.
-   objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string (char*), used as-is (its bytes, never encoded).
-   RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
+   objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string (char*), used as-is (its bytes, never encoded).
+   RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
    Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by, p = pointer. _a = argument, m_ = module-level.
    C-only (forced by C): array lengths passed alongside arrays, blockPush/bufPush/listPush for growable arrays, freeWindow + free() for memory, prototypes. */
 #include <stdint.h>
@@ -1671,7 +1795,7 @@ void @@brainless(unsigned char* arrBytes_a, long intLen_a, int intDir_a);
 void @@bufPush(@@Buf* parrOut_a, long intValue_a);
 @@List* @@buildWindow(const unsigned char* arrROM_a, long intROMLen_a, long intOffset_a, long intSize_a);
 uint32_t @@crc32Std(const unsigned char* arrBytes_a, long intLen_a);
-uint32_t @@djb2(const unsigned char* arrBytes_a, long intLen_a);
+uint32_t @@romHash(const unsigned char* arrBytes_a, long intLen_a);
 long @@effSize(long intROMLen_a, long intCap_a, int blnSliding_a);
 void @@freeWindow(@@List* arrWindow_a);
 void @@hdrValue(@@Buf* parrOut_a, @@List* arrHdrWindow_a, long intValue_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a);
@@ -1683,6 +1807,7 @@ void @@pushLE(@@Buf* parrOut_a, uint32_t lngValue_a, int intBytes_a);
 long @@readHdrValue(const unsigned char* arrROM_a, const unsigned char* arrBytes_a, long intPos_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a);
 uint32_t @@readLE(const unsigned char* arrBytes_a, long intPos_a, int intBytes_a);
 @@Span @@regime(long intROMLen_a, long intCap_a);
+uint32_t @@rollingHash(const unsigned char* arrBytes_a, long intLen_a);
 uint32_t @@seed(const unsigned char* arrROM_a, long intROMLen_a, uint32_t lngExtra_a);
 uint32_t @@timer(void);
 void @@unbrainless(unsigned char* arrBytes_a, long intLen_a, int intDir_a);
@@ -1696,7 +1821,7 @@ void @@brainless(unsigned char* arrBytes_a, long intLen_a, int intDir_a) { long 
 void @@bufPush(@@Buf* parrOut_a, long intValue_a) { if (parrOut_a->count >= parrOut_a->cap) { parrOut_a->cap = parrOut_a->cap * 2 + 256; parrOut_a->items = (unsigned char*)realloc(parrOut_a->items, (size_t)parrOut_a->cap); } parrOut_a->items[parrOut_a->count] = (unsigned char)(intValue_a & 0xFF); parrOut_a->count = parrOut_a->count + 1; }
 @@List* @@buildWindow(const unsigned char* arrROM_a, long intROMLen_a, long intOffset_a, long intSize_a) { @@List* arrWindow = (@@List*)calloc(256, sizeof(@@List)); long intI = 0; long intROMLen = intROMLen_a; for (intI = 0; intI < intSize_a; intI++) { if (intOffset_a + intI < intROMLen) { @@listPush(&arrWindow[arrROM_a[intOffset_a + intI]], intI); } } return arrWindow; }
 uint32_t @@crc32Std(const unsigned char* arrBytes_a, long intLen_a) { uint32_t lngCrc = 0xFFFFFFFFu; uint32_t lngX = 0; long intI = 0; int intJ = 0; long intLen = intLen_a; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFFu; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1u) != 0) { lngX = (lngX >> 1) ^ 0xEDB88320u; } else { lngX = lngX >> 1; } } lngCrc = (lngCrc >> 8) ^ lngX; } return lngCrc ^ 0xFFFFFFFFu; }
-uint32_t @@djb2(const unsigned char* arrBytes_a, long intLen_a) { uint32_t lngHash = 0; long intI = 0; long intLen = intLen_a; for (intI = 0; intI < intLen; intI++) { lngHash = (lngHash * 33u) + arrBytes_a[intI]; } return lngHash; }
+uint32_t @@romHash(const unsigned char* arrBytes_a, long intLen_a) { uint32_t lngHash = 0; long intI = 0; long intLen = intLen_a; for (intI = 0; intI < intLen; intI++) { lngHash = (lngHash * 33u) + arrBytes_a[intI]; } return lngHash; }
 long @@effSize(long intROMLen_a, long intCap_a, int blnSliding_a) { long intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
 void @@freeWindow(@@List* arrWindow_a) { int intI = 0; for (intI = 0; intI < 256; intI++) { free(arrWindow_a[intI].items); } free(arrWindow_a); }
 void @@hdrValue(@@Buf* parrOut_a, @@List* arrHdrWindow_a, long intValue_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { int intI = 0; long byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(parrOut_a, (uint32_t)@@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
@@ -1708,7 +1833,8 @@ void @@pushLE(@@Buf* parrOut_a, uint32_t lngValue_a, int intBytes_a) { int intI 
 long @@readHdrValue(const unsigned char* arrROM_a, const unsigned char* arrBytes_a, long intPos_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { long intValue = 0; int intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | ((long)arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
 uint32_t @@readLE(const unsigned char* arrBytes_a, long intPos_a, int intBytes_a) { uint32_t lngValue = 0; int intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = lngValue | ((uint32_t)arrBytes_a[intPos_a + intI] << (8 * intI)); } return lngValue; }
 @@Span @@regime(long intROMLen_a, long intCap_a) { long intPct = (intROMLen_a * 2) / 100; long intLimit = intCap_a + (intCap_a * 2) / 100; @@Span objSpan = { 0, 0 }; objSpan.size = intCap_a; objSpan.wrap = intCap_a; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
-uint32_t @@seed(const unsigned char* arrROM_a, long intROMLen_a, uint32_t lngExtra_a) { uint32_t lngSeed = @@djb2(arrROM_a, intROMLen_a); lngSeed = lngSeed ^ @@timer(); if (lngExtra_a != 0) { lngSeed = lngSeed ^ lngExtra_a; } if (lngSeed == 0) { lngSeed = 0x9E3779B9u; } return lngSeed; }
+uint32_t @@rollingHash(const unsigned char* arrBytes_a, long intLen_a) { uint32_t lngHash = 0; int intPass = 0; long intI = 0; long intLast = 0; uint32_t byState = 0; long intLen = intLen_a; for (intPass = 0; intPass < 4; intPass++) { byState = 0; intLast = intLen - 1; while (intLast >= 0 && (intLast % 4) != intPass) { intLast--; } if (intLast >= 0) { byState = arrBytes_a[intLast]; for (intI = intLast - 4; intI >= 0; intI = intI - 4) { byState = byState ^ arrBytes_a[intI]; } byState = byState ^ arrBytes_a[intLast]; } lngHash = lngHash | (byState << (8 * intPass)); } return lngHash; }
+uint32_t @@seed(const unsigned char* arrROM_a, long intROMLen_a, uint32_t lngExtra_a) { uint32_t lngSeed = @@romHash(arrROM_a, intROMLen_a); lngSeed = lngSeed ^ @@timer(); if (lngExtra_a != 0) { lngSeed = lngSeed ^ lngExtra_a; } if (lngSeed == 0) { lngSeed = 0x9E3779B9u; } return lngSeed; }
 uint32_t @@timer(void) { uint32_t lngTime = 0; struct timespec objTime; timespec_get(&objTime, TIME_UTC); lngTime = (uint32_t)(objTime.tv_nsec / 1000) ^ (uint32_t)(objTime.tv_sec * 1000000); return lngTime; }
 void @@unbrainless(unsigned char* arrBytes_a, long intLen_a, int intDir_a) { long intI = 0; long intLen = intLen_a; if (intLen > 0 && intDir_a == 1) { arrBytes_a[intLen - 1] = arrBytes_a[intLen - 1] ^ arrBytes_a[0]; for (intI = 0; intI <= intLen - 2; intI++) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI + 1]; } } else if (intLen > 0 && intDir_a == 2) { arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen - 1]; for (intI = intLen - 1; intI >= 1; intI--) { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI - 1]; } } }
 @@Buf @@zacBytes(@@Args objArgs_a) { @@Buf arrZac = { NULL, 0, 0 }; long intI = 0; long intLen = (long)strlen(objArgs_a.zac.value); if (intLen > 0) { for (intI = 0; intI < intLen; intI++) { @@bufPush(&arrZac, (unsigned char)objArgs_a.zac.value[intI]); } } else { for (intI = 0; intI < objArgs_a.zac.bytes; intI++) { @@bufPush(&arrZac, (long)(@@nextRand() % 256u)); } } return arrZac; }
@@ -1719,6 +1845,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
     long ADDRESS_SPACE = 1L << objArgs_a.elemBits;
     int intAddrBytes = objArgs_a.elemBits / 8;
     int intValueBits = objArgs_a.elemBits / 2;
+    int intUnit = 16 / objArgs_a.elemBits;
     @@Buf arrOut = { NULL, 0, 0 };
     @@Buf arrPayload = { NULL, 0, 0 };
     @@Buf arrElems = { NULL, 0, 0 };
@@ -1755,7 +1882,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
     /* integrity words + ZAC lead the payload (presegment placement) */
     if (objArgs_a.rollingHash == 1)
     {
-        @@pushLE(&arrPayload, @@djb2(arrMessage_a, intMessageLen), 4);
+        @@pushLE(&arrPayload, @@rollingHash(arrMessage_a, intMessageLen), 4);
     }
     if (objArgs_a.crc32)
     {
@@ -1813,7 +1940,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
     /* rolling hash raw in the last 4 bytes of the prefix (prefix placement) */
     if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
     {
-        lngHash = @@djb2(arrMessage_a, intMessageLen);
+        lngHash = @@rollingHash(arrMessage_a, intMessageLen);
         for (intI = 0; intI < 4; intI++)
         {
             arrPrefix.items[intPrefixLen - 4 + intI] = (unsigned char)((lngHash >> (8 * intI)) & 0xFFu);
@@ -1831,7 +1958,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
         }
         while (intI < arrElems.count)
         {
-            intBlockLen = objArgs_a.blockMin + (long)(@@nextRand() % (uint32_t)(objArgs_a.blockMax - objArgs_a.blockMin + 1));
+            intBlockLen = (objArgs_a.blockMin + (long)(@@nextRand() % (uint32_t)(objArgs_a.blockMax - objArgs_a.blockMin + 1))) * intUnit;
             if (intBlockLen > arrElems.count - intI)
             {
                 intBlockLen = arrElems.count - intI;
@@ -1885,7 +2012,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
         }
         if (blnMulti)
         {
-            @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[0].addrs.count, 2, intAddrBytes, intValueBits);
+            @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[0].addrs.count / intUnit, 2, intAddrBytes, intValueBits);
         }
         if (objArgs_a.prefix.on)
         {
@@ -1906,7 +2033,7 @@ unsigned char* @@encode(const unsigned char* arrROM_a, long intROMLen_a, const u
                 if (intK + 1 < arrBlocks.count)
                 {
                     @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].ptr, 2, intAddrBytes, intValueBits);
-                    @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].addrs.count, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(&arrOut, arrHdrWindow, arrBlocks.items[intK + 1].addrs.count / intUnit, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
@@ -1946,6 +2073,7 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
     long ADDRESS_SPACE = 1L << objArgs_a.elemBits;
     int intAddrBytes = objArgs_a.elemBits / 8;
     int intValueBits = objArgs_a.elemBits / 2;
+    int intUnit = 16 / objArgs_a.elemBits;
     @@Buf arrBytes = { NULL, 0, 0 };
     @@Buf arrPayload = { NULL, 0, 0 };
     @@Buf arrElems = { NULL, 0, 0 };
@@ -1964,6 +2092,10 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
     long intROMLen = intROMLen_a;
     long intEncodedLen = intEncodedLen_a;
     int blnMulti = (objArgs_a.blocks == 1);
+    @@Buf arrBody = { NULL, 0, 0 };
+    int blnOk = 1;
+    long intPrefixStart = 0;
+    long intCrcPos = 0;
 
     for (intI = 0; intI < intEncodedLen; intI++)
     {
@@ -1992,6 +2124,7 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
         intSuffixLen = @@readHdrValue(arrROM_a, arrBytes.items, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
+    intPrefixStart = intPos;
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
 
@@ -2003,7 +2136,7 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
             intNextPtr = @@readHdrValue(arrROM_a, arrBytes.items, intPos, 2, intAddrBytes, intValueBits);
             intNextSize = @@readHdrValue(arrROM_a, arrBytes.items, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
             intPos = intPos + 4 * intAddrBytes;
-            for (intI = 0; intI < intSize; intI++)
+            for (intI = 0; intI < intSize * intUnit; intI++)
             {
                 @@bufPush(&arrElems, arrROM_a[intOffset + (long)@@readLE(arrBytes.items, intPos, intAddrBytes)]);
                 intPos = intPos + intAddrBytes;
@@ -2049,7 +2182,34 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
     intHead = intHead + @@zacLen(objArgs_a);
     for (intI = intHead; intI < arrPayload.count; intI++)
     {
-        @@bufPush(&arrMessage, arrPayload.items[intI]);
+        @@bufPush(&arrBody, arrPayload.items[intI]);
+    }
+
+    /* integrity: recompute over the message and compare; a mismatch returns an empty message */
+    blnOk = (arrPayload.count >= intHead);
+    if (objArgs_a.rollingHash == 1)
+    {
+        blnOk = blnOk && (@@readLE(arrPayload.items, 0, 4) == @@rollingHash(arrBody.items, arrBody.count));
+    }
+    if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
+    {
+        blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (@@readLE(arrBytes.items, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(arrBody.items, arrBody.count));
+    }
+    if (objArgs_a.crc32)
+    {
+        if (objArgs_a.rollingHash == 1)
+        {
+            intCrcPos = 4;
+        }
+        blnOk = blnOk && (@@readLE(arrPayload.items, intCrcPos, 4) == @@crc32Std(arrBody.items, arrBody.count));
+    }
+    if (blnOk)
+    {
+        arrMessage = arrBody;
+    }
+    else
+    {
+        free(arrBody.items);
     }
 
     free(arrBytes.items);
@@ -2062,8 +2222,8 @@ unsigned char* @@decode(const unsigned char* arrROM_a, long intROMLen_a, const u
 const TPL_GO = String.raw`// ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - Go
 // arrEncoded := @@encode(arrROM, arrMessage, objArgs)   arrMessage := @@decode(arrROM, arrEncoded, objArgs)
 // All byte data is []byte. Text and binary safe. All little-endian.
-// objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (its bytes, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
+// objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (its bytes, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 // Go-only (forced by Go): '{' on the same line, append() to grow arrays, pointer args to grow a caller's array, only capitalised names are exported.
 package zoscii
@@ -2083,7 +2243,7 @@ var m_lngRandState uint32 = 0
 func @@brainless(arrBytes_a []byte, intDir_a int) { var intI int = 0; var intLen int = len(arrBytes_a); if intLen > 0 && intDir_a == 1 { for intI = intLen - 2; intI >= 0; intI-- { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI+1] }; arrBytes_a[intLen-1] = arrBytes_a[intLen-1] ^ arrBytes_a[0] } else if intLen > 0 && intDir_a == 2 { for intI = 1; intI < intLen; intI++ { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI-1] }; arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen-1] } }
 func @@buildWindow(arrROM_a []byte, intOffset_a int, intSize_a int) [][]int { var arrWindow [][]int = [][]int{}; var intI int = 0; var intROMLen int = len(arrROM_a); for intI = 0; intI < 256; intI++ { arrWindow = append(arrWindow, []int{}) }; for intI = 0; intI < intSize_a; intI++ { if intOffset_a+intI < intROMLen { arrWindow[arrROM_a[intOffset_a+intI]] = append(arrWindow[arrROM_a[intOffset_a+intI]], intI) } }; return arrWindow }
 func @@crc32Std(arrBytes_a []byte) uint32 { var lngCrc uint32 = 0xFFFFFFFF; var lngX uint32 = 0; var intI int = 0; var intJ int = 0; var intLen int = len(arrBytes_a); for intI = 0; intI < intLen; intI++ { lngX = (lngCrc ^ uint32(arrBytes_a[intI])) & 0xFF; for intJ = 0; intJ < 8; intJ++ { if (lngX & 1) != 0 { lngX = (lngX >> 1) ^ 0xEDB88320 } else { lngX = lngX >> 1 } }; lngCrc = (lngCrc >> 8) ^ lngX }; return lngCrc ^ 0xFFFFFFFF }
-func @@djb2(arrBytes_a []byte) uint32 { var lngHash uint32 = 0; var intI int = 0; var intLen int = len(arrBytes_a); for intI = 0; intI < intLen; intI++ { lngHash = (lngHash * 33) + uint32(arrBytes_a[intI]) }; return lngHash }
+func @@romHash(arrBytes_a []byte) uint32 { var lngHash uint32 = 0; var intI int = 0; var intLen int = len(arrBytes_a); for intI = 0; intI < intLen; intI++ { lngHash = (lngHash * 33) + uint32(arrBytes_a[intI]) }; return lngHash }
 func @@effSize(intROMLen_a int, intCap_a int, blnSliding_a bool) int { var intSize int = intCap_a; if intROMLen_a < intCap_a { intSize = intROMLen_a }; if blnSliding_a { intSize = @@regime(intROMLen_a, intCap_a).size }; return intSize }
 func @@hdrValue(arrOut_a *[]byte, arrHdrWindow_a [][]int, intValue_a int, intWidth_a int, intAddrBytes_a int, intValueBits_a int) { var intI int = 0; var byValue int = 0; for intI = 0; intI < intWidth_a; intI++ { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, uint32(@@pick(arrHdrWindow_a, byValue)), intAddrBytes_a) } }
 func @@nextRand() uint32 { var lngState uint32 = m_lngRandState; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); m_lngRandState = lngState; return lngState }
@@ -2093,7 +2253,8 @@ func @@pushLE(arrOut_a *[]byte, lngValue_a uint32, intBytes_a int) { var intI in
 func @@readHdrValue(arrROM_a []byte, arrBytes_a []byte, intPos_a int, intWidth_a int, intAddrBytes_a int, intValueBits_a int) int { var intValue int = 0; var intI int = 0; for intI = 0; intI < intWidth_a; intI++ { intValue = intValue | (int(arrROM_a[@@readLE(arrBytes_a, intPos_a+intI * intAddrBytes_a, intAddrBytes_a)]) << (intValueBits_a * intI)) }; return intValue }
 func @@readLE(arrBytes_a []byte, intPos_a int, intBytes_a int) uint32 { var lngValue uint32 = 0; var intI int = 0; for intI = 0; intI < intBytes_a; intI++ { lngValue = lngValue | (uint32(arrBytes_a[intPos_a+intI]) << (8 * intI)) }; return lngValue }
 func @@regime(intROMLen_a int, intCap_a int) @@Span { var intPct int = (intROMLen_a * 2) / 100; var intLimit int = intCap_a + (intCap_a*2)/100; var objSpan @@Span = @@Span{size: intCap_a, wrap: intCap_a}; if intROMLen_a < intLimit { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct } else if intROMLen_a < 2*intCap_a { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a }; return objSpan }
-func @@seed(arrROM_a []byte, lngExtra_a uint32) uint32 { var lngSeed uint32 = @@djb2(arrROM_a); lngSeed = lngSeed ^ @@timer(); if lngExtra_a != 0 { lngSeed = lngSeed ^ lngExtra_a }; if lngSeed == 0 { lngSeed = 0x9E3779B9 }; return lngSeed }
+func @@rollingHash(arrBytes_a []byte) uint32 { var lngHash uint32 = 0; var intPass int = 0; var intI int = 0; var intLast int = 0; var byState uint32 = 0; var intLen int = len(arrBytes_a); for intPass = 0; intPass < 4; intPass++ { byState = 0; intLast = intLen - 1; for intLast >= 0 && (intLast%4) != intPass { intLast-- }; if intLast >= 0 { byState = uint32(arrBytes_a[intLast]); for intI = intLast - 4; intI >= 0; intI = intI - 4 { byState = byState ^ uint32(arrBytes_a[intI]) }; byState = byState ^ uint32(arrBytes_a[intLast]) }; lngHash = lngHash | (byState << (8 * intPass)) }; return lngHash }
+func @@seed(arrROM_a []byte, lngExtra_a uint32) uint32 { var lngSeed uint32 = @@romHash(arrROM_a); lngSeed = lngSeed ^ @@timer(); if lngExtra_a != 0 { lngSeed = lngSeed ^ lngExtra_a }; if lngSeed == 0 { lngSeed = 0x9E3779B9 }; return lngSeed }
 func @@timer() uint32 { var lngTime uint32 = 0; lngTime = uint32(time.Now().UnixNano() / 1000); return lngTime }
 func @@unbrainless(arrBytes_a []byte, intDir_a int) { var intI int = 0; var intLen int = len(arrBytes_a); if intLen > 0 && intDir_a == 1 { arrBytes_a[intLen-1] = arrBytes_a[intLen-1] ^ arrBytes_a[0]; for intI = 0; intI <= intLen-2; intI++ { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI+1] } } else if intLen > 0 && intDir_a == 2 { arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[intLen-1]; for intI = intLen - 1; intI >= 1; intI-- { arrBytes_a[intI] = arrBytes_a[intI] ^ arrBytes_a[intI-1] } } }
 func @@zacBytes(objArgs_a @@Args) []byte { var arrZac []byte = []byte{}; var intI int = 0; var intLen int = len(objArgs_a.zac.value); if intLen > 0 { for intI = 0; intI < intLen; intI++ { arrZac = append(arrZac, objArgs_a.zac.value[intI]) } } else { for intI = 0; intI < objArgs_a.zac.bytes; intI++ { arrZac = append(arrZac, byte(@@nextRand()%256)) } }; return arrZac }
@@ -2103,6 +2264,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 	var ADDRESS_SPACE int = 1 << objArgs_a.elemBits
 	var intAddrBytes int = objArgs_a.elemBits / 8
 	var intValueBits int = objArgs_a.elemBits / 2
+	var intUnit int = 16 / objArgs_a.elemBits
 	var arrOut []byte = []byte{}
 	var arrPayload []byte = []byte{}
 	var arrElems []byte = []byte{}
@@ -2137,7 +2299,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 
 	// integrity words + ZAC lead the payload (presegment placement)
 	if objArgs_a.rollingHash == 1 {
-		@@pushLE(&arrPayload, @@djb2(arrMessage_a), 4)
+		@@pushLE(&arrPayload, @@rollingHash(arrMessage_a), 4)
 	}
 	if objArgs_a.crc32 {
 		@@pushLE(&arrPayload, @@crc32Std(arrMessage_a), 4)
@@ -2181,7 +2343,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 	}
 	// rolling hash raw in the last 4 bytes of the prefix (prefix placement)
 	if objArgs_a.rollingHash == 2 && intPrefixLen >= 4 {
-		lngHash = @@djb2(arrMessage_a)
+		lngHash = @@rollingHash(arrMessage_a)
 		for intI = 0; intI < 4; intI++ {
 			arrPrefix[intPrefixLen-4+intI] = byte((lngHash >> (8 * intI)) & 0xFF)
 		}
@@ -2195,7 +2357,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 			intI = intHeadLen
 		}
 		for intI < len(arrElems) {
-			intBlockLen = objArgs_a.blockMin + int(@@nextRand()%uint32(objArgs_a.blockMax-objArgs_a.blockMin+1))
+			intBlockLen = (objArgs_a.blockMin + int(@@nextRand()%uint32(objArgs_a.blockMax-objArgs_a.blockMin+1))) * intUnit
 			if intBlockLen > len(arrElems)-intI {
 				intBlockLen = len(arrElems) - intI
 			}
@@ -2235,7 +2397,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 			@@hdrValue(&arrOut, arrHdrWindow, arrBlocks[0].ptr, 2, intAddrBytes, intValueBits)
 		}
 		if blnMulti {
-			@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[0].addrs), 2, intAddrBytes, intValueBits)
+			@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[0].addrs) / intUnit, 2, intAddrBytes, intValueBits)
 		}
 		if objArgs_a.prefix.on {
 			@@hdrValue(&arrOut, arrHdrWindow, intPrefixLen, objArgs_a.prefix.width, intAddrBytes, intValueBits)
@@ -2250,7 +2412,7 @@ func @@encode(arrROM_a []byte, arrMessage_a []byte, objArgs_a @@Args) []byte {
 			if blnMulti {
 				if intK+1 < len(arrBlocks) {
 					@@hdrValue(&arrOut, arrHdrWindow, arrBlocks[intK+1].ptr, 2, intAddrBytes, intValueBits)
-					@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[intK+1].addrs), 2, intAddrBytes, intValueBits)
+					@@hdrValue(&arrOut, arrHdrWindow, len(arrBlocks[intK+1].addrs) / intUnit, 2, intAddrBytes, intValueBits)
 				} else {
 					@@hdrValue(&arrOut, arrHdrWindow, int(@@nextRand()%uint32(ADDRESS_SPACE)), 2, intAddrBytes, intValueBits)
 					@@hdrValue(&arrOut, arrHdrWindow, int(@@nextRand()%uint32(ADDRESS_SPACE)), 2, intAddrBytes, intValueBits)
@@ -2273,6 +2435,7 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 	var ADDRESS_SPACE int = 1 << objArgs_a.elemBits
 	var intAddrBytes int = objArgs_a.elemBits / 8
 	var intValueBits int = objArgs_a.elemBits / 2
+	var intUnit int = 16 / objArgs_a.elemBits
 	var arrBytes []byte = []byte{}
 	var arrPayload []byte = []byte{}
 	var arrElems []byte = []byte{}
@@ -2291,6 +2454,10 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 	var intROMLen int = len(arrROM_a)
 	var intEncodedLen int = len(arrEncoded_a)
 	var blnMulti bool = (objArgs_a.blocks == 1)
+	var arrBody []byte = []byte{}
+	var blnOk bool = true
+	var intPrefixStart int = 0
+	var intCrcPos int = 0
 
 	for intI = 0; intI < intEncodedLen; intI++ {
 		arrBytes = append(arrBytes, arrEncoded_a[intI])
@@ -2314,6 +2481,7 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 		intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits)
 		intPos = intPos + objArgs_a.suffix.width * intAddrBytes
 	}
+	intPrefixStart = intPos
 	intPos = intPos + intPrefixLen
 	intEnd = intEncodedLen - intSuffixLen
 
@@ -2323,7 +2491,7 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 			intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits)
 			intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits)
 			intPos = intPos + 4 * intAddrBytes
-			for intI = 0; intI < intSize; intI++ {
+			for intI = 0; intI < intSize * intUnit; intI++ {
 				arrElems = append(arrElems, arrROM_a[intOffset+int(@@readLE(arrBytes, intPos, intAddrBytes))])
 				intPos = intPos + intAddrBytes
 			}
@@ -2357,7 +2525,25 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 	}
 	intHead = intHead + @@zacLen(objArgs_a)
 	for intI = intHead; intI < len(arrPayload); intI++ {
-		arrMessage = append(arrMessage, arrPayload[intI])
+		arrBody = append(arrBody, arrPayload[intI])
+	}
+
+	// integrity: recompute over the message and compare; a mismatch returns an empty message
+	blnOk = (len(arrPayload) >= intHead)
+	if objArgs_a.rollingHash == 1 {
+		blnOk = blnOk && (@@readLE(arrPayload, 0, 4) == @@rollingHash(arrBody))
+	}
+	if objArgs_a.rollingHash == 2 && intPrefixLen >= 4 {
+		blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (@@readLE(arrBytes, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(arrBody))
+	}
+	if objArgs_a.crc32 {
+		if objArgs_a.rollingHash == 1 {
+			intCrcPos = 4
+		}
+		blnOk = blnOk && (@@readLE(arrPayload, intCrcPos, 4) == @@crc32Std(arrBody))
+	}
+	if blnOk {
+		arrMessage = arrBody
 	}
 
 	return arrMessage
@@ -2366,8 +2552,8 @@ func @@decode(arrROM_a []byte, arrEncoded_a []byte, objArgs_a @@Args) []byte {
 const TPL_RUST = String.raw`// ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - Rust
 // let arrEncoded = @@encode(&arrROM, &arrMessage, &objArgs);   let arrMessage = @@decode(&arrROM, &arrEncoded, &objArgs);
 // All byte data is Vec<u8> / &[u8]. Text and binary safe. All little-endian.
-// objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = String, used as-is (its bytes, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
+// objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = String, used as-is (its bytes, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 // Rust-only (forced by Rust): while loops (no C-style for), 'as' casts, &/&mut borrows, unsafe to touch the module-level RNG state.
 #![allow(dead_code, non_snake_case, non_upper_case_globals, non_camel_case_types, unused_assignments, unused_mut, static_mut_refs)]
@@ -2385,7 +2571,7 @@ static mut m_lngRandState: u32 = 0;
 pub fn @@brainless(arrBytes_a: &mut Vec<u8>, intDir_a: i64) { let mut intI: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; if intLen > 0 && intDir_a == 1 { intI = intLen - 2; while intI >= 0 { arrBytes_a[intI as usize] = arrBytes_a[intI as usize] ^ arrBytes_a[(intI + 1) as usize]; intI = intI - 1; } arrBytes_a[(intLen - 1) as usize] = arrBytes_a[(intLen - 1) as usize] ^ arrBytes_a[0]; } else if intLen > 0 && intDir_a == 2 { intI = 1; while intI < intLen { arrBytes_a[intI as usize] = arrBytes_a[intI as usize] ^ arrBytes_a[(intI - 1) as usize]; intI = intI + 1; } arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[(intLen - 1) as usize]; } }
 pub fn @@buildWindow(arrROM_a: &[u8], intOffset_a: i64, intSize_a: i64) -> Vec<Vec<i64>> { let mut arrWindow: Vec<Vec<i64>> = Vec::new(); let mut intI: i64 = 0; let mut intROMLen: i64 = arrROM_a.len() as i64; intI = 0; while intI < 256 { arrWindow.push(Vec::new()); intI = intI + 1; } intI = 0; while intI < intSize_a { if intOffset_a + intI < intROMLen { arrWindow[arrROM_a[(intOffset_a + intI) as usize] as usize].push(intI); } intI = intI + 1; } return arrWindow; }
 pub fn @@crc32Std(arrBytes_a: &[u8]) -> u32 { let mut lngCrc: u32 = 0xFFFFFFFF; let mut lngX: u32 = 0; let mut intI: i64 = 0; let mut intJ: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; intI = 0; while intI < intLen { lngX = (lngCrc ^ arrBytes_a[intI as usize] as u32) & 0xFF; intJ = 0; while intJ < 8 { if (lngX & 1) != 0 { lngX = (lngX >> 1) ^ 0xEDB88320; } else { lngX = lngX >> 1; } intJ = intJ + 1; } lngCrc = (lngCrc >> 8) ^ lngX; intI = intI + 1; } return lngCrc ^ 0xFFFFFFFF; }
-pub fn @@djb2(arrBytes_a: &[u8]) -> u32 { let mut lngHash: u32 = 0; let mut intI: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; intI = 0; while intI < intLen { lngHash = lngHash.wrapping_mul(33).wrapping_add(arrBytes_a[intI as usize] as u32); intI = intI + 1; } return lngHash; }
+pub fn @@romHash(arrBytes_a: &[u8]) -> u32 { let mut lngHash: u32 = 0; let mut intI: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; intI = 0; while intI < intLen { lngHash = lngHash.wrapping_mul(33).wrapping_add(arrBytes_a[intI as usize] as u32); intI = intI + 1; } return lngHash; }
 pub fn @@effSize(intROMLen_a: i64, intCap_a: i64, blnSliding_a: bool) -> i64 { let mut intSize: i64 = intCap_a; if intROMLen_a < intCap_a { intSize = intROMLen_a; } if blnSliding_a { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
 pub fn @@hdrValue(arrOut_a: &mut Vec<u8>, arrHdrWindow_a: &Vec<Vec<i64>>, intValue_a: i64, intWidth_a: i64, intAddrBytes_a: i64, intValueBits_a: i64) { let mut intI: i64 = 0; let mut byValue: i64 = 0; intI = 0; while intI < intWidth_a { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, @@pick(arrHdrWindow_a, byValue) as u32, intAddrBytes_a); intI = intI + 1; } }
 pub fn @@nextRand() -> u32 { let mut lngState: u32 = unsafe { m_lngRandState }; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); unsafe { m_lngRandState = lngState; } return lngState; }
@@ -2395,7 +2581,8 @@ pub fn @@pushLE(arrOut_a: &mut Vec<u8>, lngValue_a: u32, intBytes_a: i64) { let 
 pub fn @@readHdrValue(arrROM_a: &[u8], arrBytes_a: &[u8], intPos_a: i64, intWidth_a: i64, intAddrBytes_a: i64, intValueBits_a: i64) -> i64 { let mut intValue: i64 = 0; let mut intI: i64 = 0; intI = 0; while intI < intWidth_a { intValue = intValue | ((arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a) as usize] as i64) << (intValueBits_a * intI)); intI = intI + 1; } return intValue; }
 pub fn @@readLE(arrBytes_a: &[u8], intPos_a: i64, intBytes_a: i64) -> u32 { let mut lngValue: u32 = 0; let mut intI: i64 = 0; intI = 0; while intI < intBytes_a { lngValue = lngValue | ((arrBytes_a[(intPos_a + intI) as usize] as u32) << (8 * intI)); intI = intI + 1; } return lngValue; }
 pub fn @@regime(intROMLen_a: i64, intCap_a: i64) -> @@Span { let mut intPct: i64 = (intROMLen_a * 2) / 100; let mut intLimit: i64 = intCap_a + (intCap_a * 2) / 100; let mut objSpan: @@Span = @@Span { size: intCap_a, wrap: intCap_a }; if intROMLen_a < intLimit { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if intROMLen_a < 2 * intCap_a { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
-pub fn @@seed(arrROM_a: &[u8], lngExtra_a: u32) -> u32 { let mut lngSeed: u32 = @@djb2(arrROM_a); lngSeed = lngSeed ^ @@timer(); if lngExtra_a != 0 { lngSeed = lngSeed ^ lngExtra_a; } if lngSeed == 0 { lngSeed = 0x9E3779B9; } return lngSeed; }
+pub fn @@rollingHash(arrBytes_a: &[u8]) -> u32 { let mut lngHash: u32 = 0; let mut intPass: i64 = 0; let mut intI: i64 = 0; let mut intLast: i64 = 0; let mut byState: u32 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; intPass = 0; while intPass < 4 { byState = 0; intLast = intLen - 1; while intLast >= 0 && (intLast % 4) != intPass { intLast = intLast - 1; } if intLast >= 0 { byState = arrBytes_a[intLast as usize] as u32; intI = intLast - 4; while intI >= 0 { byState = byState ^ (arrBytes_a[intI as usize] as u32); intI = intI - 4; } byState = byState ^ (arrBytes_a[intLast as usize] as u32); } lngHash = lngHash | (byState << (8 * intPass)); intPass = intPass + 1; } return lngHash; }
+pub fn @@seed(arrROM_a: &[u8], lngExtra_a: u32) -> u32 { let mut lngSeed: u32 = @@romHash(arrROM_a); lngSeed = lngSeed ^ @@timer(); if lngExtra_a != 0 { lngSeed = lngSeed ^ lngExtra_a; } if lngSeed == 0 { lngSeed = 0x9E3779B9; } return lngSeed; }
 pub fn @@timer() -> u32 { let mut lngTime: u32 = 0; lngTime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u32; return lngTime; }
 pub fn @@unbrainless(arrBytes_a: &mut Vec<u8>, intDir_a: i64) { let mut intI: i64 = 0; let mut intLen: i64 = arrBytes_a.len() as i64; if intLen > 0 && intDir_a == 1 { arrBytes_a[(intLen - 1) as usize] = arrBytes_a[(intLen - 1) as usize] ^ arrBytes_a[0]; intI = 0; while intI <= intLen - 2 { arrBytes_a[intI as usize] = arrBytes_a[intI as usize] ^ arrBytes_a[(intI + 1) as usize]; intI = intI + 1; } } else if intLen > 0 && intDir_a == 2 { arrBytes_a[0] = arrBytes_a[0] ^ arrBytes_a[(intLen - 1) as usize]; intI = intLen - 1; while intI >= 1 { arrBytes_a[intI as usize] = arrBytes_a[intI as usize] ^ arrBytes_a[(intI - 1) as usize]; intI = intI - 1; } } }
 pub fn @@zacBytes(objArgs_a: &@@Args) -> Vec<u8> { let mut arrZac: Vec<u8> = Vec::new(); let mut intI: i64 = 0; let mut intLen: i64 = objArgs_a.zac.value.len() as i64; if intLen > 0 { intI = 0; while intI < intLen { arrZac.push(objArgs_a.zac.value.as_bytes()[intI as usize]); intI = intI + 1; } } else { intI = 0; while intI < objArgs_a.zac.bytes { arrZac.push((@@nextRand() % 256) as u8); intI = intI + 1; } } return arrZac; }
@@ -2406,6 +2593,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
     let mut ADDRESS_SPACE: i64 = 1 << objArgs_a.elemBits;
     let mut intAddrBytes: i64 = objArgs_a.elemBits / 8;
     let mut intValueBits: i64 = objArgs_a.elemBits / 2;
+    let mut intUnit: i64 = 16 / objArgs_a.elemBits;
     let mut arrOut: Vec<u8> = Vec::new();
     let mut arrPayload: Vec<u8> = Vec::new();
     let mut arrElems: Vec<u8> = Vec::new();
@@ -2442,7 +2630,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
     // integrity words + ZAC lead the payload (presegment placement)
     if objArgs_a.rollingHash == 1
     {
-        @@pushLE(&mut arrPayload, @@djb2(arrMessage_a), 4);
+        @@pushLE(&mut arrPayload, @@rollingHash(arrMessage_a), 4);
     }
     if objArgs_a.crc32
     {
@@ -2512,7 +2700,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
     // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if objArgs_a.rollingHash == 2 && intPrefixLen >= 4
     {
-        lngHash = @@djb2(arrMessage_a);
+        lngHash = @@rollingHash(arrMessage_a);
         intI = 0;
         while intI < 4
         {
@@ -2532,7 +2720,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
         }
         while intI < arrElems.len() as i64
         {
-            intBlockLen = objArgs_a.blockMin + (@@nextRand() as i64 % (objArgs_a.blockMax - objArgs_a.blockMin + 1));
+            intBlockLen = (objArgs_a.blockMin + (@@nextRand() as i64 % (objArgs_a.blockMax - objArgs_a.blockMin + 1))) * intUnit;
             if intBlockLen > arrElems.len() as i64 - intI
             {
                 intBlockLen = arrElems.len() as i64 - intI;
@@ -2589,7 +2777,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
         }
         if blnMulti
         {
-            @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[0].addrs.len() as i64, 2, intAddrBytes, intValueBits);
+            @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[0].addrs.len() as i64 / intUnit, 2, intAddrBytes, intValueBits);
         }
         if objArgs_a.prefix.on
         {
@@ -2613,7 +2801,7 @@ pub fn @@encode(arrROM_a: &[u8], arrMessage_a: &[u8], objArgs_a: &@@Args) -> Vec
                 if intK + 1 < arrBlocks.len() as i64
                 {
                     @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].ptr, 2, intAddrBytes, intValueBits);
-                    @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].addrs.len() as i64, 2, intAddrBytes, intValueBits);
+                    @@hdrValue(&mut arrOut, &arrHdrWindow, arrBlocks[(intK + 1) as usize].addrs.len() as i64 / intUnit, 2, intAddrBytes, intValueBits);
                 }
                 else
                 {
@@ -2646,6 +2834,7 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
     let mut ADDRESS_SPACE: i64 = 1 << objArgs_a.elemBits;
     let mut intAddrBytes: i64 = objArgs_a.elemBits / 8;
     let mut intValueBits: i64 = objArgs_a.elemBits / 2;
+    let mut intUnit: i64 = 16 / objArgs_a.elemBits;
     let mut arrBytes: Vec<u8> = Vec::new();
     let mut arrPayload: Vec<u8> = Vec::new();
     let mut arrElems: Vec<u8> = Vec::new();
@@ -2664,6 +2853,10 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
     let mut intROMLen: i64 = arrROM_a.len() as i64;
     let mut intEncodedLen: i64 = arrEncoded_a.len() as i64;
     let mut blnMulti: bool = objArgs_a.blocks == 1;
+    let mut arrBody: Vec<u8> = Vec::new();
+    let mut blnOk: bool = true;
+    let mut intPrefixStart: i64 = 0;
+    let mut intCrcPos: i64 = 0;
 
     intI = 0;
     while intI < intEncodedLen
@@ -2694,6 +2887,7 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
         intSuffixLen = @@readHdrValue(arrROM_a, &arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
         intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
     }
+    intPrefixStart = intPos;
     intPos = intPos + intPrefixLen;
     intEnd = intEncodedLen - intSuffixLen;
 
@@ -2706,7 +2900,7 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
             intNextSize = @@readHdrValue(arrROM_a, &arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
             intPos = intPos + 4 * intAddrBytes;
             intI = 0;
-            while intI < intSize
+            while intI < intSize * intUnit
             {
                 arrElems.push(arrROM_a[(intOffset + @@readLE(&arrBytes, intPos, intAddrBytes) as i64) as usize]);
                 intPos = intPos + intAddrBytes;
@@ -2758,8 +2952,31 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
     intI = intHead;
     while intI < arrPayload.len() as i64
     {
-        arrMessage.push(arrPayload[intI as usize]);
+        arrBody.push(arrPayload[intI as usize]);
         intI = intI + 1;
+    }
+
+    // integrity: recompute over the message and compare; a mismatch returns an empty message
+    blnOk = (arrPayload.len() as i64) >= intHead;
+    if objArgs_a.rollingHash == 1
+    {
+        blnOk = blnOk && (@@readLE(&arrPayload, 0, 4) == @@rollingHash(&arrBody));
+    }
+    if objArgs_a.rollingHash == 2 && intPrefixLen >= 4
+    {
+        blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (@@readLE(&arrBytes, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(&arrBody));
+    }
+    if objArgs_a.crc32
+    {
+        if objArgs_a.rollingHash == 1
+        {
+            intCrcPos = 4;
+        }
+        blnOk = blnOk && (@@readLE(&arrPayload, intCrcPos, 4) == @@crc32Std(&arrBody));
+    }
+    if blnOk
+    {
+        arrMessage = arrBody;
     }
 
     return arrMessage;
@@ -2768,8 +2985,8 @@ pub fn @@decode(arrROM_a: &[u8], arrEncoded_a: &[u8], objArgs_a: &@@Args) -> Vec
 const TPL_PERL = String.raw`# ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - Perl 5 (64-bit perl)
 # $arrEncoded = @@encode($arrROM, $arrMessage, $objArgs)   $arrMessage = @@decode($arrROM, $arrEncoded, $objArgs)
 # All byte data is array refs of bytes 0-255 (string -> array: [unpack('C*', $str)]). Text and binary safe. All little-endian.
-# $objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
-# RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional $objArgs->{seed}. Randomness carries NO security - ROM secrecy does.
+# $objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
+# RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional $objArgs->{seed}. Randomness carries NO security - ROM secrecy does.
 # Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 # Perl-only (forced by Perl): sigils, array/hash refs, 'my (...) = @_' for arguments, 'elsif'.
 use strict;
@@ -2781,7 +2998,7 @@ my $m_lngRandState = 0;
 sub @@brainless { my ($arrBytes_a, $intDir_a) = @_; my $intI = 0; my $intLen = scalar(@$arrBytes_a); if ($intLen > 0 && $intDir_a == 1) { for ($intI = $intLen - 2; $intI >= 0; $intI--) { $arrBytes_a->[$intI] = $arrBytes_a->[$intI] ^ $arrBytes_a->[$intI + 1]; } $arrBytes_a->[$intLen - 1] = $arrBytes_a->[$intLen - 1] ^ $arrBytes_a->[0]; } elsif ($intLen > 0 && $intDir_a == 2) { for ($intI = 1; $intI < $intLen; $intI++) { $arrBytes_a->[$intI] = $arrBytes_a->[$intI] ^ $arrBytes_a->[$intI - 1]; } $arrBytes_a->[0] = $arrBytes_a->[0] ^ $arrBytes_a->[$intLen - 1]; } }
 sub @@buildWindow { my ($arrROM_a, $intOffset_a, $intSize_a) = @_; my $arrWindow = []; my $intI = 0; my $intROMLen = scalar(@$arrROM_a); for ($intI = 0; $intI < 256; $intI++) { push(@$arrWindow, []); } for ($intI = 0; $intI < $intSize_a; $intI++) { if ($intOffset_a + $intI < $intROMLen) { push(@{$arrWindow->[$arrROM_a->[$intOffset_a + $intI]]}, $intI); } } return $arrWindow; }
 sub @@crc32Std { my ($arrBytes_a) = @_; my $lngCrc = 0xFFFFFFFF; my $lngX = 0; my $intI = 0; my $intJ = 0; my $intLen = scalar(@$arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngX = ($lngCrc ^ $arrBytes_a->[$intI]) & 0xFF; for ($intJ = 0; $intJ < 8; $intJ++) { if (($lngX & 1) != 0) { $lngX = (($lngX >> 1) ^ 0xEDB88320) & 0xFFFFFFFF; } else { $lngX = $lngX >> 1; } } $lngCrc = (($lngCrc >> 8) ^ $lngX) & 0xFFFFFFFF; } return ($lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF; }
-sub @@djb2 { my ($arrBytes_a) = @_; my $lngHash = 0; my $intI = 0; my $intLen = scalar(@$arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a->[$intI]) & 0xFFFFFFFF; } return $lngHash; }
+sub @@romHash { my ($arrBytes_a) = @_; my $lngHash = 0; my $intI = 0; my $intLen = scalar(@$arrBytes_a); for ($intI = 0; $intI < $intLen; $intI++) { $lngHash = (($lngHash * 33) + $arrBytes_a->[$intI]) & 0xFFFFFFFF; } return $lngHash; }
 sub @@effSize { my ($intROMLen_a, $intCap_a, $blnSliding_a) = @_; my $intSize = $intCap_a; if ($intROMLen_a < $intCap_a) { $intSize = $intROMLen_a; } if ($blnSliding_a) { $intSize = @@regime($intROMLen_a, $intCap_a)->{size}; } return $intSize; }
 sub @@hdrValue { my ($arrOut_a, $arrHdrWindow_a, $intValue_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) = @_; my $intI = 0; my $byValue = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $byValue = ($intValue_a >> ($intValueBits_a * $intI)) & ((1 << $intValueBits_a) - 1); @@pushLE($arrOut_a, @@pick($arrHdrWindow_a, $byValue), $intAddrBytes_a); } }
 sub @@nextRand { my $lngState = $m_lngRandState; $lngState = ($lngState ^ ($lngState << 13)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState >> 17)) & 0xFFFFFFFF; $lngState = ($lngState ^ ($lngState << 5)) & 0xFFFFFFFF; $m_lngRandState = $lngState; return $lngState; }
@@ -2791,7 +3008,8 @@ sub @@pushLE { my ($arrOut_a, $lngValue_a, $intBytes_a) = @_; my $intI = 0; for 
 sub @@readHdrValue { my ($arrROM_a, $arrBytes_a, $intPos_a, $intWidth_a, $intAddrBytes_a, $intValueBits_a) = @_; my $intValue = 0; my $intI = 0; for ($intI = 0; $intI < $intWidth_a; $intI++) { $intValue = $intValue | ($arrROM_a->[@@readLE($arrBytes_a, $intPos_a + $intI * $intAddrBytes_a, $intAddrBytes_a)] << ($intValueBits_a * $intI)); } return $intValue; }
 sub @@readLE { my ($arrBytes_a, $intPos_a, $intBytes_a) = @_; my $lngValue = 0; my $intI = 0; for ($intI = 0; $intI < $intBytes_a; $intI++) { $lngValue = ($lngValue | ($arrBytes_a->[$intPos_a + $intI] << (8 * $intI))) & 0xFFFFFFFF; } return $lngValue; }
 sub @@regime { my ($intROMLen_a, $intCap_a) = @_; my $intPct = int($intROMLen_a * 2 / 100); my $intLimit = $intCap_a + int($intCap_a * 2 / 100); my $objSpan = { size => $intCap_a, wrap => $intCap_a }; if ($intROMLen_a < $intLimit) { $objSpan->{size} = $intROMLen_a - $intPct; $objSpan->{wrap} = $intPct; } elsif ($intROMLen_a < 2 * $intCap_a) { $objSpan->{size} = $intCap_a; $objSpan->{wrap} = $intROMLen_a - $intCap_a; } return $objSpan; }
-sub @@seed { my ($arrROM_a, $lngExtra_a) = @_; my $lngSeed = @@djb2($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
+sub @@rollingHash { my ($arrBytes_a) = @_; my $lngHash = 0; my $intPass = 0; my $intI = 0; my $intLast = 0; my $byState = 0; my $intLen = scalar(@$arrBytes_a); for ($intPass = 0; $intPass < 4; $intPass++) { $byState = 0; $intLast = $intLen - 1; while ($intLast >= 0 && ($intLast % 4) != $intPass) { $intLast--; } if ($intLast >= 0) { $byState = $arrBytes_a->[$intLast]; for ($intI = $intLast - 4; $intI >= 0; $intI = $intI - 4) { $byState = $byState ^ $arrBytes_a->[$intI]; } $byState = $byState ^ $arrBytes_a->[$intLast]; } $lngHash = ($lngHash | ($byState << (8 * $intPass))) & 0xFFFFFFFF; } return $lngHash; }
+sub @@seed { my ($arrROM_a, $lngExtra_a) = @_; my $lngSeed = @@romHash($arrROM_a); $lngSeed = ($lngSeed ^ @@timer()) & 0xFFFFFFFF; if ($lngExtra_a != 0) { $lngSeed = ($lngSeed ^ $lngExtra_a) & 0xFFFFFFFF; } if ($lngSeed == 0) { $lngSeed = 0x9E3779B9; } return $lngSeed; }
 sub @@timer { my $lngTime = 0; $lngTime = int(Time::HiRes::time() * 1000000) & 0xFFFFFFFF; return $lngTime; }
 sub @@unbrainless { my ($arrBytes_a, $intDir_a) = @_; my $intI = 0; my $intLen = scalar(@$arrBytes_a); if ($intLen > 0 && $intDir_a == 1) { $arrBytes_a->[$intLen - 1] = $arrBytes_a->[$intLen - 1] ^ $arrBytes_a->[0]; for ($intI = 0; $intI <= $intLen - 2; $intI++) { $arrBytes_a->[$intI] = $arrBytes_a->[$intI] ^ $arrBytes_a->[$intI + 1]; } } elsif ($intLen > 0 && $intDir_a == 2) { $arrBytes_a->[0] = $arrBytes_a->[0] ^ $arrBytes_a->[$intLen - 1]; for ($intI = $intLen - 1; $intI >= 1; $intI--) { $arrBytes_a->[$intI] = $arrBytes_a->[$intI] ^ $arrBytes_a->[$intI - 1]; } } }
 sub @@zacBytes { my ($objArgs_a) = @_; my $arrZac = []; my $intI = 0; my $intLen = length($objArgs_a->{zac}{value}); if ($intLen > 0) { for ($intI = 0; $intI < $intLen; $intI++) { push(@$arrZac, ord(substr($objArgs_a->{zac}{value}, $intI, 1))); } } else { for ($intI = 0; $intI < $objArgs_a->{zac}{bytes}; $intI++) { push(@$arrZac, @@nextRand() % 256); } } return $arrZac; }
@@ -2803,6 +3021,7 @@ sub @@encode
     my $ADDRESS_SPACE = 1 << $objArgs_a->{elemBits};
     my $intAddrBytes = int($objArgs_a->{elemBits} / 8);
     my $intValueBits = int($objArgs_a->{elemBits} / 2);
+    my $intUnit = int(16 / $objArgs_a->{elemBits});
     my $arrOut = [];
     my $arrPayload = [];
     my $arrElems = [];
@@ -2839,7 +3058,7 @@ sub @@encode
     # integrity words + ZAC lead the payload (presegment placement)
     if ($objArgs_a->{rollingHash} == 1)
     {
-        @@pushLE($arrPayload, @@djb2($arrMessage_a), 4);
+        @@pushLE($arrPayload, @@rollingHash($arrMessage_a), 4);
     }
     if ($objArgs_a->{crc32})
     {
@@ -2897,7 +3116,7 @@ sub @@encode
     # rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if ($objArgs_a->{rollingHash} == 2 && $intPrefixLen >= 4)
     {
-        $lngHash = @@djb2($arrMessage_a);
+        $lngHash = @@rollingHash($arrMessage_a);
         for ($intI = 0; $intI < 4; $intI++)
         {
             $arrPrefix->[$intPrefixLen - 4 + $intI] = ($lngHash >> (8 * $intI)) & 0xFF;
@@ -2915,7 +3134,7 @@ sub @@encode
         }
         while ($intI < scalar(@$arrElems))
         {
-            $intBlockLen = $objArgs_a->{blockMin} + (@@nextRand() % ($objArgs_a->{blockMax} - $objArgs_a->{blockMin} + 1));
+            $intBlockLen = ($objArgs_a->{blockMin} + (@@nextRand() % ($objArgs_a->{blockMax} - $objArgs_a->{blockMin} + 1))) * $intUnit;
             if ($intBlockLen > scalar(@$arrElems) - $intI)
             {
                 $intBlockLen = scalar(@$arrElems) - $intI;
@@ -2968,7 +3187,7 @@ sub @@encode
         }
         if ($blnMulti)
         {
-            @@hdrValue($arrOut, $arrHdrWindow, scalar(@{$arrBlocks->[0]{addrs}}), 2, $intAddrBytes, $intValueBits);
+            @@hdrValue($arrOut, $arrHdrWindow, int(scalar(@{$arrBlocks->[0]{addrs}}) / $intUnit), 2, $intAddrBytes, $intValueBits);
         }
         if ($objArgs_a->{prefix}{on})
         {
@@ -2989,7 +3208,7 @@ sub @@encode
                 if ($intK + 1 < scalar(@$arrBlocks))
                 {
                     @@hdrValue($arrOut, $arrHdrWindow, $arrBlocks->[$intK + 1]{ptr}, 2, $intAddrBytes, $intValueBits);
-                    @@hdrValue($arrOut, $arrHdrWindow, scalar(@{$arrBlocks->[$intK + 1]{addrs}}), 2, $intAddrBytes, $intValueBits);
+                    @@hdrValue($arrOut, $arrHdrWindow, int(scalar(@{$arrBlocks->[$intK + 1]{addrs}}) / $intUnit), 2, $intAddrBytes, $intValueBits);
                 }
                 else
                 {
@@ -3018,6 +3237,7 @@ sub @@decode
     my $ADDRESS_SPACE = 1 << $objArgs_a->{elemBits};
     my $intAddrBytes = int($objArgs_a->{elemBits} / 8);
     my $intValueBits = int($objArgs_a->{elemBits} / 2);
+    my $intUnit = int(16 / $objArgs_a->{elemBits});
     my $arrBytes = [];
     my $arrPayload = [];
     my $arrElems = [];
@@ -3036,6 +3256,10 @@ sub @@decode
     my $intROMLen = scalar(@$arrROM_a);
     my $intEncodedLen = scalar(@$arrEncoded_a);
     my $blnMulti = ($objArgs_a->{blocks} == 1);
+    my $arrBody = [];
+    my $blnOk = 1;
+    my $intPrefixStart = 0;
+    my $intCrcPos = 0;
 
     for ($intI = 0; $intI < $intEncodedLen; $intI++)
     {
@@ -3064,6 +3288,7 @@ sub @@decode
         $intSuffixLen = @@readHdrValue($arrROM_a, $arrBytes, $intPos, $objArgs_a->{suffix}{width}, $intAddrBytes, $intValueBits);
         $intPos = $intPos + $objArgs_a->{suffix}{width} * $intAddrBytes;
     }
+    $intPrefixStart = $intPos;
     $intPos = $intPos + $intPrefixLen;
     $intEnd = $intEncodedLen - $intSuffixLen;
 
@@ -3075,7 +3300,7 @@ sub @@decode
             $intNextPtr = @@readHdrValue($arrROM_a, $arrBytes, $intPos, 2, $intAddrBytes, $intValueBits);
             $intNextSize = @@readHdrValue($arrROM_a, $arrBytes, $intPos + 2 * $intAddrBytes, 2, $intAddrBytes, $intValueBits);
             $intPos = $intPos + 4 * $intAddrBytes;
-            for ($intI = 0; $intI < $intSize; $intI++)
+            for ($intI = 0; $intI < $intSize * $intUnit; $intI++)
             {
                 push(@$arrElems, $arrROM_a->[$intOffset + @@readLE($arrBytes, $intPos, $intAddrBytes)]);
                 $intPos = $intPos + $intAddrBytes;
@@ -3121,7 +3346,30 @@ sub @@decode
     $intHead = $intHead + @@zacLen($objArgs_a);
     for ($intI = $intHead; $intI < scalar(@$arrPayload); $intI++)
     {
-        push(@$arrMessage, $arrPayload->[$intI]);
+        push(@$arrBody, $arrPayload->[$intI]);
+    }
+
+    # integrity: recompute over the message and compare; a mismatch returns an empty message
+    $blnOk = (scalar(@$arrPayload) >= $intHead);
+    if ($objArgs_a->{rollingHash} == 1)
+    {
+        $blnOk = $blnOk && (@@readLE($arrPayload, 0, 4) == @@rollingHash($arrBody));
+    }
+    if ($objArgs_a->{rollingHash} == 2 && $intPrefixLen >= 4)
+    {
+        $blnOk = $blnOk && ($intPrefixStart + $intPrefixLen <= $intEncodedLen) && (@@readLE($arrBytes, $intPrefixStart + $intPrefixLen - 4, 4) == @@rollingHash($arrBody));
+    }
+    if ($objArgs_a->{crc32})
+    {
+        if ($objArgs_a->{rollingHash} == 1)
+        {
+            $intCrcPos = 4;
+        }
+        $blnOk = $blnOk && (@@readLE($arrPayload, $intCrcPos, 4) == @@crc32Std($arrBody));
+    }
+    if ($blnOk)
+    {
+        $arrMessage = $arrBody;
     }
 
     return $arrMessage;
@@ -3132,8 +3380,8 @@ sub @@decode
 const TPL_PYTHON = String.raw`# ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - Python 3
 # arrEncoded = @@encode(arrROM, arrMessage, objArgs)   arrMessage = @@decode(arrROM, arrEncoded, objArgs)
 # All byte data is lists of bytes 0-255 (bytes -> list: list(b); list -> bytes: bytes(arr)). Text and binary safe. All little-endian.
-# objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
-# RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs['seed']. Randomness carries NO security - ROM secrecy does.
+# objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
+# RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs['seed']. Randomness carries NO security - ROM secrecy does.
 # Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 # Python-only (forced by Python): indentation instead of {} (so helpers cannot be one-liners), while loops (no C-style for), 'global', 'elif', '//' integer division.
 import time
@@ -3200,7 +3448,7 @@ def @@crc32Std(arrBytes_a):
     return (lngCrc ^ 0xFFFFFFFF) & 0xFFFFFFFF
 
 
-def @@djb2(arrBytes_a):
+def @@romHash(arrBytes_a):
     lngHash = 0
     intI = 0
     intLen = len(arrBytes_a)
@@ -3317,8 +3565,35 @@ def @@regime(intROMLen_a, intCap_a):
     return objSpan
 
 
+def @@rollingHash(arrBytes_a):
+    lngHash = 0
+    intPass = 0
+    intI = 0
+    intLast = 0
+    byState = 0
+    intLen = len(arrBytes_a)
+
+    intPass = 0
+    while intPass < 4:
+        byState = 0
+        intLast = intLen - 1
+        while intLast >= 0 and (intLast % 4) != intPass:
+            intLast = intLast - 1
+        if intLast >= 0:
+            byState = arrBytes_a[intLast]
+            intI = intLast - 4
+            while intI >= 0:
+                byState = byState ^ arrBytes_a[intI]
+                intI = intI - 4
+            byState = byState ^ arrBytes_a[intLast]
+        lngHash = (lngHash | (byState << (8 * intPass))) & 0xFFFFFFFF
+        intPass = intPass + 1
+
+    return lngHash
+
+
 def @@seed(arrROM_a, lngExtra_a):
-    lngSeed = @@djb2(arrROM_a)
+    lngSeed = @@romHash(arrROM_a)
 
     lngSeed = (lngSeed ^ @@timer()) & 0xFFFFFFFF
     if lngExtra_a != 0:
@@ -3390,6 +3665,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
     ADDRESS_SPACE = 1 << objArgs_a['elemBits']
     intAddrBytes = objArgs_a['elemBits'] // 8
     intValueBits = objArgs_a['elemBits'] // 2
+    intUnit = 16 // objArgs_a['elemBits']
     arrOut = []
     arrPayload = []
     arrElems = []
@@ -3423,7 +3699,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
 
     # integrity words + ZAC lead the payload (presegment placement)
     if objArgs_a['rollingHash'] == 1:
-        @@pushLE(arrPayload, @@djb2(arrMessage_a), 4)
+        @@pushLE(arrPayload, @@rollingHash(arrMessage_a), 4)
     if objArgs_a['crc32']:
         @@pushLE(arrPayload, @@crc32Std(arrMessage_a), 4)
     if objArgs_a['zac']['on']:
@@ -3467,7 +3743,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
         intI = intI + 1
     # rolling hash raw in the last 4 bytes of the prefix (prefix placement)
     if objArgs_a['rollingHash'] == 2 and intPrefixLen >= 4:
-        lngHash = @@djb2(arrMessage_a)
+        lngHash = @@rollingHash(arrMessage_a)
         intI = 0
         while intI < 4:
             arrPrefix[intPrefixLen - 4 + intI] = (lngHash >> (8 * intI)) & 0xFF
@@ -3480,7 +3756,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
             arrBlocks.append({'start': 0, 'len': intHeadLen, 'ptr': 0, 'addrs': []})
             intI = intHeadLen
         while intI < len(arrElems):
-            intBlockLen = objArgs_a['blockMin'] + (@@nextRand() % (objArgs_a['blockMax'] - objArgs_a['blockMin'] + 1))
+            intBlockLen = (objArgs_a['blockMin'] + (@@nextRand() % (objArgs_a['blockMax'] - objArgs_a['blockMin'] + 1))) * intUnit
             if intBlockLen > len(arrElems) - intI:
                 intBlockLen = len(arrElems) - intI
             arrBlocks.append({'start': intI, 'len': intBlockLen, 'ptr': 0, 'addrs': []})
@@ -3515,7 +3791,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
         if objArgs_a['sliding']:
             @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0]['ptr'], 2, intAddrBytes, intValueBits)
         if blnMulti:
-            @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[0]['addrs']), 2, intAddrBytes, intValueBits)
+            @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[0]['addrs']) // intUnit, 2, intAddrBytes, intValueBits)
         if objArgs_a['prefix']['on']:
             @@hdrValue(arrOut, arrHdrWindow, intPrefixLen, objArgs_a['prefix']['width'], intAddrBytes, intValueBits)
         if objArgs_a['suffix']['on']:
@@ -3529,7 +3805,7 @@ def @@encode(arrROM_a, arrMessage_a, objArgs_a):
             if blnMulti:
                 if intK + 1 < len(arrBlocks):
                     @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1]['ptr'], 2, intAddrBytes, intValueBits)
-                    @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[intK + 1]['addrs']), 2, intAddrBytes, intValueBits)
+                    @@hdrValue(arrOut, arrHdrWindow, len(arrBlocks[intK + 1]['addrs']) // intUnit, 2, intAddrBytes, intValueBits)
                 else:
                     @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits)
                     @@hdrValue(arrOut, arrHdrWindow, @@nextRand() % ADDRESS_SPACE, 2, intAddrBytes, intValueBits)
@@ -3551,6 +3827,7 @@ def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
     ADDRESS_SPACE = 1 << objArgs_a['elemBits']
     intAddrBytes = objArgs_a['elemBits'] // 8
     intValueBits = objArgs_a['elemBits'] // 2
+    intUnit = 16 // objArgs_a['elemBits']
     arrBytes = []
     arrPayload = []
     arrElems = []
@@ -3569,6 +3846,10 @@ def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
     intROMLen = len(arrROM_a)
     intEncodedLen = len(arrEncoded_a)
     blnMulti = (objArgs_a['blocks'] == 1)
+    arrBody = []
+    blnOk = True
+    intPrefixStart = 0
+    intCrcPos = 0
 
     intI = 0
     while intI < intEncodedLen:
@@ -3589,6 +3870,7 @@ def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
     if objArgs_a['suffix']['on']:
         intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a['suffix']['width'], intAddrBytes, intValueBits)
         intPos = intPos + objArgs_a['suffix']['width'] * intAddrBytes
+    intPrefixStart = intPos
     intPos = intPos + intPrefixLen
     intEnd = intEncodedLen - intSuffixLen
 
@@ -3599,7 +3881,7 @@ def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
             intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits)
             intPos = intPos + 4 * intAddrBytes
             intI = 0
-            while intI < intSize:
+            while intI < intSize * intUnit:
                 arrElems.append(arrROM_a[intOffset + @@readLE(arrBytes, intPos, intAddrBytes)])
                 intPos = intPos + intAddrBytes
                 intI = intI + 1
@@ -3630,8 +3912,21 @@ def @@decode(arrROM_a, arrEncoded_a, objArgs_a):
     intHead = intHead + @@zacLen(objArgs_a)
     intI = intHead
     while intI < len(arrPayload):
-        arrMessage.append(arrPayload[intI])
+        arrBody.append(arrPayload[intI])
         intI = intI + 1
+
+    # integrity: recompute over the message and compare; a mismatch returns an empty message
+    blnOk = (len(arrPayload) >= intHead)
+    if objArgs_a['rollingHash'] == 1:
+        blnOk = blnOk and (@@readLE(arrPayload, 0, 4) == @@rollingHash(arrBody))
+    if objArgs_a['rollingHash'] == 2 and intPrefixLen >= 4:
+        blnOk = blnOk and (intPrefixStart + intPrefixLen <= intEncodedLen) and (@@readLE(arrBytes, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(arrBody))
+    if objArgs_a['crc32']:
+        if objArgs_a['rollingHash'] == 1:
+            intCrcPos = 4
+        blnOk = blnOk and (@@readLE(arrPayload, intCrcPos, 4) == @@crc32Std(arrBody))
+    if blnOk:
+        arrMessage = arrBody
 
     return arrMessage
 `;
@@ -3641,8 +3936,8 @@ const TPL_CSHARP = String.raw`// grab the nuget from https://www.nuget.org/profi
 // ZOSCII / UNSIGNAL / BRICS - general encoder/decoder (16-bit element size) - C#
 // byte[] arrEncoded = @@Protocol.@@encode(arrROM, arrMessage, objArgs)   byte[] arrMessage = @@Protocol.@@decode(arrROM, arrEncoded, objArgs)
 // All byte data is byte[] in / byte[] out. Text and binary safe. All little-endian.
-// objArgs: blocks 0 single / 1 multi; rollingHash 0 none / 1 presegment / 2 prefix; brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
-// RNG: xorshift32 seeded from the ROM (djb2) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
+// objArgs: blocks 0 single / 1 multi (block sizes count message bytes); rollingHash 0 none / 1 presegment / 2 prefix (ZOSCII Rolling Hash, reverse; it and CRC32 are verified on decode, a mismatch returns an empty message); brainless 0 none / 1 forward / 2 backward; zac.value = string, used as-is (one byte per character, never encoded).
+// RNG: xorshift32 seeded from the ROM (romHash: hash*33 + byte, from 0) XOR the timer, plus optional objArgs.seed. Randomness carries NO security - ROM secrecy does.
 // Prefixes: int = counter/size/index, lng = 32-bit unsigned value, arr, obj, bln, by. _a = argument, m_ = module-level.
 // C#-only (forced by C#): every method must live in a class (all static - copy them into your own class as-is), List<> to grow arrays, (byte)/(int)/(uint) casts.
 using System;
@@ -3661,7 +3956,7 @@ public static class @@Protocol
     public static void @@brainless(List<byte> arrBytes_a, int intDir_a) { int intI = 0; int intLen = arrBytes_a.Count; if (intLen > 0 && intDir_a == 1) { for (intI = intLen - 2; intI >= 0; intI--) { arrBytes_a[intI] = (byte)(arrBytes_a[intI] ^ arrBytes_a[intI + 1]); } arrBytes_a[intLen - 1] = (byte)(arrBytes_a[intLen - 1] ^ arrBytes_a[0]); } else if (intLen > 0 && intDir_a == 2) { for (intI = 1; intI < intLen; intI++) { arrBytes_a[intI] = (byte)(arrBytes_a[intI] ^ arrBytes_a[intI - 1]); } arrBytes_a[0] = (byte)(arrBytes_a[0] ^ arrBytes_a[intLen - 1]); } }
     public static List<List<int>> @@buildWindow(byte[] arrROM_a, int intOffset_a, int intSize_a) { List<List<int>> arrWindow = new List<List<int>>(); int intI = 0; int intROMLen = arrROM_a.Length; for (intI = 0; intI < 256; intI++) { arrWindow.Add(new List<int>()); } for (intI = 0; intI < intSize_a; intI++) { if (intOffset_a + intI < intROMLen) { arrWindow[arrROM_a[intOffset_a + intI]].Add(intI); } } return arrWindow; }
     public static uint @@crc32Std(byte[] arrBytes_a) { uint lngCrc = 0xFFFFFFFF; uint lngX = 0; int intI = 0; int intJ = 0; int intLen = arrBytes_a.Length; for (intI = 0; intI < intLen; intI++) { lngX = (lngCrc ^ arrBytes_a[intI]) & 0xFF; for (intJ = 0; intJ < 8; intJ++) { if ((lngX & 1) != 0) { lngX = (lngX >> 1) ^ 0xEDB88320; } else { lngX = lngX >> 1; } } lngCrc = (lngCrc >> 8) ^ lngX; } return lngCrc ^ 0xFFFFFFFF; }
-    public static uint @@djb2(byte[] arrBytes_a) { uint lngHash = 0; int intI = 0; int intLen = arrBytes_a.Length; for (intI = 0; intI < intLen; intI++) { lngHash = unchecked((lngHash * 33) + arrBytes_a[intI]); } return lngHash; }
+    public static uint @@romHash(byte[] arrBytes_a) { uint lngHash = 0; int intI = 0; int intLen = arrBytes_a.Length; for (intI = 0; intI < intLen; intI++) { lngHash = unchecked((lngHash * 33) + arrBytes_a[intI]); } return lngHash; }
     public static int @@effSize(int intROMLen_a, int intCap_a, bool blnSliding_a) { int intSize = intCap_a; if (intROMLen_a < intCap_a) { intSize = intROMLen_a; } if (blnSliding_a) { intSize = @@regime(intROMLen_a, intCap_a).size; } return intSize; }
     public static void @@hdrValue(List<byte> arrOut_a, List<List<int>> arrHdrWindow_a, int intValue_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { int intI = 0; int byValue = 0; for (intI = 0; intI < intWidth_a; intI++) { byValue = (intValue_a >> (intValueBits_a * intI)) & ((1 << intValueBits_a) - 1); @@pushLE(arrOut_a, (uint)@@pick(arrHdrWindow_a, byValue), intAddrBytes_a); } }
     public static uint @@nextRand() { uint lngState = m_lngRandState; lngState = lngState ^ (lngState << 13); lngState = lngState ^ (lngState >> 17); lngState = lngState ^ (lngState << 5); m_lngRandState = lngState; return lngState; }
@@ -3671,7 +3966,8 @@ public static class @@Protocol
     public static int @@readHdrValue(byte[] arrROM_a, List<byte> arrBytes_a, int intPos_a, int intWidth_a, int intAddrBytes_a, int intValueBits_a) { int intValue = 0; int intI = 0; for (intI = 0; intI < intWidth_a; intI++) { intValue = intValue | (arrROM_a[@@readLE(arrBytes_a, intPos_a + intI * intAddrBytes_a, intAddrBytes_a)] << (intValueBits_a * intI)); } return intValue; }
     public static uint @@readLE(List<byte> arrBytes_a, int intPos_a, int intBytes_a) { uint lngValue = 0; int intI = 0; for (intI = 0; intI < intBytes_a; intI++) { lngValue = lngValue | ((uint)arrBytes_a[intPos_a + intI] << (8 * intI)); } return lngValue; }
     public static @@Span @@regime(int intROMLen_a, int intCap_a) { int intPct = (intROMLen_a * 2) / 100; int intLimit = intCap_a + (intCap_a * 2) / 100; @@Span objSpan = new @@Span { size = intCap_a, wrap = intCap_a }; if (intROMLen_a < intLimit) { objSpan.size = intROMLen_a - intPct; objSpan.wrap = intPct; } else if (intROMLen_a < 2 * intCap_a) { objSpan.size = intCap_a; objSpan.wrap = intROMLen_a - intCap_a; } return objSpan; }
-    public static uint @@seed(byte[] arrROM_a, uint lngExtra_a) { uint lngSeed = @@djb2(arrROM_a); lngSeed = lngSeed ^ @@timer(); if (lngExtra_a != 0) { lngSeed = lngSeed ^ lngExtra_a; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
+    public static uint @@rollingHash(byte[] arrBytes_a) { uint lngHash = 0; int intPass = 0; int intI = 0; int intLast = 0; uint byState = 0; int intLen = arrBytes_a.Length; for (intPass = 0; intPass < 4; intPass++) { byState = 0; intLast = intLen - 1; while (intLast >= 0 && (intLast % 4) != intPass) { intLast--; } if (intLast >= 0) { byState = arrBytes_a[intLast]; for (intI = intLast - 4; intI >= 0; intI = intI - 4) { byState = byState ^ arrBytes_a[intI]; } byState = byState ^ arrBytes_a[intLast]; } lngHash = lngHash | (byState << (8 * intPass)); } return lngHash; }
+    public static uint @@seed(byte[] arrROM_a, uint lngExtra_a) { uint lngSeed = @@romHash(arrROM_a); lngSeed = lngSeed ^ @@timer(); if (lngExtra_a != 0) { lngSeed = lngSeed ^ lngExtra_a; } if (lngSeed == 0) { lngSeed = 0x9E3779B9; } return lngSeed; }
     public static uint @@timer() { uint lngTime = 0; lngTime = unchecked((uint)(DateTime.UtcNow.Ticks / 10)); return lngTime; }
     public static void @@unbrainless(List<byte> arrBytes_a, int intDir_a) { int intI = 0; int intLen = arrBytes_a.Count; if (intLen > 0 && intDir_a == 1) { arrBytes_a[intLen - 1] = (byte)(arrBytes_a[intLen - 1] ^ arrBytes_a[0]); for (intI = 0; intI <= intLen - 2; intI++) { arrBytes_a[intI] = (byte)(arrBytes_a[intI] ^ arrBytes_a[intI + 1]); } } else if (intLen > 0 && intDir_a == 2) { arrBytes_a[0] = (byte)(arrBytes_a[0] ^ arrBytes_a[intLen - 1]); for (intI = intLen - 1; intI >= 1; intI--) { arrBytes_a[intI] = (byte)(arrBytes_a[intI] ^ arrBytes_a[intI - 1]); } } }
     public static List<byte> @@zacBytes(@@Args objArgs_a) { List<byte> arrZac = new List<byte>(); int intI = 0; int intLen = objArgs_a.zac.value.Length; if (intLen > 0) { for (intI = 0; intI < intLen; intI++) { arrZac.Add((byte)objArgs_a.zac.value[intI]); } } else { for (intI = 0; intI < objArgs_a.zac.bytes; intI++) { arrZac.Add((byte)(@@nextRand() % 256)); } } return arrZac; }
@@ -3682,6 +3978,7 @@ public static class @@Protocol
         int ADDRESS_SPACE = 1 << objArgs_a.elemBits;
         int intAddrBytes = objArgs_a.elemBits / 8;
         int intValueBits = objArgs_a.elemBits / 2;
+        int intUnit = 16 / objArgs_a.elemBits;
         List<byte> arrOut = new List<byte>();
         List<byte> arrPayload = new List<byte>();
         List<byte> arrElems = new List<byte>();
@@ -3718,7 +4015,7 @@ public static class @@Protocol
         // integrity words + ZAC lead the payload (presegment placement)
         if (objArgs_a.rollingHash == 1)
         {
-            @@pushLE(arrPayload, @@djb2(arrMessage_a), 4);
+            @@pushLE(arrPayload, @@rollingHash(arrMessage_a), 4);
         }
         if (objArgs_a.crc32)
         {
@@ -3776,7 +4073,7 @@ public static class @@Protocol
         // rolling hash raw in the last 4 bytes of the prefix (prefix placement)
         if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
         {
-            lngHash = @@djb2(arrMessage_a);
+            lngHash = @@rollingHash(arrMessage_a);
             for (intI = 0; intI < 4; intI++)
             {
                 arrPrefix[intPrefixLen - 4 + intI] = (byte)((lngHash >> (8 * intI)) & 0xFF);
@@ -3794,7 +4091,7 @@ public static class @@Protocol
             }
             while (intI < arrElems.Count)
             {
-                intBlockLen = objArgs_a.blockMin + (int)(@@nextRand() % (uint)(objArgs_a.blockMax - objArgs_a.blockMin + 1));
+                intBlockLen = (objArgs_a.blockMin + (int)(@@nextRand() % (uint)(objArgs_a.blockMax - objArgs_a.blockMin + 1))) * intUnit;
                 if (intBlockLen > arrElems.Count - intI)
                 {
                     intBlockLen = arrElems.Count - intI;
@@ -3847,7 +4144,7 @@ public static class @@Protocol
             }
             if (blnMulti)
             {
-                @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.Count, 2, intAddrBytes, intValueBits);
+                @@hdrValue(arrOut, arrHdrWindow, arrBlocks[0].addrs.Count / intUnit, 2, intAddrBytes, intValueBits);
             }
             if (objArgs_a.prefix.on)
             {
@@ -3868,7 +4165,7 @@ public static class @@Protocol
                     if (intK + 1 < arrBlocks.Count)
                     {
                         @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].ptr, 2, intAddrBytes, intValueBits);
-                        @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.Count, 2, intAddrBytes, intValueBits);
+                        @@hdrValue(arrOut, arrHdrWindow, arrBlocks[intK + 1].addrs.Count / intUnit, 2, intAddrBytes, intValueBits);
                     }
                     else
                     {
@@ -3896,6 +4193,7 @@ public static class @@Protocol
         int ADDRESS_SPACE = 1 << objArgs_a.elemBits;
         int intAddrBytes = objArgs_a.elemBits / 8;
         int intValueBits = objArgs_a.elemBits / 2;
+        int intUnit = 16 / objArgs_a.elemBits;
         List<byte> arrBytes = new List<byte>();
         List<byte> arrPayload = new List<byte>();
         List<byte> arrElems = new List<byte>();
@@ -3914,6 +4212,10 @@ public static class @@Protocol
         int intROMLen = arrROM_a.Length;
         int intEncodedLen = arrEncoded_a.Length;
         bool blnMulti = (objArgs_a.blocks == 1);
+        List<byte> arrBody = new List<byte>();
+        bool blnOk = true;
+        int intPrefixStart = 0;
+        int intCrcPos = 0;
 
         for (intI = 0; intI < intEncodedLen; intI++)
         {
@@ -3942,6 +4244,7 @@ public static class @@Protocol
             intSuffixLen = @@readHdrValue(arrROM_a, arrBytes, intPos, objArgs_a.suffix.width, intAddrBytes, intValueBits);
             intPos = intPos + objArgs_a.suffix.width * intAddrBytes;
         }
+        intPrefixStart = intPos;
         intPos = intPos + intPrefixLen;
         intEnd = intEncodedLen - intSuffixLen;
 
@@ -3953,7 +4256,7 @@ public static class @@Protocol
                 intNextPtr = @@readHdrValue(arrROM_a, arrBytes, intPos, 2, intAddrBytes, intValueBits);
                 intNextSize = @@readHdrValue(arrROM_a, arrBytes, intPos + 2 * intAddrBytes, 2, intAddrBytes, intValueBits);
                 intPos = intPos + 4 * intAddrBytes;
-                for (intI = 0; intI < intSize; intI++)
+                for (intI = 0; intI < intSize * intUnit; intI++)
                 {
                     arrElems.Add(arrROM_a[intOffset + (int)@@readLE(arrBytes, intPos, intAddrBytes)]);
                     intPos = intPos + intAddrBytes;
@@ -3999,7 +4302,30 @@ public static class @@Protocol
         intHead = intHead + @@zacLen(objArgs_a);
         for (intI = intHead; intI < arrPayload.Count; intI++)
         {
-            arrMessage.Add(arrPayload[intI]);
+            arrBody.Add(arrPayload[intI]);
+        }
+
+        // integrity: recompute over the message and compare; a mismatch returns an empty message
+        blnOk = (arrPayload.Count >= intHead);
+        if (objArgs_a.rollingHash == 1)
+        {
+            blnOk = blnOk && (@@readLE(arrPayload, 0, 4) == @@rollingHash(arrBody.ToArray()));
+        }
+        if (objArgs_a.rollingHash == 2 && intPrefixLen >= 4)
+        {
+            blnOk = blnOk && (intPrefixStart + intPrefixLen <= intEncodedLen) && (@@readLE(arrBytes, intPrefixStart + intPrefixLen - 4, 4) == @@rollingHash(arrBody.ToArray()));
+        }
+        if (objArgs_a.crc32)
+        {
+            if (objArgs_a.rollingHash == 1)
+            {
+                intCrcPos = 4;
+            }
+            blnOk = blnOk && (@@readLE(arrPayload, intCrcPos, 4) == @@crc32Std(arrBody.ToArray()));
+        }
+        if (blnOk)
+        {
+            arrMessage = arrBody;
         }
 
         return arrMessage.ToArray();
@@ -4534,7 +4860,7 @@ function zDropZeroVars(arrB_a, strStyle, arrZero_a)
 // right-hand side with no calls, or only calls that change nothing (not nextRand)
 function zPureRhs(strRhs_a)
 {
-    var arrPure = { buildWindow: 1, djb2: 1, crc32Std: 1, effSize: 1, offset: 1, regime: 1, readLE: 1, readHdrValue: 1, zacLen: 1 };
+    var arrPure = { buildWindow: 1, romHash: 1, crc32Std: 1, effSize: 1, offset: 1, regime: 1, readLE: 1, readHdrValue: 1, rollingHash: 1, zacLen: 1 };
     var objRe = /@@(\w+)\(/g;
     var arrM = objRe.exec(strRhs_a);
     var blnPure = true;
