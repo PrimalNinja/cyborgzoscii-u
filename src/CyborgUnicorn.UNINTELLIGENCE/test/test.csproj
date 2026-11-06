@@ -15,6 +15,10 @@
     <Compile Include="..\src\EntropySugar.cs" />
     <Compile Include="..\src\MQClient.cs" />
     <Compile Include="..\src\MicroZOSCII.cs" />
+    <Compile Include="..\src\MicroUnsignal.cs" />
+    <Compile Include="..\src\Brics.cs" />
+    <Compile Include="..\src\Scheme.cs" />
+    <Compile Include="..\src\Hardfile.cs" />
     <Compile Include="..\src\ROMExchange.cs" />
     <Compile Include="..\src\ROMGenerator.cs" />
     <Compile Include="..\src\SecureDelete.cs" />

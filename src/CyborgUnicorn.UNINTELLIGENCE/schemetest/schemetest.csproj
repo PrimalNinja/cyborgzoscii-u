@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>schemetest</AssemblyName>
+    <RootNamespace>CyborgUnicorn.ZOSCII</RootNamespace>
+    <Nullable>disable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\src\Binary.cs" />
+    <Compile Include="..\src\SecureDelete.cs" />
+    <Compile Include="..\src\microZOSCII.cs" />
+    <Compile Include="..\src\MicroUnsignal.cs" />
+    <Compile Include="..\src\Brics.cs" />
+    <Compile Include="..\src\Scheme.cs" />
+    <Compile Include="..\src\Hardfile.cs" />
+    <Compile Include="..\src\Unsignal.cs" />
+    <Compile Include="..\src\ZOSCII.cs" />
+    <Compile Include="..\src\ZRollingHash.cs" />
+  </ItemGroup>
+
+</Project>

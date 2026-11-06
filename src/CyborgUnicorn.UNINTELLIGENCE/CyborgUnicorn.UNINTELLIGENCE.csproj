@@ -3,14 +3,15 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net8.0-windows</TargetFrameworks>
     <PackageId>CyborgUnicorn.UNINTELLIGENCE</PackageId>
-    <Version>1.0.6</Version>
+    <Version>1.0.8</Version>
     <Authors>Julian Cassin</Authors>
     <Company>Cyborg Unicorn Pty Ltd</Company>
     <Product>UNINTELLIGENCE SDK</Product>
     <Description>
       ZOSCII (Zero Overhead Secure Code Information Interchange) SDK.
       Information-theoretically secure encoding achieving I(M;A)=0.
-      Includes UNSIGNAL protocol, PENTAGONE 3-of-5 redundancy, ZOSCII MQ client,
+      Includes UNSIGNAL, BRICS, microUNSIGNAL and microBRICS encodings, Schemes (multi-step encoding chains), Hardfile (noise-filled single-file store),
+      PENTAGONE 3-of-5 redundancy, ZOSCII MQ client,
       ROM generation, Entropy Sugar collection, and Secure Delete.
     </Description>
     <Copyright>Copyright (c) 2026 Cyborg Unicorn Pty Ltd</Copyright>

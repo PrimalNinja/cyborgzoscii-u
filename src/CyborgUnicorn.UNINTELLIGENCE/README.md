@@ -14,6 +14,10 @@ is statistically independent of the input without the ROM key material.
 | `B` | Binary operations: compare, split, join, verify |
 | `MQ` | Message Queue operations (queue, store, replication, monitoring) |
 | `ZWT` | ZOSCII Web Tokens: issue, open, introspect, verify |
+| `B` | BRICS encode / decode (16-bit / byte, multi-block) |
+| `MU`, `MB` | microUNSIGNAL / microBRICS encode / decode (8-bit / nibble) on a `MicroRom` |
+| `Scheme` | Multi-step encoding chains run by `SchemeRunner` |
+| `Hardfile` | One noise-filled file holding a tree of indirected nodes (a store with no visible files) |
 
 ---
 
@@ -38,6 +42,105 @@ byte[] encoded   = UEncode.String("hello", rom);
 string text      = UDecode.ToString(encoded, rom);
 string text      = UDecode.FileToString("output.sig", rom);
 ```
+
+---
+
+## BEncode / BDecode (BRICS)
+
+Same call shapes as UEncode / UDecode. No Tango. Blocks of 128..512 elements, each with its own ROM offset.
+
+```csharp
+byte[] encoded = BEncode.Bytes(data, rom);
+byte[] decoded = BDecode.Bytes(encoded, rom);
+byte[] chain   = BEncode.Chain(data, new[] { rom1, rom2 });
+byte[] back    = BDecode.Chain(chain, new[] { rom1, rom2 });
+bool   ok      = BEncode.ChainFile("in.bin", "out.brc", new[] { rom1, rom2 });
+```
+
+---
+
+## MicroRom, MUEncode / MUDecode, MBEncode / MBDecode
+
+A `MicroRom` is up to 512 nibbles from any source: a hex string, raw bytes (a JPEG, a published ROM; each byte gives
+two nibbles), or 1..6 hand-typed base-62 chunks of 54 characters. microZOSCII addresses 256 positions, so give it a
+256-nibble ROM; microUNSIGNAL and microBRICS use the sliding window and take up to 512.
+
+```csharp
+MicroRom mu = MicroRom.FromBytes(File.ReadAllBytes("photo.jpg"), 512);
+MicroRom mz = MicroRom.FromBytes(bytes, 256);
+MicroRom hand = MicroRom.FromBase62(new[] { chunk1, chunk2, chunk3 });
+byte[] e1 = MUEncode.Bytes(data, mu);   byte[] d1 = MUDecode.Bytes(e1, mu);
+byte[] e2 = MBEncode.Bytes(data, mu);   byte[] d2 = MBDecode.Bytes(e2, mu);
+byte[] e3 = MicroZOSCII.Encode(mz.ToHex(), data);
+```
+
+---
+
+## Schemes
+
+A scheme is an ordered list of steps, inner to outer. Each step: an encoding (ZOSCII, UNSIGNAL, BRICS, MICROZOSCII,
+MICROUNSIGNAL, MICROBRICS), 1..3 ROM ids, Tango (ZOSCII / UNSIGNAL with 2..3 ROMs) and an optional integrity check
+(ROLLINGHASH or ROLLINGHASH+CRC32) placed inside that step and verified on decode. ROM ids are resolved by the caller
+through `ISchemeRomResolver`; the nuget never touches storage. Byte encodings load the bytes as a `ZOSCIIRom`; micro
+encodings take the leading 256 or 512 nibbles of the same bytes.
+
+```csharp
+Scheme scheme = new Scheme { Id = guid, Name = "micro then full" };
+scheme.Steps.Add(new SchemeStep { Encoding = SchemeEncoding.MICROZOSCII, RomIds = { "photo" }, Integrity = SchemeIntegrity.ROLLINGHASH_CRC32 });
+scheme.Steps.Add(new SchemeStep { Encoding = SchemeEncoding.UNSIGNAL, RomIds = { "romA", "romB" }, Tango = true });
+byte[] wire = SchemeRunner.Encode(plain, scheme, resolver);
+byte[] back = SchemeRunner.Decode(wire, scheme, resolver);   // null on failure; SchemeRunner.LastError says why
+Scheme copy = scheme.Clone(newGuid, "Copy of " + scheme.Name);
+```
+
+`ZCRC32` (standard CRC-32, table-free) sits beside `ZRollingHash`. Test harness: `schemetest\build.bat`.
+
+---
+
+## Hardfile
+
+A store with no visible files; every file is wrapped in an envelope (random prefix, random suffix holding the
+set GUID and its rolling hash, all indirected) so the wrong image opens nothing and files from different
+sets cannot be mixed. One set per store: `<name>.hfd` data (noise + encoded blobs, no structure),
+`<name>.hfi` index (fixed 84-byte records, one per node, indirected through the *hardfile image*),
+`<name>.hfm` mirror (an identical copy of the index), and a `<name>.hft` scratch set for intermediates,
+secure-deleted on close. Index record: `[NEXT][CHILD][DATA][META][SIZE][BLOB][CHAIN][FLAG][HASH]`; links are record numbers,
+every byte of every number is a random address in the image holding that byte, and three ZOSCII rolling hashes
+(the record, the stored blob, the sibling chain) catch corruption and tampering with no key. Meta (name, kind, dates) and content are encoded separately by an `IHardfileCodec` (data images
+or a scheme), so listing decodes metas, never contents. Nodes with children are folders.
+
+Data and index are noise-filled and grow in chunks (the index starts at 1% of the data size, 64 KB floor), so
+sizes say nothing. Free space is reused like memory in whole units (per-store, 256 B..64 KB, default 1 KB; first fit, adjacent holes joined, dead records reused);
+delete overwrites with noise. Nothing is compacted in place: `CopyTo` writes a fresh set from the live nodes
+(blobs verbatim, image only). Any number of replicas (other devices): a write goes to the primary first and the
+identical bytes are then copied to mirror and replicas; reads take the first copy whose hash passes; a shorter
+copy is caught up on open; `Verify()` checks structure, `Verify(true)` structure and every file, `VerifyFile`
+one file; `Repair` rewrites whatever fails its hash from a copy that passes, in either direction, and marks out (bad-sector style: held, never replicated, never reused) a blob with no passing copy; `MarkOut` / `Restore` / `ExportRaw` act on such files.
+`Export` / `Import` move decoded trees to and from a folder, skipping what exists.
+
+```csharp
+HardfilePaths paths = HardfilePaths.FromBase(@"C:\SaturnData\saturn");   // .hfd / .hfi / .hfm
+paths.AddReplicaFolder(@"E:\backup", "saturn");                            // optional, any number
+using (Hardfile hf = Hardfile.Create(paths, 256L << 20, 64L << 20, hardfileImage, 8192))   // unit optional, default 1024
+{
+    IHardfileCodec codec = new UnsignalChainCodec(new[] { data1, data2 });   // or new SchemeCodec(scheme, resolver), or new PassthroughCodec() for already-encoded content
+    hf.Put("photos/2026/img1.jpg", bytes, codec);
+    byte[] back = hf.Get("photos/2026/img1.jpg", codec);
+    List<HardfileEntry> items = hf.List("photos/2026", codec);
+    hf.Delete("photos/2026/img1.jpg", codec);
+    HardfileReport r = hf.Verify(true);  if (!r.Clean) { hf.Repair(); }   // Verify() = structure only; VerifyFile(path, codec) = one file
+    int skipped; hf.Export("", @"D:\out", codec, out skipped);
+    hf.Import(@"D:\in", "imported", codec);
+    using (Hardfile fresh = hf.CopyTo(HardfilePaths.FromBase(@"C:\SaturnData\saturn-new"), 64L << 20)) { }
+}
+using (Hardfile hf = Hardfile.Open(paths, 64L << 20, hardfileImage)) { }    // null if the root does not read under this image
+using (ScratchHardfile scratch = ScratchHardfile.Create(tempBase, 64L << 20, hardfileImage)) { scratch.Store.Put("layer1", ...); }
+```
+
+Tests in `schemetest\` (hardfile section, 34): create / grow / put / get / list / replace / delete file and
+subtree / verify / replica and mirror written / export / corrupt primary records read via mirror, reported and
+repaired / corrupt data replica and truncated mirror flagged, caught up and repaired / copyto / import /
+wrong image refused / scratch discarded / noise files refuse to open.
 
 ---
 
