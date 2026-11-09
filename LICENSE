@@ -1,12 +1,16 @@
-UNINTELLIGENCE SOFTWARE LICENSE v1.2
+UNINTELLIGENCE SOFTWARE LICENSE v2.0
 
 Copyright (c) 2026 Cyborg Unicorn Pty Ltd
 
 Permission is hereby granted, free of charge, to any person or organization obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the following conditions:
 
-SOFTWARE LICENSE v1.2
+SOFTWARE LICENSE v2.0
 
-What v1.2 does is clarify vagueness of v1.1 - anything in v1.1 and v1.2 is applicable to both - choose which one you want.
+What 2.0 does is opens the usage of ZOSCII and it's protocols to all uses and organisations Worldwide - the only restrictions being rebranding and attribution.
+
+What v1.2 does is clarify vagueness of v1.1 - anything in v1.1 and v1.2 is applicable to both.
+
+Choose which version of the license you want.
 
 REBRANDING:
 
@@ -17,45 +21,6 @@ examples:
 ✗ Rebranding of UNSIGNAL Protocol is NOT permitted.
 ✓ The Unsignal Protocol must be branded "UNSIGNAL Protocol" or simply "UNSIGNAL" for short.
 ✓ Usage of the UNSIGNAL Protocol must be attributed as such, simply say something like "This product uses the UNSIGNAL Protocol".
-
-PERMITTED USERS:
-
-✓ Individuals for personal use
-✓ Private commercial entities
-✓ Non-governmental organizations
-✓ Academic and research institutions
-✓ Journalists and media organizations
-✓ Civil society organizations
-✓ Any non-government military organization or non-government defense contractor (product tender/development/sales, not employee extensions to governments or government shell company)
-
-PROHIBITED USERS AND USES:
-
-The Software shall NOT be used by, for, or on behalf of unless sourced from the permitted users as part of a larger body of work:
-
-✗ Any governmental intelligence agency
-✗ Any government military organization or government defense contractor
-✗ Any governmental surveillance operation
-✗ Any law enforcement agency (national/federal level)
-✗ Any entity conducting mass surveillance
-✗ Any entity whose primary purpose is signals intelligence (SIGINT), communications intelligence (COMINT), or cyber warfare
-
-Examples:
-
-A military contractor can make a Jet Fighter that uses UNINTELLIGENCE products and sells them to the Government - this is permitted.
-
-The Government themselves cannot make a Jet Fighter and fit it with UNINTELLIGENCE whether directly or via contractors operating as staff extensions.
-
-PROHIBITED APPLICATIONS:
-
-✗ Mass surveillance systems
-✗ Warrantless monitoring of civilian communications
-✗ Offensive cyber operations
-✗ Military command and control systems
-✗ Intelligence gathering operations targeting civilians
-
-COMPLIANCE:
-
-Use of this Software constitutes acceptance of these terms. Any use by Prohibited Users or for Prohibited Applications is unauthorized and constitutes a material breach of this license.
 
 ENFORCEMENT:
 
