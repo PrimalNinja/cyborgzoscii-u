@@ -211,6 +211,7 @@ namespace CyborgUnicorn.ZOSCII
         private const int ENVELOPE_BLOCK = 60;           // 30 plain bytes (guid + unit + last written + hash) indirected
         private long m_lngLastWritten = 0;               // unix seconds, inside the envelope
         private long m_lngLastWrittenRead = 0;           // scratch: the value the last readEnvelope saw
+        private bool m_blnReadOnly = false;              // opened by a reader (the core peeking a store it minted): never writes, never catches up
         public const int UNIT_DEFAULT = 1024;
         private long m_lngUnit = UNIT_DEFAULT;           // allocation unit in bytes, 256..65536
         private const int PREFIX_MIN = 8;
@@ -248,8 +249,8 @@ namespace CyborgUnicorn.ZOSCII
                     objHf.m_objImage = objImage_a;
                     objHf.m_objRom = objImage_a.GetRomData();
                     objHf.m_lngGrowth = lngGrowth_a;
-                    objHf.m_objData = openGroup(objPaths_a.Data, objPaths_a.DataReplicas, null, FileMode.Create);
-                    objHf.m_objIndex = openGroup(objPaths_a.Index, objPaths_a.IndexReplicas, objPaths_a.Mirror, FileMode.Create);
+                    objHf.m_objData = openGroup(objPaths_a.Data, objPaths_a.DataReplicas, null, FileMode.Create, false);
+                    objHf.m_objIndex = openGroup(objPaths_a.Index, objPaths_a.IndexReplicas, objPaths_a.Mirror, FileMode.Create, false);
                     objHf.m_arrGuid = Guid.NewGuid().ToByteArray();
                     objHf.m_lngUnit = normaliseUnit(lngUnit_a);
                     objHf.m_lngLastWritten = now();
@@ -288,7 +289,12 @@ namespace CyborgUnicorn.ZOSCII
             return objResult;
         }
 
-        public static Hardfile Open(HardfilePaths objPaths_a, long lngGrowth_a, ZOSCIIRom objImage_a)
+        /// <summary>Open for reading only, sharing with a running writer: no catch-up, no stamps, no timestamp randomisation. For the core peeking a store it minted.</summary>
+        public static Hardfile OpenReadOnly(HardfilePaths objPaths_a, ZOSCIIRom objImage_a) { return open(objPaths_a, 0, objImage_a, true); }
+
+        public static Hardfile Open(HardfilePaths objPaths_a, long lngGrowth_a, ZOSCIIRom objImage_a) { return open(objPaths_a, lngGrowth_a, objImage_a, false); }
+
+        private static Hardfile open(HardfilePaths objPaths_a, long lngGrowth_a, ZOSCIIRom objImage_a, bool blnReadOnly_a)
         {
             Hardfile objResult = null;
             try
@@ -300,10 +306,14 @@ namespace CyborgUnicorn.ZOSCII
                     objHf.m_objImage = objImage_a;
                     objHf.m_objRom = objImage_a.GetRomData();
                     objHf.m_lngGrowth = lngGrowth_a;
-                    objHf.m_objData = openGroup(objPaths_a.Data, objPaths_a.DataReplicas, null, FileMode.OpenOrCreate);
-                    objHf.m_objIndex = openGroup(objPaths_a.Index, objPaths_a.IndexReplicas, objPaths_a.Mirror, FileMode.OpenOrCreate);
-                    objHf.catchUpGroup(objHf.m_objData);
-                    objHf.catchUpGroup(objHf.m_objIndex);
+                    objHf.m_blnReadOnly = blnReadOnly_a;
+                    objHf.m_objData = openGroup(objPaths_a.Data, objPaths_a.DataReplicas, null, blnReadOnly_a ? FileMode.Open : FileMode.OpenOrCreate, blnReadOnly_a);
+                    objHf.m_objIndex = openGroup(objPaths_a.Index, objPaths_a.IndexReplicas, objPaths_a.Mirror, blnReadOnly_a ? FileMode.Open : FileMode.OpenOrCreate, blnReadOnly_a);
+                    if (!blnReadOnly_a)
+                    {
+                        objHf.catchUpGroup(objHf.m_objData);
+                        objHf.catchUpGroup(objHf.m_objIndex);
+                    }
                     bool blnOk = objHf.openEnvelopes();
                     Record objR = new Record();
                     blnOk = blnOk && objHf.readRecord(0, out objR);
@@ -325,10 +335,10 @@ namespace CyborgUnicorn.ZOSCII
         public void Dispose()
         {
             List<string> arrPaths = new List<string>();
-            try { if (m_lngLastWritten > 0) { stampEnvelopes(); } } catch { }
+            try { if (!m_blnReadOnly && m_lngLastWritten > 0) { stampEnvelopes(); } } catch { }
             if (m_objData != null) { arrPaths.AddRange(m_objData.Paths); m_objData.Dispose(); m_objData = null; }
             if (m_objIndex != null) { arrPaths.AddRange(m_objIndex.Paths); m_objIndex.Dispose(); m_objIndex = null; }
-            randomiseTimestamps(arrPaths);
+            if (!m_blnReadOnly) { randomiseTimestamps(arrPaths); }
         }
 
         /// <summary>Set every file of the set to a random created / modified / accessed time within the past five years. Done automatically at Dispose; callable while mounted for long sessions.</summary>
@@ -361,15 +371,18 @@ namespace CyborgUnicorn.ZOSCII
             }
         }
 
-        private static clsFileGroup openGroup(string strPrimary_a, List<string> arrReplicas_a, string strMirror_a, FileMode objMode_a)
+        // a writer opens read/write allowing readers; a reader opens read-only allowing the writer
+        private static clsFileGroup openGroup(string strPrimary_a, List<string> arrReplicas_a, string strMirror_a, FileMode objMode_a, bool blnReadOnly_a)
         {
+            FileAccess objAccess = blnReadOnly_a ? FileAccess.Read : FileAccess.ReadWrite;
+            FileShare objShare = blnReadOnly_a ? FileShare.ReadWrite : FileShare.Read;
             clsFileGroup objGroup = new clsFileGroup();
             objGroup.Paths.Add(strPrimary_a);
-            objGroup.Streams.Add(new FileStream(strPrimary_a, objMode_a, FileAccess.ReadWrite, FileShare.None));
+            objGroup.Streams.Add(new FileStream(strPrimary_a, objMode_a, objAccess, objShare));
             if (strMirror_a != null && strMirror_a.Length > 0)
             {
                 objGroup.Paths.Add(strMirror_a);
-                objGroup.Streams.Add(new FileStream(strMirror_a, objMode_a, FileAccess.ReadWrite, FileShare.None));
+                objGroup.Streams.Add(new FileStream(strMirror_a, objMode_a, objAccess, objShare));
             }
             for (int intI = 0; arrReplicas_a != null && intI < arrReplicas_a.Count; intI++)
             {
@@ -378,7 +391,7 @@ namespace CyborgUnicorn.ZOSCII
                     string strDir = System.IO.Path.GetDirectoryName(arrReplicas_a[intI]);
                     if (strDir != null && strDir.Length > 0 && !Directory.Exists(strDir)) { Directory.CreateDirectory(strDir); }
                     objGroup.Paths.Add(arrReplicas_a[intI]);
-                    objGroup.Streams.Add(new FileStream(arrReplicas_a[intI], objMode_a, FileAccess.ReadWrite, FileShare.None));
+                    objGroup.Streams.Add(new FileStream(arrReplicas_a[intI], objMode_a, objAccess, objShare));
                 }
                 catch { }
             }
@@ -495,6 +508,9 @@ namespace CyborgUnicorn.ZOSCII
         private bool setFlag(string strPath_a, IHardfileCodec objCodec_a, long lngFlag_a)
         {
             bool blnResult = false;
+            if (m_blnReadOnly) { m_strLastError = "read-only"; }
+            else
+            {
             long lngNode = findNode(strPath_a, objCodec_a);
             Record objR;
             if (lngNode > 0 && readRecord(lngNode, out objR) && !isDead(objR))
@@ -506,14 +522,19 @@ namespace CyborgUnicorn.ZOSCII
                 m_objData.Flush();
                 blnResult = true;
             }
+            }
             return blnResult;
         }
 
         public bool Exists(string strPath_a, IHardfileCodec objCodec_a) { return findNode(strPath_a, objCodec_a) >= 0; }
 
+        public bool IsReadOnly { get { return m_blnReadOnly; } }
+
         public bool MakeFolder(string strPath_a, IHardfileCodec objCodec_a)
         {
             bool blnResult = false;
+            if (m_blnReadOnly) { m_strLastError = "read-only"; }
+            else
             try
             {
                 string[] arrParts = splitPath(strPath_a);
@@ -542,6 +563,8 @@ namespace CyborgUnicorn.ZOSCII
         public bool Put(string strPath_a, byte[] arrContent_a, IHardfileCodec objCodec_a)
         {
             bool blnResult = false;
+            if (m_blnReadOnly) { m_strLastError = "read-only"; }
+            else
             try
             {
                 string[] arrParts = splitPath(strPath_a);
@@ -591,6 +614,8 @@ namespace CyborgUnicorn.ZOSCII
         public bool Delete(string strPath_a, IHardfileCodec objCodec_a)
         {
             bool blnResult = false;
+            if (m_blnReadOnly) { m_strLastError = "read-only"; }
+            else
             try
             {
                 string[] arrParts = splitPath(strPath_a);
@@ -787,6 +812,8 @@ namespace CyborgUnicorn.ZOSCII
         public int Repair()
         {
             int intRepaired = 0;
+            if (m_blnReadOnly) { m_strLastError = "read-only"; }
+            else
             try
             {
                 long lngCount = recordCount();
@@ -1128,17 +1155,41 @@ namespace CyborgUnicorn.ZOSCII
             return arrResult;
         }
 
-        // Stamps both files' envelope blocks with the time, under the one hash.
-        //
-        // TEMPORARILY A NO-OP. Rewriting the block on every change makes it a beacon: anything that changes at a
-        // fixed position on every write lets a monitor diffing snapshots locate it, and from the block's position
-        // read off the suffix length (the record slots at prefix + r * 84 give away the prefix the same way).
-        // Indirection re-randomises the values, never the positions. Until decoy writes exist (random free-space
-        // extents re-noised and random dead records re-randomised alongside every real write, so the real change
-        // hides among many), the stamp is written once at Dispose, together with the timestamp randomisation.
+        // Every change to the set: the last-written time is taken, the envelope block is stamped on a random third
+        // of changes (never on every one, so no region changes every time), and decoy writes go out with it:
+        // a few random free-space extents get fresh noise and a few random dead records get fresh random fields,
+        // in every copy. Free space is noise by definition and dead records random by definition, so nothing is
+        // lost and every hash still passes, but a monitor diffing snapshots sees many regions change per write and
+        // cannot tell the real record, the real blob or the envelope block from the decoys. The block is also
+        // stamped once at Dispose so LastWritten is always current on disk.
+        private const int DECOY_MIN = 3;
+        private const int DECOY_MAX = 7;
+        private const int DECOY_SPAN = 4096;
+
         private void touch()
         {
             m_lngLastWritten = now();
+            if (m_objRand.Next(3) == 0) { stampEnvelopes(); }
+            decoyWrites();
+        }
+
+        private void decoyWrites()
+        {
+            int intCount = DECOY_MIN + m_objRand.Next(DECOY_MAX - DECOY_MIN + 1);
+            for (int intI = 0; intI < intCount; intI++)
+            {
+                if (m_arrFree != null && m_arrFree.Count > 0)
+                {
+                    Extent objE = m_arrFree[m_objRand.Next(m_arrFree.Count)];
+                    long lngLen = Math.Min(objE.lngLen, (long)(1 + m_objRand.Next(DECOY_SPAN)));
+                    long lngAt = objE.lngAt + (objE.lngLen > lngLen ? (long)(m_objRand.NextDouble() * (objE.lngLen - lngLen)) : 0);
+                    fillNoise(m_objData, lngAt, lngLen);
+                }
+                if (m_arrFreeRecords != null && m_arrFreeRecords.Count > 0)
+                {
+                    writeRecord(m_arrFreeRecords[m_objRand.Next(m_arrFreeRecords.Count)], deadRecord());
+                }
+            }
         }
 
         private void stampEnvelopes()

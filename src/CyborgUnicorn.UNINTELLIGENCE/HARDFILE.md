@@ -1,7 +1,7 @@
 # Hardfile Specification
 
 **Author:** Cyborg Unicorn Pty Ltd
-**Version:** 1.6 (nuget 1.0.8)
+**Version:** 1.7 (nuget 1.0.8)
 **Status:** implemented in `src/Hardfile.cs`, tested by `schemetest/`
 
 ## SOFTWARE LICENSE v1.2
@@ -104,20 +104,26 @@ The block is the openability check: under the right image it decodes to a GUID w
 any other image it does not, and the file is not touched. The last-written time is the true one and lives only where the image can read it; the file-system times
 are randomised (section 10). `LastWritten` exposes it.
 
-**When the block is written.** At create, at growth, at repair, and once at close. Not on every change,
-deliberately: a block rewritten at a fixed position on every write is a beacon to anyone diffing snapshots of
-the file, giving away the suffix length (as per-write rewrites of record slots would give away the prefix
-and the record size); indirection re-randomises values, never positions. Planned: decoy writes (random
-free-space extents re-noised and random dead records re-randomised alongside every real write) so that the
-real change hides among many; the block can then be stamped per change, and moved to a new suffix length
-each time. Every file of a set carries the same GUID, so
-`Open` also refuses a data file and an index from different sets. The GUID is minted at `Create`; `CopyTo`
-mints a new one, since a copy is a new set.
+**When the block is written.** At create, at growth, at repair, once at close, and on a random third of
+changes. Never on every change: a region that changes on every write is a beacon to anyone diffing snapshots
+of the file, and would give away the suffix length. Changes are covered by decoys (section 4b).
 
-On growth the file is extended with noise, the old suffix region becomes noise (and, in the data file,
-free space), a new random suffix length is drawn and a fresh block is written at the new end, and the
-header's SUFFIX LEN is rewritten. Prefix and suffix lengths are per file and random, so the content never
-sits at a predictable offset.
+---
+
+## 4b. DECOYS
+
+Indirection re-randomises values, never positions. A monitor that diffs successive snapshots of the files
+sees which bytes changed, and a region that changes on every write (an envelope block, a record slot) would
+give away where the structure sits. So every change to the set is accompanied by decoy writes, in every copy:
+
+- a few (3 to 7) random extents of free space, up to 4 KB each, get fresh noise;
+- a few random dead records get fresh random fields (still hashed, still dead);
+- the envelope block is stamped on a random third of changes, not all.
+
+Free space is noise by definition and dead records are random by definition, so nothing is lost and every
+hash still passes; but each write now changes many regions, none of them every time, and the real record,
+the real blob and the block are indistinguishable from the decoys. The cost is a few kilobytes of extra
+writes per change.
 
 ---
 
@@ -357,7 +363,10 @@ An unreachable replica path (device not present) is skipped at open and does not
   nothing but the holes a large blob cannot use. `CopyTo` repacks.
 - One root and one GUID per set. A second ROM set gets its own set (its own image and scheme via publishing),
   not a second root in the same files. Opening with the wrong image is refused; there is no override.
-- No concurrency: one opener at a time (`FileShare.None`).
+- One writer at a time. A writer opens read/write allowing readers; `OpenReadOnly` opens read-only beside a
+  running writer, never writes, never catches up copies, never stamps or randomises times. A record being
+  written at the moment of a read fails its hash and is skipped. This is how the core reads an application's
+  store it minted the image for (FORMS.md section 5).
 - No transactions across nodes; a torn write damages at most the node being written, which the mirror and
   `Repair` cover for the index and the codec's integrity check reveals for content.
 - Names are matched exactly (case-sensitive, UTF-8); a folder is walked linearly to find a name.

@@ -419,6 +419,40 @@ public static class HardfileTest
 				using (Hardfile objT = Hardfile.Open(HardfilePaths.FromBase(strBaseT), 65536, objImage)) { check("last written kept inside the envelope", objT != null && objT.LastWritten > lngNowUnix - 120 && objT.LastWritten <= lngNowUnix + 1); }
 			}
 
+			// decoys: one put changes several separate regions of the data file, not just the new blob
+			{
+				string strBaseD = System.IO.Path.Combine(strTmp, "hfdecoy");
+				using (Hardfile objD = Hardfile.Create(HardfilePaths.FromBase(strBaseD), 2 * 1024 * 1024, 0, objImage)) { objD.Put("one.bin", arrNote, objCodec); objD.Put("two.bin", arrNote, objCodec); objD.Delete("one.bin", objCodec); }
+				byte[] arrBefore = System.IO.File.ReadAllBytes(strBaseD + ".hfd");
+				using (Hardfile objD = Hardfile.Open(HardfilePaths.FromBase(strBaseD), 0, objImage)) { objD.Put("three.bin", arrNote, objCodec); check("decoy: verify clean after decoys", objD.Verify(true).Clean); }
+				byte[] arrAfter = System.IO.File.ReadAllBytes(strBaseD + ".hfd");
+				int intRuns = 0;
+				bool blnIn = false;
+				for (int intK = 0; intK < arrBefore.Length; intK++)
+				{
+					bool blnDiff = arrBefore[intK] != arrAfter[intK];
+					if (blnDiff && !blnIn) { intRuns++; }
+					blnIn = blnDiff;
+				}
+				check("decoy: several changed regions, not one (" + intRuns + ")", intRuns >= 3);
+			}
+
+			// read-only peek while a writer holds the store: lists and reads, refuses to write, leaves times alone
+			{
+				string strBaseP = System.IO.Path.Combine(strTmp, "hfpeek");
+				using (Hardfile objW = Hardfile.Create(HardfilePaths.FromBase(strBaseP), 65536, 65536, objImage))
+				{
+					objW.Put("forms/f1/r1", arrNote, objCodec);
+					using (Hardfile objR = Hardfile.OpenReadOnly(HardfilePaths.FromBase(strBaseP), objImage))
+					{
+						check("peek opens beside the writer", objR != null && objR.IsReadOnly);
+						check("peek reads", objR != null && same(arrNote, objR.Get("forms/f1/r1", objCodec)) && objR.List("forms/f1", objCodec).Count == 1);
+						check("peek cannot write", objR != null && !objR.Put("x", arrNote, objCodec) && objR.LastError == "read-only");
+						check("writer still writes", objW.Put("forms/f1/r2", arrNote, objCodec));
+					}
+				}
+			}
+
 			check("open with wrong image fails", Hardfile.Open(objPaths, 0, objD1) == null);
 
 			string strScratch = System.IO.Path.Combine(strTmp, "hfscratch");
